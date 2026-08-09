@@ -1,0 +1,26 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: ecc5ddb294380844682c11dbca234ac0, type: 3}
+  m_Name: Test_Start
+  m_EditorClassIdentifier: Assembly-CSharp::DialogueData
+  lines:
+  - speaker: "\uC720\uD55C\uC131"
+    sentence: "\uC870\uC0AC\uB97C \uC2DC\uC791\uD558\uACA0\uC2B5\uB2C8\uAE4C?"
+  choices:
+  - choiceText: "1. \uC0AC\uC7A5\uC5D0\uAC8C \uBCF5\uC218\uD55C\uB2E4"
+    nextDialogue: {fileID: 0}
+    isEndingChoice: 1
+    targetEnding: 3
+  - choiceText: "2. \uADF8\uB0E5 \uC870\uC0AC\uB97C \uC9C4\uD589\uD55C\uB2E4"
+    nextDialogue: {fileID: 11400000}
+    isEndingChoice: 0
+    targetEnding: 0
