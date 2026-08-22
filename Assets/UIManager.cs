@@ -8,6 +8,11 @@ public class UIManager : MonoBehaviour
     [Header("글로벌 상단 UI")]
     public TMP_Text timeStampText; // 예: "2002/08/08 13:00"
 
+    // 이 필드들은 QuickBarPanel의 버튼(Btn_Inventory 등)이 아니라, 그 버튼을 눌렀을 때
+    // 열리는 실제 팝업 콘텐츠(아이템 리스트, 사진첩 등)를 가리켜야 한다.
+    // 버튼은 항상 화면에 떠있는 QuickBarPanel 쪽에 있고, 여기 연결된 패널은 평소엔 꺼져
+    // 있다가 토글로만 켜지는 콘텐츠 화면이다. 예전엔 버튼이 이 패널들 안에 잘못 들어가
+    // 있었어서 (QuickBarPanel로 분리하며 수정됨), 헷갈리지 않도록 남겨두는 주석.
     [Header("팝업 UI 패널들")]
     public GameObject inventoryPanel;   // 가방 UI
     public GameObject photoPanel;       // 사진 앨범 UI
