@@ -1,4 +1,4 @@
-LineType,Speaker,Sentence,BGM,SFX,IsFadeOut,Item,ChoiceText,NextScenario,IsEndingChoice,TargetEnding
+﻿LineType,Speaker,Sentence,BGM,SFX,IsFadeOut,Item,ChoiceText,NextScenario,IsEndingChoice,TargetEnding
 Normal,재훈,"줄곧 운이 없었다. 아버지는 밖에서 쌓인 화를 나와 어머니께 풀었다. 세게 맞고 난 날엔 일부러 긴 옷을 입고 나와 멍자국을 감췄지만, 동갑내기 아이들의 호기심에 결국 진실은 드러나 버렸고, 나는 금새 만만한 아이가 되어 괴롭힘을 당했다.",Sad_BGM,,FALSE,,,,,
 Normal,재훈,그 날도 여김없이 운이 없었고 나는 가지고 있던 것들을 전부 빼앗긴 채 공사장에 고립되어 있었다.,,,FALSE,,,,,
 Narration,,"(암전된 밀실, 10살 남짓의 어린 아이인 재훈은 오래된 컨테이너 박스의 문을 걸어 잠근 채 홀로 웅크려 앉아있다.)",,,TRUE,,,,,

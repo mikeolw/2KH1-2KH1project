@@ -102,10 +102,12 @@ public class DialogueSystem : MonoBehaviour
 
     void Update()
     {
-        // 스페이스바/마우스 클릭으로 대사 넘기기 (선택지나 팝업 UI가 안 떠있을 때만)
-        if (!choicePanel.activeSelf && (Input.GetMouseButtonDown(0) || Input.GetKeyDown(KeyCode.Space)))
+        // 스페이스바/마우스 클릭으로 대사 넘기기 (선택지나 팝업 UI가 안 떠있을 때만).
+        // UIManager의 조사기록/인벤토리/사진첩/핸드폰 팝업이 열려있을 때 그 바깥(모달 밖)을
+        // 클릭해도 이 대사 넘기기가 같이 발동하지 않도록 IsAnyPanelOpen도 함께 확인한다.
+        bool blockedByPopup = UIManager.Instance != null && UIManager.Instance.IsAnyPanelOpen;
+        if (!choicePanel.activeSelf && !blockedByPopup && (Input.GetMouseButtonDown(0) || Input.GetKeyDown(KeyCode.Space)))
         {
-            // 팝업 패널이 열려있지 않은 상태일 때만 넘어감
             ShowNextSentence();
         }
     }
@@ -172,10 +174,11 @@ public class DialogueSystem : MonoBehaviour
             line.acquireItemName = GetField(data[i], "Item");
 
             // 사운드 파일명이 적혀있다면 Resources 폴더에서 오디오 불러오기
+            // 효과음(SFX)은 배경음악(BGM)과 구분하기 쉽도록 Sounds/SFX/ 하위 폴더에 모아둔다.
             string sfxName = GetField(data[i], "SFX");
             if (!string.IsNullOrEmpty(sfxName))
             {
-                line.sfxToPlay = Resources.Load<AudioClip>("Sounds/" + sfxName);
+                line.sfxToPlay = Resources.Load<AudioClip>("Sounds/SFX/" + sfxName);
             }
 
             // BGM도 SFX와 동일한 방식으로 불러온다. 단, 실제로 이 클립을 재생하는 코드는 아직

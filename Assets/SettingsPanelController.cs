@@ -65,7 +65,7 @@ public class SettingsPanelController : MonoBehaviour
         if (backButton != null) backButton.onClick.AddListener(() =>
         {
             if (onBack != null) onBack.Invoke();
-            else SceneManager.LoadScene("Title");
+            else SceneManager.LoadScene(SettingsManager.Instance != null ? SettingsManager.Instance.ReturnSceneName : "Title");
         });
     }
 

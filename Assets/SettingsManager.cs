@@ -19,6 +19,11 @@ public class SettingsManager : MonoBehaviour
     // 현재 적용 중인 설정값. UI(슬라이더)는 이 값을 읽어서 초기 상태를 표시한다.
     public GameSettings Current { get; private set; } = new GameSettings();
 
+    // Settings.unity의 뒤로가기 버튼이 돌아갈 씬 이름. 기본값은 Title에서 진입한 경우를
+    // 위한 "Title". SampleScene 등 인게임에서 설정 화면을 열 때는 진입 직전에 이 값을
+    // 그 씬 이름으로 바꿔준다 (UIManager.OpenSettingsScene 참고).
+    public string ReturnSceneName = "Title";
+
     private void Awake()
     {
         if (Instance == null)
