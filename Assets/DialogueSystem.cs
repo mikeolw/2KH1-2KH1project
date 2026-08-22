@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.UI;
+using UnityEngine.EventSystems;
 using TMPro;
 
 public class DialogueSystem : MonoBehaviour
@@ -102,14 +103,30 @@ public class DialogueSystem : MonoBehaviour
 
     void Update()
     {
-        // 스페이스바/마우스 클릭으로 대사 넘기기 (선택지나 팝업 UI가 안 떠있을 때만).
-        // UIManager의 조사기록/인벤토리/사진첩/핸드폰 팝업이 열려있을 때 그 바깥(모달 밖)을
-        // 클릭해도 이 대사 넘기기가 같이 발동하지 않도록 IsAnyPanelOpen도 함께 확인한다.
-        bool blockedByPopup = UIManager.Instance != null && UIManager.Instance.IsAnyPanelOpen;
-        if (!choicePanel.activeSelf && !blockedByPopup && (Input.GetMouseButtonDown(0) || Input.GetKeyDown(KeyCode.Space)))
+        // 선택지 패널이나 UIManager 팝업(조사기록/인벤토리/사진첩/핸드폰/설정)이 열려있을 땐
+        // 스페이스바로도 대사가 넘어가면 안 된다.
+        if (choicePanel.activeSelf) return;
+        if (UIManager.Instance != null && UIManager.Instance.IsAnyPanelOpen) return;
+
+        if (Input.GetKeyDown(KeyCode.Space))
+        {
+            ShowNextSentence();
+            return;
+        }
+
+        // 마우스 클릭은 EventSystem 기준으로 "지금 클릭한 지점 아래에 UI 요소가 없을 때만"
+        // 대사를 넘긴다. 이 체크가 없으면 QuickBar 버튼(Note 등)을 눌러서 패널을 여는
+        // 그 클릭이 동시에 "대사창 클릭"으로도 처리되어, 버튼 누를 때마다 대사도 같이
+        // 넘어가는 버그가 생긴다.
+        if (Input.GetMouseButtonDown(0) && !IsPointerOverUI())
         {
             ShowNextSentence();
         }
+    }
+
+    private bool IsPointerOverUI()
+    {
+        return EventSystem.current != null && EventSystem.current.IsPointerOverGameObject();
     }
 
     //CSV 데이터를 DialogueData로 변환해 불러오기
