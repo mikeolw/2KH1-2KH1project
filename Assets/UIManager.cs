@@ -23,6 +23,7 @@ public class UIManager : MonoBehaviour
 
     [Header("효과음")]
     public AudioClip noteOpenSfx;       // 노트(조사기록) 패널을 열 때 재생되는 효과음 (Sounds/SFX/ 폴더 참고)
+    public AudioClip phoneOpenSfx;      // 핸드폰 패널을 열 때 재생되는 효과음
     private AudioSource sfxSource;
 
     private void Awake()
@@ -50,7 +51,12 @@ public class UIManager : MonoBehaviour
     // 하단 퀵바 버튼에서 호출할 함수들
     public void ToggleInventory() => TogglePanel(inventoryPanel);
     public void TogglePhoto() => TogglePanel(photoPanel);
-    public void TogglePhone() => TogglePanel(phonePanel);
+    public void TogglePhone()
+    {
+        bool willOpen = !phonePanel.activeSelf;
+        TogglePanel(phonePanel);
+        if (willOpen && phoneOpenSfx != null) sfxSource.PlayOneShot(phoneOpenSfx);
+    }
     public void ToggleNote()
     {
         bool willOpen = !notePanel.activeSelf;

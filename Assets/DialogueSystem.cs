@@ -19,8 +19,8 @@ public class DialogueSystem : MonoBehaviour
     private int lineIndex = 0;
     void Start()
     {
-        // 게임 시작 시 scenario_sample.csv 파일 자동 로드 테스트
-        LoadDialogueFromCSV("scenario_sample");
+        // 게임 시작 시 scenario_01.csv(프롤로그)부터 자동 로드
+        LoadDialogueFromCSV("scenario_01");
     }
 
     //void Start()

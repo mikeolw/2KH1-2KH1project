@@ -155,6 +155,7 @@ MonoBehaviour:
   notePanel: {fileID: 1866010455}
   settingsPanel: {fileID: 0}
   noteOpenSfx: {fileID: 8300000, guid: f274b04f224079542aad43d859655e90, type: 3}
+  phoneOpenSfx: {fileID: 8300000, guid: c53fee648772bea408c10f2d80d72b39, type: 3}
 --- !u!4 &17792400
 Transform:
   m_ObjectHideFlags: 0
