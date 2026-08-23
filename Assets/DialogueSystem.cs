@@ -114,19 +114,33 @@ public class DialogueSystem : MonoBehaviour
             return;
         }
 
-        // 마우스 클릭은 EventSystem 기준으로 "지금 클릭한 지점 아래에 UI 요소가 없을 때만"
-        // 대사를 넘긴다. 이 체크가 없으면 QuickBar 버튼(Note 등)을 눌러서 패널을 여는
-        // 그 클릭이 동시에 "대사창 클릭"으로도 처리되어, 버튼 누를 때마다 대사도 같이
-        // 넘어가는 버그가 생긴다.
-        if (Input.GetMouseButtonDown(0) && !IsPointerOverUI())
+        // 마우스 클릭은 "지금 클릭한 지점 아래에 실제 버튼(Button)이 있을 때만" 대사 넘기기를
+        // 막는다. 대사창 자체(배경/텍스트)도 UI라서 EventSystem.IsPointerOverGameObject()로
+        // "UI 위인지"만 검사하면 화면 어디를 눌러도 항상 UI 위로 판정되어 클릭이 아예 안 먹히는
+        // 문제가 있었다. QuickBar 버튼(Note 등)을 눌러서 패널을 여는 클릭이 동시에 "대사창
+        // 클릭"으로도 처리되는 것만 막으면 되므로, Button 컴포넌트가 있는지로 좁혀서 검사한다.
+        if (Input.GetMouseButtonDown(0) && !IsPointerOverButton())
         {
             ShowNextSentence();
         }
     }
 
-    private bool IsPointerOverUI()
+    private bool IsPointerOverButton()
     {
-        return EventSystem.current != null && EventSystem.current.IsPointerOverGameObject();
+        if (EventSystem.current == null) return false;
+
+        var pointerData = new PointerEventData(EventSystem.current) { position = Input.mousePosition };
+        var results = new List<RaycastResult>();
+        EventSystem.current.RaycastAll(pointerData, results);
+
+        foreach (var result in results)
+        {
+            if (result.gameObject.GetComponentInParent<Button>() != null)
+            {
+                return true;
+            }
+        }
+        return false;
     }
 
     //CSV 데이터를 DialogueData로 변환해 불러오기
