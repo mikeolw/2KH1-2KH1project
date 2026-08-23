@@ -19,19 +19,23 @@ public class DialogueSystem : MonoBehaviour
     private int lineIndex = 0;
 
     // UIManager.cs와 동일한 방식: 씬에 미리 연결해둘 필요 없이 자기 GameObject에서
-    // AudioSource를 직접 확보한다 (없으면 새로 붙인다).
-    // SFX는 겹쳐 재생될 수 있어야 하니 PlayOneShot용, BGM은 계속 이어져야 하니 루프 재생용으로 분리한다.
+    // AudioSource를 직접 확보한다 (없으면 새로 붙인다). SFX/BGM을 동시에 겹쳐 들려줘야 하니
+    // (예: 발소리 SFX 위에 빗소리 BGM) 두 개로 분리했다. 같은 종류(SFX끼리, BGM끼리)는
+    // 한 번에 하나만 재생된다 - 아래 규칙 참고.
     //
-    // ===== CSV의 BGM 칸 사용법 =====
-    // 파일 위치: Assets/Resources/Sounds/ 바로 밑 (SFX처럼 SFX/ 하위 폴더 아님). 확장자 없이 파일명만 적는다.
-    //   1) 곡을 "시작"하려는 줄에만 BGM 칸을 채운다. 그 줄부터 재생되고 자동으로 루프된다.
-    //   2) 같은 곡이 이어지는 줄들은 BGM 칸을 비워둔다. 지금 재생 중인 곡을 그대로 이어간다
-    //      (ShowNextSentence()에서 line.bgmToPlay == null이면 아무 것도 안 건드림).
-    //   3) 다른 곡 이름이 적힌 줄이 나오면 그 시점에 이전 곡을 멈추고 새 곡으로 전환한다
-    //      (ShowNextSentence()에서 bgmSource.clip과 다른 클립일 때만 Stop 후 재생).
-    //   4) 선택지를 눌러 "다음 씬"(다른 CSV 파일)으로 넘어가면 재생 중이던 BGM은 무조건 끊긴다
-    //      (StartDialogue()에서 강제 Stop). 다음 CSV에서도 이어가고 싶으면 그 파일 첫 줄에
-    //      같은 파일명을 다시 적어야 한다 (처음부터 재생되는 것이라 이음매 없이 이어지진 않는다).
+    // ===== CSV의 SFX/BGM 칸 사용법 (ApplyLineAudio 참고) =====
+    // 파일 위치: SFX는 Assets/Resources/Sounds/SFX/, BGM은 Assets/Resources/Sounds/ 바로 밑.
+    // 둘 다 확장자 없이 파일명만 적는다. 기준은 "다음 문장(대사 한 줄)"으로 넘어갈 때마다
+    // 매번 적용된다 (CSV 파일이 바뀌는 것과는 무관함):
+    //   1) 칸이 비어있는 줄로 넘어가면 그 시점에 재생 중이던 걸 끊는다(정지).
+    //   2) 칸에 적힌 이름이 지금 재생 중인 것과 같으면 그대로 이어간다(재시작 안 함).
+    //      -> N번 줄부터 M번 줄까지 계속 이어지게 하려면, N~M 줄 전부에 같은 파일명을
+    //         적어두면 된다. M+1번 줄에서 칸을 비우면 그때 끊긴다.
+    //   3) 칸에 지금과 다른 이름이 적혀있으면, 이전 것을 멈추고 새 걸로 전환한다.
+    // CSV 파일(씬)이 바뀌어도 이 규칙은 그대로 적용된다 - 새 CSV 첫 줄이 비어있으면 끊기고,
+    // 같은 이름이 적혀있으면 이어진다.
+    // 주의: SFX는 더 이상 PlayOneShot이 아니라서(끊을 수 있어야 하므로) 짧은 효과음 두 개를
+    // 동시에 겹쳐 재생할 수는 없다 - 새 SFX가 시작되면 이전 SFX는 그 즉시 끊긴다.
     private AudioSource sfxSource;
     private AudioSource bgmSource;
 
@@ -59,12 +63,9 @@ public class DialogueSystem : MonoBehaviour
 
     public void StartDialogue(DialogueData data)
     {
-        // "다음 씬(CSV)"으로 넘어갈 때는 이전에 재생 중이던 BGM을 무조건 끊는다. 같은 곡을
-        // 이어가고 싶으면 새 CSV의 첫 줄 BGM 칸에 같은 파일명을 다시 적어주면 된다(처음부터
-        // 다시 재생되긴 하지만, 씬이 바뀌었는데도 소리가 계속 이어지는 것보다는 자연스럽다).
-        bgmSource.Stop();
-        bgmSource.clip = null;
-
+        // BGM 재생/정지는 줄 단위로 ShowNextSentence()에서 처리한다 (필드 선언부의
+        // "CSV의 BGM 칸 사용법" 주석 참고). 여기서 따로 끊지 않아도 새 CSV의 첫 줄이
+        // 비어있으면 알아서 끊기고, 같은 곡 이름이면 알아서 이어진다.
         currentDialogue = data;
         lineIndex = 0;
         choicePanel.SetActive(false);
@@ -85,20 +86,31 @@ public class DialogueSystem : MonoBehaviour
         speakerText.text = line.lineType == LineType.Narration ? "" : line.speaker;
         sentenceText.text = line.sentence;
 
-        if (line.sfxToPlay != null) sfxSource.PlayOneShot(line.sfxToPlay);
-
-        // BGM 칸이 비어있으면(line.bgmToPlay == null) 지금 재생 중인 곡을 그대로 이어간다.
-        // 같은 곡을 여러 줄에 걸쳐 계속 틀고 싶다면, 시작하는 줄에만 BGM을 적고 이어지는
-        // 줄들은 BGM 칸을 비워두면 된다 - 매 줄마다 다시 적어도 같은 클립이면 끊기지 않는다.
-        // 다른 곡이 적혀있으면 그 시점에 이전 곡을 멈추고 새 곡으로 전환한다.
-        if (line.bgmToPlay != null && bgmSource.clip != line.bgmToPlay)
-        {
-            bgmSource.Stop();
-            bgmSource.clip = line.bgmToPlay;
-            bgmSource.Play();
-        }
+        // 다음 문장으로 넘어갈 때마다 SFX/BGM 칸을 확인한다 (규칙은 필드 선언부 주석 참고):
+        // 칸이 비어있으면 끊고, 같은 클립이면 이어가고, 다른 클립이면 전환한다.
+        // (SFX도 예전엔 PlayOneShot으로 쏘기만 하고 끊는 방법이 없었다 - PlayOneShot은
+        // sfxSource.clip에 기록되지 않아서 Stop()으로만 멈출 수 있다. BGM과 같은 방식으로
+        // 통일해서 다음 줄로 넘어가면 SFX도 확실히 끊기도록 고쳤다.)
+        ApplyLineAudio(sfxSource, line.sfxToPlay);
+        ApplyLineAudio(bgmSource, line.bgmToPlay);
 
         lineIndex++;
+    }
+
+    private void ApplyLineAudio(AudioSource source, AudioClip desiredClip)
+    {
+        if (desiredClip == null)
+        {
+            source.Stop();
+            source.clip = null;
+        }
+        else if (source.clip != desiredClip)
+        {
+            source.Stop();
+            source.clip = desiredClip;
+            source.Play();
+        }
+        // else: 같은 클립이 이미 재생 중 -> 그대로 둔다 (재시작하지 않음)
     }
 
     private void ShowChoices()
