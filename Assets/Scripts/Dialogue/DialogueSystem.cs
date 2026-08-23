@@ -17,8 +17,34 @@ public class DialogueSystem : MonoBehaviour
     [Header("프로토타입 테스트용 대사 데이터")]
     public DialogueData currentDialogue;
     private int lineIndex = 0;
+
+    // UIManager.cs와 동일한 방식: 씬에 미리 연결해둘 필요 없이 자기 GameObject에서
+    // AudioSource를 직접 확보한다 (없으면 새로 붙인다).
+    // SFX는 겹쳐 재생될 수 있어야 하니 PlayOneShot용, BGM은 계속 이어져야 하니 루프 재생용으로 분리한다.
+    //
+    // ===== CSV의 BGM 칸 사용법 =====
+    // 파일 위치: Assets/Resources/Sounds/ 바로 밑 (SFX처럼 SFX/ 하위 폴더 아님). 확장자 없이 파일명만 적는다.
+    //   1) 곡을 "시작"하려는 줄에만 BGM 칸을 채운다. 그 줄부터 재생되고 자동으로 루프된다.
+    //   2) 같은 곡이 이어지는 줄들은 BGM 칸을 비워둔다. 지금 재생 중인 곡을 그대로 이어간다
+    //      (ShowNextSentence()에서 line.bgmToPlay == null이면 아무 것도 안 건드림).
+    //   3) 다른 곡 이름이 적힌 줄이 나오면 그 시점에 이전 곡을 멈추고 새 곡으로 전환한다
+    //      (ShowNextSentence()에서 bgmSource.clip과 다른 클립일 때만 Stop 후 재생).
+    //   4) 선택지를 눌러 "다음 씬"(다른 CSV 파일)으로 넘어가면 재생 중이던 BGM은 무조건 끊긴다
+    //      (StartDialogue()에서 강제 Stop). 다음 CSV에서도 이어가고 싶으면 그 파일 첫 줄에
+    //      같은 파일명을 다시 적어야 한다 (처음부터 재생되는 것이라 이음매 없이 이어지진 않는다).
+    private AudioSource sfxSource;
+    private AudioSource bgmSource;
+
     void Start()
     {
+        sfxSource = GetComponent<AudioSource>();
+        if (sfxSource == null) sfxSource = gameObject.AddComponent<AudioSource>();
+        sfxSource.playOnAwake = false;
+
+        bgmSource = gameObject.AddComponent<AudioSource>();
+        bgmSource.playOnAwake = false;
+        bgmSource.loop = true;
+
         // 게임 시작 시 scenario_01.csv(프롤로그)부터 자동 로드
         LoadDialogueFromCSV("scenario_01");
     }
@@ -33,6 +59,12 @@ public class DialogueSystem : MonoBehaviour
 
     public void StartDialogue(DialogueData data)
     {
+        // "다음 씬(CSV)"으로 넘어갈 때는 이전에 재생 중이던 BGM을 무조건 끊는다. 같은 곡을
+        // 이어가고 싶으면 새 CSV의 첫 줄 BGM 칸에 같은 파일명을 다시 적어주면 된다(처음부터
+        // 다시 재생되긴 하지만, 씬이 바뀌었는데도 소리가 계속 이어지는 것보다는 자연스럽다).
+        bgmSource.Stop();
+        bgmSource.clip = null;
+
         currentDialogue = data;
         lineIndex = 0;
         choicePanel.SetActive(false);
@@ -52,6 +84,20 @@ public class DialogueSystem : MonoBehaviour
         // 지문/나레이션(LineType.Narration)은 화자 이름을 숨긴다 (DialogueLine.cs의 lineType 주석 참고).
         speakerText.text = line.lineType == LineType.Narration ? "" : line.speaker;
         sentenceText.text = line.sentence;
+
+        if (line.sfxToPlay != null) sfxSource.PlayOneShot(line.sfxToPlay);
+
+        // BGM 칸이 비어있으면(line.bgmToPlay == null) 지금 재생 중인 곡을 그대로 이어간다.
+        // 같은 곡을 여러 줄에 걸쳐 계속 틀고 싶다면, 시작하는 줄에만 BGM을 적고 이어지는
+        // 줄들은 BGM 칸을 비워두면 된다 - 매 줄마다 다시 적어도 같은 클립이면 끊기지 않는다.
+        // 다른 곡이 적혀있으면 그 시점에 이전 곡을 멈추고 새 곡으로 전환한다.
+        if (line.bgmToPlay != null && bgmSource.clip != line.bgmToPlay)
+        {
+            bgmSource.Stop();
+            bgmSource.clip = line.bgmToPlay;
+            bgmSource.Play();
+        }
+
         lineIndex++;
     }
 
@@ -212,9 +258,7 @@ public class DialogueSystem : MonoBehaviour
                 line.sfxToPlay = Resources.Load<AudioClip>("Sounds/SFX/" + sfxName);
             }
 
-            // BGM도 SFX와 동일한 방식으로 불러온다. 단, 실제로 이 클립을 재생하는 코드는 아직
-            // 없다 (TODO: 대사 진행에 맞춰 BGM을 재생/전환하는 오디오 매니저가 필요함 - 지금은
-            // Title 화면 전용 BgmPlayer.cs만 있고, 게임 씬 쪽 BGM 재생기는 없다).
+            // BGM도 SFX와 동일한 방식으로 불러온다. 실제 재생/전환 로직은 ShowNextSentence()에 있다.
             string bgmName = GetField(data[i], "BGM");
             if (!string.IsNullOrEmpty(bgmName))
             {
