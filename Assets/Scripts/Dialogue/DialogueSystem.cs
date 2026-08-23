@@ -82,6 +82,22 @@ public class DialogueSystem : MonoBehaviour
         }
 
         var line = currentDialogue.lines[lineIndex];
+        lineIndex++;
+
+        // LineType이 "Minigame"인 줄은 대사 대신 미니게임 패널을 띄운다 (MinigameController.cs
+        // 상단 주석 참고). 성공하면 다음 줄로 계속 진행하고, 실패하면 바로 엔딩으로 분기한다.
+        // 지금은 MinigameController가 "버튼 하나 누르면 무조건 성공"하는 스텁이라 onFailCallback이
+        // 실제로 호출되진 않지만, 나중에 진짜 실패 조건이 생겨도 이 호출부는 그대로 두면 된다.
+        if (line.isMinigame)
+        {
+            MinigameController.Instance.StartMinigame(
+                line.minigameLabel,
+                onSuccessCallback: () => ShowNextSentence(),
+                onFailCallback: () => GameFlowManager.Instance.TriggerEnding(line.minigameFailEnding)
+            );
+            return;
+        }
+
         // 지문/나레이션(LineType.Narration)은 화자 이름을 숨긴다 (DialogueLine.cs의 lineType 주석 참고).
         speakerText.text = line.lineType == LineType.Narration ? "" : line.speaker;
         sentenceText.text = line.sentence;
@@ -93,8 +109,6 @@ public class DialogueSystem : MonoBehaviour
         // 통일해서 다음 줄로 넘어가면 SFX도 확실히 끊기도록 고쳤다.)
         ApplyLineAudio(sfxSource, line.sfxToPlay);
         ApplyLineAudio(bgmSource, line.bgmToPlay);
-
-        lineIndex++;
     }
 
     private void ApplyLineAudio(AudioSource source, AudioClip desiredClip)
@@ -165,6 +179,7 @@ public class DialogueSystem : MonoBehaviour
         // 스페이스바로도 대사가 넘어가면 안 된다.
         if (choicePanel.activeSelf) return;
         if (UIManager.Instance != null && UIManager.Instance.IsAnyPanelOpen) return;
+        if (MinigameController.Instance != null && MinigameController.Instance.IsActive) return;
 
         if (Input.GetKeyDown(KeyCode.Space))
         {
@@ -203,13 +218,21 @@ public class DialogueSystem : MonoBehaviour
 
     //CSV 데이터를 DialogueData로 변환해 불러오기
     //
-    // CSV 컬럼: LineType,Speaker,Sentence,BGM,SFX,IsFadeOut,Item,ChoiceText,NextScenario,IsEndingChoice,TargetEnding
+    // CSV 컬럼: LineType,Speaker,Sentence,BGM,SFX,IsFadeOut,Item,ChoiceText,NextScenario,
+    //           IsEndingChoice,TargetEnding,MinigameLabel
+    // (MinigameLabel은 LineType이 "Minigame"인 행에서만 쓰인다. 실제 미니게임 조작 방식이
+    // 정해지면 여기에 컬럼이 더 추가될 수 있다 - DialogueLine.cs 상단 주석 참고.)
     //
     // LineType이 "Choice"인 행은 일반 대사(DialogueLine)가 아니라 선택지(Choice)로 취급되어
-    // currentDialogue.choices에 쌓인다. 그 외("Normal"/"Narration")는 기존처럼 lines에 쌓인다.
-    // 지금 엔진 구조상 선택지는 항상 대사가 다 끝난 뒤 한 번에 보여주므로(ShowChoices() 참고),
-    // Choice 행은 CSV 파일의 맨 끝에 몰아서 적어야 한다 (중간에 끼워넣으면 무시되지 않고 그냥
-    // choices 리스트에 똑같이 쌓이긴 하지만, 화면에는 대사가 전부 끝난 뒤에야 나타난다).
+    // currentDialogue.choices에 쌓인다. 그 외("Normal"/"Narration"/"Minigame")는 lines에
+    // 순서대로 쌓인다 (Minigame도 대사 흐름 중간에 끼워야 하므로 Choice와 다르게 lines 쪽으로
+    // 감). 지금 엔진 구조상 선택지는 항상 대사가 다 끝난 뒤 한 번에 보여주므로(ShowChoices()
+    // 참고), Choice 행은 CSV 파일의 맨 끝에 몰아서 적어야 한다 (중간에 끼워넣으면 무시되지
+    // 않고 그냥 choices 리스트에 똑같이 쌓이긴 하지만, 화면에는 대사가 전부 끝난 뒤에야
+    // 나타난다).
+    //
+    // "Minigame" 행은 MinigameController.cs가 실제로 처리한다. TargetEnding 칸은 Choice
+    // 행과 같은 컬럼이지만 여기서는 "실패 시 연결할 엔딩"이라는 뜻으로 재사용된다.
     public void LoadDialogueFromCSV(string csvFileName)
     {
         // Resources/Dialogues/ 폴더 내의 CSV 파일 읽기
@@ -248,6 +271,30 @@ public class DialogueSystem : MonoBehaviour
                 }
 
                 currentDialogue.choices.Add(choice);
+                continue;
+            }
+
+            if (string.Equals(lineTypeStr, "Minigame", StringComparison.OrdinalIgnoreCase))
+            {
+                // 지금은 실제 미니게임 기획이 없어서 "라벨 문구 + 실패 시 엔딩"만 읽어온다.
+                // 나중에 실제 조작 방식이 정해지면 여기서 필요한 CSV 컬럼을 추가로 읽어와서
+                // DialogueLine의 새 필드에 채워주면 된다 (DialogueLine.cs 상단의 확장 방법 주석 참고).
+                var minigameLine = new DialogueLine();
+                minigameLine.isMinigame = true;
+                minigameLine.minigameLabel = GetField(data[i], "MinigameLabel");
+
+                // TargetEnding 칸을 실패 엔딩으로 재사용한다 (Choice 행의 TargetEnding과 같은 컬럼).
+                string failEndingStr = GetField(data[i], "TargetEnding");
+                if (Enum.TryParse(failEndingStr, out EndingType parsedFailEnding))
+                {
+                    minigameLine.minigameFailEnding = parsedFailEnding;
+                }
+                else
+                {
+                    Debug.LogWarning($"[DialogueSystem] Minigame 행의 TargetEnding '{failEndingStr}'이 EndingType에 없습니다. (CSV: {csvFileName}, 행: {i + 2})");
+                }
+
+                currentDialogue.lines.Add(minigameLine);
                 continue;
             }
 
