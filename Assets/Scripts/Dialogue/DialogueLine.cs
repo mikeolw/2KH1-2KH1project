@@ -58,4 +58,19 @@ public class DialogueLine
     public EndingType minigameFailEnding; // 실패 시 연결할 엔딩 (CSV의 TargetEnding 컬럼 재사용,
                                            // 지금 스텁은 항상 성공하므로 실제로 쓰이진 않지만
                                            // 나중에 진짜 실패 조건이 생기면 바로 쓸 수 있게 남겨둠)
+
+    [Header("조사 모드 (선택)")]
+    // CSV의 LineType이 "Investigate"인 행에서만 채워진다. isInvestigation이 true면
+    // DialogueSystem.ShowNextSentence()가 대사를 표시하는 대신 InvestigationController를
+    // 띄운다 - 위의 미니게임(isMinigame)과 완전히 동일한 배관 구조이고, 자리만
+    // InvestigationController로 바뀐 것뿐이다.
+    //
+    // investigationId는 씬에 미리 배치해둔 조사 화면(InvestigationController.screens 목록의
+    // InvestigationScreen.id)과 매칭된다. 지금은 조사 가능한 위치(책상/핸드폰/창문/회사 동료
+    // 등) 자체를 CSV가 아니라 씬에 직접 배치한 Placeholder 오브젝트(InvestigatableObject.cs)로
+    // 관리한다. 나중에 조사 위치 자체를 CSV로 데이터화해야 한다면, 미니게임 확장 방법과
+    // 동일하게 여기에 필드를 추가하고 DialogueSystem.LoadDialogueFromCSV()의 "Investigate"
+    // 파싱부에서 채워주면 된다.
+    public bool isInvestigation;
+    public string investigationId;
 }
