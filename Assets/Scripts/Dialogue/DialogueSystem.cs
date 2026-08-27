@@ -18,6 +18,11 @@ public class DialogueSystem : MonoBehaviour
     public DialogueData currentDialogue;
     private int lineIndex = 0;
 
+    // UIManager.cs/MinigameController.cs와 동일한 싱글톤 패턴. InvestigationController가
+    // "Talk" 타입 조사 오브젝트를 처리할 때 기존 대사창(speakerText/sentenceText)을
+    // 빌려 쓰기 위해 이 Instance를 통해 접근한다 (ShowInvestigationLine() 참고).
+    public static DialogueSystem Instance;
+
     // UIManager.cs와 동일한 방식: 씬에 미리 연결해둘 필요 없이 자기 GameObject에서
     // AudioSource를 직접 확보한다 (없으면 새로 붙인다). SFX/BGM을 동시에 겹쳐 들려줘야 하니
     // (예: 발소리 SFX 위에 빗소리 BGM) 두 개로 분리했다. 같은 종류(SFX끼리, BGM끼리)는
@@ -38,6 +43,12 @@ public class DialogueSystem : MonoBehaviour
     // 동시에 겹쳐 재생할 수는 없다 - 새 SFX가 시작되면 이전 SFX는 그 즉시 끊긴다.
     private AudioSource sfxSource;
     private AudioSource bgmSource;
+
+    private void Awake()
+    {
+        if (Instance == null) Instance = this;
+        else Destroy(gameObject);
+    }
 
     void Start()
     {
@@ -98,6 +109,18 @@ public class DialogueSystem : MonoBehaviour
             return;
         }
 
+        // LineType이 "Investigate"인 줄은 대사 대신 조사 화면을 띄운다 (InvestigationController.cs
+        // 상단 주석 참고). 조사를 마치고 "조사 그만하기"를 누르면 onExit 콜백으로 넘겨준
+        // ShowNextSentence()가 다시 호출되어 CSV의 다음 줄부터 이어간다.
+        if (line.isInvestigation)
+        {
+            InvestigationController.Instance.Enter(
+                line.investigationId,
+                onExit: () => ShowNextSentence()
+            );
+            return;
+        }
+
         // 지문/나레이션(LineType.Narration)은 화자 이름을 숨긴다 (DialogueLine.cs의 lineType 주석 참고).
         speakerText.text = line.lineType == LineType.Narration ? "" : line.speaker;
         sentenceText.text = line.sentence;
@@ -109,6 +132,19 @@ public class DialogueSystem : MonoBehaviour
         // 통일해서 다음 줄로 넘어가면 SFX도 확실히 끊기도록 고쳤다.)
         ApplyLineAudio(sfxSource, line.sfxToPlay);
         ApplyLineAudio(bgmSource, line.bgmToPlay);
+    }
+
+    // Talk 타입 조사 오브젝트(InvestigatableObject.cs 참고, 예: 회사 동료)가
+    // InvestigationController.Inspect()를 거쳐서 호출한다. 일반 ShowNextSentence()와 달리
+    // lineIndex/currentDialogue를 전혀 건드리지 않고 speakerText/sentenceText만 그 자리에서
+    // 바꿔 보여준다 - 즉 "지금 CSV 대사가 어디까지 진행됐는지"는 그대로 유지한 채, 대사창
+    // UI만 잠깐 빌려 쓰는 것이다. 다시 조사 화면으로 돌아가는 처리는
+    // InvestigationController.DismissTalkLine()이 담당하고, 그 트리거(스페이스/클릭)는
+    // 아래 Update()가 IsShowingTalkLine을 보고 분기한다.
+    public void ShowInvestigationLine(string speaker, string sentence)
+    {
+        speakerText.text = speaker;
+        sentenceText.text = sentence;
     }
 
     private void ApplyLineAudio(AudioSource source, AudioClip desiredClip)
@@ -181,6 +217,22 @@ public class DialogueSystem : MonoBehaviour
         if (UIManager.Instance != null && UIManager.Instance.IsAnyPanelOpen) return;
         if (MinigameController.Instance != null && MinigameController.Instance.IsActive) return;
 
+        // 조사 모드 처리: 평소엔 조사 화면의 버튼들(InvestigatableObject)이 클릭을 직접
+        // 받으므로 여기서 따로 막을 필요가 없다. 다만 "Talk" 타입 오브젝트(예: 회사 동료)를
+        // 조사해서 기존 대사창을 임시로 보여주고 있는 동안(IsShowingTalkLine)은, 그 대사창이
+        // 실제 CSV lineIndex와 무관한 "오버레이"이므로 스페이스/클릭이 ShowNextSentence()로
+        // 새어나가면 안 된다 - 조사 화면이 떠 있는 채로 몰래 CSV가 진행돼버리는 버그가 생긴다.
+        // 그래서 이 경우엔 DismissTalkLine()으로 돌려서 "조사 화면으로 복귀"만 시킨다.
+        if (InvestigationController.Instance != null && InvestigationController.Instance.IsActive)
+        {
+            if (InvestigationController.Instance.IsShowingTalkLine &&
+                (Input.GetKeyDown(KeyCode.Space) || (Input.GetMouseButtonDown(0) && !IsPointerOverButton())))
+            {
+                InvestigationController.Instance.DismissTalkLine();
+            }
+            return;
+        }
+
         if (Input.GetKeyDown(KeyCode.Space))
         {
             ShowNextSentence();
@@ -219,9 +271,10 @@ public class DialogueSystem : MonoBehaviour
     //CSV 데이터를 DialogueData로 변환해 불러오기
     //
     // CSV 컬럼: LineType,Speaker,Sentence,BGM,SFX,IsFadeOut,Item,ChoiceText,NextScenario,
-    //           IsEndingChoice,TargetEnding,MinigameLabel
-    // (MinigameLabel은 LineType이 "Minigame"인 행에서만 쓰인다. 실제 미니게임 조작 방식이
-    // 정해지면 여기에 컬럼이 더 추가될 수 있다 - DialogueLine.cs 상단 주석 참고.)
+    //           IsEndingChoice,TargetEnding,MinigameLabel,InvestigationId
+    // (MinigameLabel은 LineType이 "Minigame"인 행에서만, InvestigationId는 LineType이
+    // "Investigate"인 행에서만 쓰인다. 실제 미니게임 조작 방식이 정해지면 여기에 컬럼이 더
+    // 추가될 수 있다 - DialogueLine.cs 상단 주석 참고.)
     //
     // LineType이 "Choice"인 행은 일반 대사(DialogueLine)가 아니라 선택지(Choice)로 취급되어
     // currentDialogue.choices에 쌓인다. 그 외("Normal"/"Narration"/"Minigame")는 lines에
@@ -295,6 +348,18 @@ public class DialogueSystem : MonoBehaviour
                 }
 
                 currentDialogue.lines.Add(minigameLine);
+                continue;
+            }
+
+            if (string.Equals(lineTypeStr, "Investigate", StringComparison.OrdinalIgnoreCase))
+            {
+                // 조사 화면은 CSV가 아니라 씬에 직접 배치해두므로, 여기서는 어떤 조사 화면을
+                // 띄울지 가리키는 식별자(InvestigationId)만 읽어오면 된다.
+                var investigateLine = new DialogueLine();
+                investigateLine.isInvestigation = true;
+                investigateLine.investigationId = GetField(data[i], "InvestigationId");
+
+                currentDialogue.lines.Add(investigateLine);
                 continue;
             }
 
