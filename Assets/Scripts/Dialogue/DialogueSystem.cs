@@ -1,4 +1,5 @@
 using System;
+using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.UI;
@@ -43,6 +44,16 @@ public class DialogueSystem : MonoBehaviour
     // 동시에 겹쳐 재생할 수는 없다 - 새 SFX가 시작되면 이전 SFX는 그 즉시 끊긴다.
     private AudioSource sfxSource;
     private AudioSource bgmSource;
+
+    [Header("화면 연출")]
+    // DialogueLine.isFadeOut 줄을 보여줄 때 쓰는 화면 전체 검은 오버레이.
+    // 시간 경과/장소 전환처럼 급격한 배경·대사 전환을 암전으로 부드럽게 가리는 용도.
+    public CanvasGroup fadeCanvasGroup;
+    public float fadeDuration = 0.5f;   // 암전/복귀 각각에 걸리는 시간(초)
+    public float blackHoldDuration = 2f; // 완전히 검게 된 채로 유지되는 시간(초)
+
+    // 암전 코루틴이 도는 동안 스페이스/클릭으로 대사를 건너뛰지 못하게 막는 플래그.
+    private bool isFading;
 
     private void Awake()
     {
@@ -121,15 +132,60 @@ public class DialogueSystem : MonoBehaviour
             return;
         }
 
-        // 지문/나레이션(LineType.Narration)은 화자 이름을 숨긴다 (DialogueLine.cs의 lineType 주석 참고).
+        // isFadeOut 줄은 화면을 암전시킨 뒤에 대사/사운드를 바꾸고 다시 밝게 복귀한다.
+        if (line.isFadeOut)
+        {
+            StartCoroutine(ShowLineWithFade(line));
+        }
+        else
+        {
+            DisplayLine(line);
+        }
+    }
+
+    // 화면을 검게 암전(alpha 0->1) -> 그 상태에서 대사/사운드 교체 -> blackHoldDuration만큼 검은
+    // 화면 유지 -> 다시 밝게 복귀(alpha 1->0). 시간 경과/장소 전환처럼 급격한 전환을 부드럽게
+    // 가리는 용도 (DialogueLine.isFadeOut 참고).
+    private IEnumerator ShowLineWithFade(DialogueLine line)
+    {
+        isFading = true;
+        if (fadeCanvasGroup != null) fadeCanvasGroup.blocksRaycasts = true;
+
+        yield return StartCoroutine(Fade(1f));
+        DisplayLine(line);
+        yield return new WaitForSeconds(blackHoldDuration);
+        yield return StartCoroutine(Fade(0f));
+
+        if (fadeCanvasGroup != null) fadeCanvasGroup.blocksRaycasts = false;
+        isFading = false;
+    }
+
+    private IEnumerator Fade(float targetAlpha)
+    {
+        if (fadeCanvasGroup == null) yield break;
+
+        float startAlpha = fadeCanvasGroup.alpha;
+        float t = 0f;
+        while (t < fadeDuration)
+        {
+            t += Time.deltaTime;
+            fadeCanvasGroup.alpha = Mathf.Lerp(startAlpha, targetAlpha, t / fadeDuration);
+            yield return null;
+        }
+        fadeCanvasGroup.alpha = targetAlpha;
+    }
+
+    // 지문/나레이션(LineType.Narration)은 화자 이름을 숨긴다 (DialogueLine.cs의 lineType 주석 참고).
+    // 다음 문장으로 넘어갈 때마다 SFX/BGM 칸을 확인한다 (규칙은 필드 선언부 주석 참고):
+    // 칸이 비어있으면 끊고, 같은 클립이면 이어가고, 다른 클립이면 전환한다.
+    // (SFX도 예전엔 PlayOneShot으로 쏘기만 하고 끊는 방법이 없었다 - PlayOneShot은
+    // sfxSource.clip에 기록되지 않아서 Stop()으로만 멈출 수 있다. BGM과 같은 방식으로
+    // 통일해서 다음 줄로 넘어가면 SFX도 확실히 끊기도록 고쳤다.)
+    private void DisplayLine(DialogueLine line)
+    {
         speakerText.text = line.lineType == LineType.Narration ? "" : line.speaker;
         sentenceText.text = line.sentence;
 
-        // 다음 문장으로 넘어갈 때마다 SFX/BGM 칸을 확인한다 (규칙은 필드 선언부 주석 참고):
-        // 칸이 비어있으면 끊고, 같은 클립이면 이어가고, 다른 클립이면 전환한다.
-        // (SFX도 예전엔 PlayOneShot으로 쏘기만 하고 끊는 방법이 없었다 - PlayOneShot은
-        // sfxSource.clip에 기록되지 않아서 Stop()으로만 멈출 수 있다. BGM과 같은 방식으로
-        // 통일해서 다음 줄로 넘어가면 SFX도 확실히 끊기도록 고쳤다.)
         ApplyLineAudio(sfxSource, line.sfxToPlay);
         ApplyLineAudio(bgmSource, line.bgmToPlay);
     }
@@ -211,6 +267,9 @@ public class DialogueSystem : MonoBehaviour
 
     void Update()
     {
+        // 암전 연출(ShowLineWithFade) 진행 중엔 스페이스/클릭으로 건너뛰지 못하게 막는다.
+        if (isFading) return;
+
         // 선택지 패널이나 UIManager 팝업(조사기록/인벤토리/사진첩/핸드폰/설정)이 열려있을 땐
         // 스페이스바로도 대사가 넘어가면 안 된다.
         if (choicePanel.activeSelf) return;

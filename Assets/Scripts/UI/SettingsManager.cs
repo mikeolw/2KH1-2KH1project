@@ -16,6 +16,16 @@ public class SettingsManager : MonoBehaviour
     // 기존 유저의 예전 형식 데이터와 충돌하지 않게 하는 걸 권장.
     private const string PrefsKey = "GameSettings_v1";
 
+    // 창 모드 해상도. 레퍼런스 해상도 1440x1080(4:3)에서 너비를 1080으로 줄인 배율(0.75)을
+    // 그대로 높이에 적용: 1080 * 0.75 = 810.
+    private const int WindowedWidth = 1080;
+    private const int WindowedHeight = 810;
+
+    // 창 모드가 아닐 때(기본값) 되돌아갈 해상도/모드. ProjectSettings.asset의
+    // defaultScreenWidth/Height(1920x1080)와 fullscreenMode(1 = FullScreenWindow)를 그대로 따름.
+    private const int DefaultWidth = 1920;
+    private const int DefaultHeight = 1080;
+
     // 현재 적용 중인 설정값. UI(슬라이더)는 이 값을 읽어서 초기 상태를 표시한다.
     public GameSettings Current { get; private set; } = new GameSettings();
 
@@ -59,20 +69,24 @@ public class SettingsManager : MonoBehaviour
     }
 
     // 실제 게임에 설정값을 반영하는 부분.
-    // TODO: 지금은 masterVolume -> AudioListener.volume 하나만 연결되어 있다.
+    // TODO: masterVolume -> AudioListener.volume, windowed -> Screen.SetResolution만 연결되어 있다.
     // bgmVolume/sfxVolume은 저장은 되지만 적용할 대상(BGM/SFX 전용 AudioSource나
     // AudioMixer)이 프로젝트에 아직 없어서 소리에 영향을 주지 않는다.
-    // sharpness(선명도)도 마찬가지로 저장만 되고 화면에 실제로 적용되지 않는다.
-    // 오디오/화면 시스템이 추가되면 이 메서드 안에서 각 값을 연결해줄 것.
+    // 오디오 시스템이 추가되면 이 메서드 안에서 각 값을 연결해줄 것.
     private void Apply()
     {
         AudioListener.volume = Current.masterVolume;
+
+        if (Current.windowed)
+            Screen.SetResolution(WindowedWidth, WindowedHeight, FullScreenMode.Windowed);
+        else
+            Screen.SetResolution(DefaultWidth, DefaultHeight, FullScreenMode.FullScreenWindow);
     }
 
-    // 아래 4개는 SettingsPanelController의 슬라이더 onValueChanged에 직접 연결되는
-    // 콜백들이다. 슬라이더를 움직일 때마다 해당 값만 바꾸고 바로 SaveAndApply()를 호출한다.
+    // 아래 4개는 SettingsPanelController의 슬라이더/토글 onValueChanged에 직접 연결되는
+    // 콜백들이다. 값이 바뀔 때마다 해당 값만 바꾸고 바로 SaveAndApply()를 호출한다.
     public void SetMasterVolume(float v) { Current.masterVolume = v; SaveAndApply(); }
-    public void SetSharpness(float v) { Current.sharpness = v; SaveAndApply(); }
     public void SetBgmVolume(float v) { Current.bgmVolume = v; SaveAndApply(); }
     public void SetSfxVolume(float v) { Current.sfxVolume = v; SaveAndApply(); }
+    public void SetWindowed(bool v) { Current.windowed = v; SaveAndApply(); }
 }

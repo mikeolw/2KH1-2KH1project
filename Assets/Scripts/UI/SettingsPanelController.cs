@@ -2,7 +2,7 @@ using UnityEngine;
 using UnityEngine.UI;
 using UnityEngine.SceneManagement;
 
-// 환경설정 화면(탭 4개 + 슬라이더)의 UI 동작을 담당.
+// 환경설정 화면(탭 2개 + 슬라이더)의 UI 동작을 담당.
 //
 // 두 가지 방식으로 재사용할 수 있게 설계되어 있다:
 //   1) 독립된 씬으로 쓰는 경우 (지금의 Settings.unity) - onBack을 아무도 설정하지 않으면
@@ -17,23 +17,21 @@ using UnityEngine.SceneManagement;
 // 연결하는 것"만 담당한다.
 public class SettingsPanelController : MonoBehaviour
 {
-    [Header("탭 버튼 (상단 4개 아이콘)")]
+    [Header("탭 버튼 (상단 2개 아이콘)")]
     public Button tabVolumeButton;
-    public Button tabDisplayButton;   // TODO: "화면" 탭 - 아직 내용(밝기/해상도 등)이 정해지지 않아 Content_Display는 "준비 중" placeholder 텍스트만 있음
-    public Button tabKeypadButton;    // TODO: "키패드" 탭 - 조작키 설정으로 추정되나 확정 전, Content_Keypad도 placeholder
-    public Button tabListButton;      // TODO: "목록" 탭 - 용도 자체가 아직 불명확, Content_List도 placeholder
+    public Button tabDisplayButton;   // "화면" 탭 - 창 모드 토글 추가됨 (밝기 등 나머지는 아직 미정)
 
     [Header("탭별 콘텐츠 패널 (한 번에 하나만 활성화됨)")]
     public GameObject volumeContent;
     public GameObject displayContent;
-    public GameObject keypadContent;
-    public GameObject listContent;
 
     [Header("볼륨 탭 슬라이더 (min 0 ~ max 1)")]
     public Slider masterVolumeSlider;
-    public Slider sharpnessSlider;   // "선명도" - 화면 탭으로 옮길지 미정이라 우선 여기 있음 (GameSettings.sharpness 주석 참고)
     public Slider bgmVolumeSlider;   // TODO: 실제 BGM 소스가 없어 값 저장만 되고 소리엔 영향 없음
     public Slider sfxVolumeSlider;   // TODO: 실제 SFX 소스가 없어 값 저장만 되고 소리엔 영향 없음
+
+    [Header("화면 탭 (Content_Display)")]
+    public Toggle windowedToggle;
 
     [Header("공용 버튼")]
     public Button quitButton;
@@ -46,8 +44,6 @@ public class SettingsPanelController : MonoBehaviour
     {
         tabVolumeButton.onClick.AddListener(() => ShowTab(volumeContent));
         tabDisplayButton.onClick.AddListener(() => ShowTab(displayContent));
-        tabKeypadButton.onClick.AddListener(() => ShowTab(keypadContent));
-        tabListButton.onClick.AddListener(() => ShowTab(listContent));
 
         // 에디터에서는 플레이 모드를 끄고, 실제 빌드에서는 애플리케이션을 종료한다.
         // (Application.Quit()은 에디터 플레이 모드에서는 아무 효과가 없기 때문에 분기 처리)
@@ -83,32 +79,30 @@ public class SettingsPanelController : MonoBehaviour
         // SetValueWithoutNotify: 초기값을 세팅할 때 onValueChanged가 같이 발동해서
         // "읽어온 값을 다시 저장"하는 불필요한 호출이 일어나지 않도록 함.
         masterVolumeSlider.SetValueWithoutNotify(s.masterVolume);
-        sharpnessSlider.SetValueWithoutNotify(s.sharpness);
         bgmVolumeSlider.SetValueWithoutNotify(s.bgmVolume);
         sfxVolumeSlider.SetValueWithoutNotify(s.sfxVolume);
+        windowedToggle.SetIsOnWithoutNotify(s.windowed);
 
         // OnEnable이 여러 번 호출될 수 있으므로(예: 탭을 왔다갔다 하는 경우는 아니지만
         // 씬을 다시 로드하는 경우 등) 리스너가 중복 등록되지 않도록 먼저 전부 제거한다.
         masterVolumeSlider.onValueChanged.RemoveAllListeners();
-        sharpnessSlider.onValueChanged.RemoveAllListeners();
         bgmVolumeSlider.onValueChanged.RemoveAllListeners();
         sfxVolumeSlider.onValueChanged.RemoveAllListeners();
+        windowedToggle.onValueChanged.RemoveAllListeners();
 
         masterVolumeSlider.onValueChanged.AddListener(SettingsManager.Instance.SetMasterVolume);
-        sharpnessSlider.onValueChanged.AddListener(SettingsManager.Instance.SetSharpness);
         bgmVolumeSlider.onValueChanged.AddListener(SettingsManager.Instance.SetBgmVolume);
         sfxVolumeSlider.onValueChanged.AddListener(SettingsManager.Instance.SetSfxVolume);
+        windowedToggle.onValueChanged.AddListener(SettingsManager.Instance.SetWindowed);
 
         // 화면을 열 때마다 항상 볼륨 탭부터 보여준다.
         ShowTab(volumeContent);
     }
 
-    // 4개 탭 콘텐츠 중 target 하나만 켜고 나머지는 끈다 (라디오 버튼 방식).
+    // 2개 탭 콘텐츠 중 target 하나만 켜고 나머지는 끈다 (라디오 버튼 방식).
     private void ShowTab(GameObject target)
     {
         volumeContent.SetActive(target == volumeContent);
         displayContent.SetActive(target == displayContent);
-        keypadContent.SetActive(target == keypadContent);
-        listContent.SetActive(target == listContent);
     }
 }
