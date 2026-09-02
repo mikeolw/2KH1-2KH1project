@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using UnityEngine;
+using TMPro;
 
 // =====================================================================================
 // 조사 모드 컨트롤러 (MinigameController.cs와 완전히 동일한 배관 패턴)
@@ -64,6 +65,113 @@ public class InvestigationController : MonoBehaviour
     public bool IsActive => inSession;
     public bool IsShowingTalkLine { get; private set; }
 
+    // ===== 핫스팟 텍스트를 CSV로 관리하기 (Resources/Dialogues/InvestigationData.csv) =====
+    // 씬에는 핫스팟의 "틀"(위치/크기/Button/타입 기본값)만 미리 배치해두고, 실제로 보여줄
+    // 이름/설명/대사 텍스트는 이 CSV에서 읽어와 Enter() 시점에 덮어쓴다. 스토리 데이터인 CSV는
+    // (다른 scenario_XX.csv들처럼) 구글 드라이브로 따로 관리하고 git에는 올리지 않으므로,
+    // 조사 화면 텍스트를 고칠 때 씬을 열 필요가 없어진다.
+    // 컬럼: InvestigationId,HotspotKey,Type,ObjectName,Speaker,Text,ItemId
+    //   - HotspotKey: 씬의 핫스팟 GameObject 이름과 정확히 일치해야 한다 (예: Hotspot_Sea).
+    //     "IntroText"를 키로 쓰면 핫스팟이 아니라 패널 상단의 안내문(IntroText)을 갈아끼운다.
+    //   - Type: Item/Description/Talk (IntroText 행에서는 무시됨)
+    //   - Speaker: Talk 타입에서만 쓰임. 비어있으면 ObjectName을 화자 이름으로 대신 쓴다.
+    //   - Text: Description/Talk의 본문. Item 타입도 모달 설명으로 이 칸을 쓴다.
+    //   - ItemId: Item 타입 전용, InventorySlotUI.itemId와 맞춰야 함.
+    // CSV에 해당 investigationId+key 조합이 없으면 Inspector에 미리 넣어둔 값을 그대로 쓴다 -
+    // office_desk처럼 CSV 없이 손으로 채워둔 화면과도 호환된다.
+    private const string InvestigationDataCsv = "InvestigationData";
+
+    private class HotspotData
+    {
+        public HotspotType type;
+        public string objectName;
+        public string speaker;
+        public string text;
+        public string itemId;
+    }
+
+    private Dictionary<string, HotspotData> hotspotData; // key: investigationId + "|" + hotspotKey
+    private Dictionary<string, string> introTextData;    // key: investigationId
+
+    private void LoadHotspotDataIfNeeded()
+    {
+        if (hotspotData != null) return;
+        hotspotData = new Dictionary<string, HotspotData>();
+        introTextData = new Dictionary<string, string>();
+
+        var rows = CSVReader.Read("Dialogues/" + InvestigationDataCsv);
+        foreach (var row in rows)
+        {
+            string id = GetField(row, "InvestigationId");
+            string key = GetField(row, "HotspotKey");
+            if (string.IsNullOrEmpty(id) || string.IsNullOrEmpty(key)) continue;
+
+            if (key == "IntroText")
+            {
+                introTextData[id] = GetField(row, "Text");
+                continue;
+            }
+
+            if (!Enum.TryParse(GetField(row, "Type"), true, out HotspotType type))
+            {
+                Debug.LogWarning($"[InvestigationController] '{GetField(row, "Type")}'은 HotspotType에 없는 값입니다. (InvestigationId={id}, HotspotKey={key})");
+                continue;
+            }
+
+            hotspotData[id + "|" + key] = new HotspotData
+            {
+                type = type,
+                objectName = GetField(row, "ObjectName"),
+                speaker = GetField(row, "Speaker"),
+                text = GetField(row, "Text"),
+                itemId = GetField(row, "ItemId")
+            };
+        }
+    }
+
+    private string GetField(Dictionary<string, object> row, string column)
+    {
+        return row.TryGetValue(column, out var value) ? value.ToString() : "";
+    }
+
+    // 패널을 활성화하기 직전에, CSV에 데이터가 있는 핫스팟/IntroText는 그 내용으로 덮어쓴다.
+    private void ApplyHotspotData(string investigationId, GameObject panel)
+    {
+        LoadHotspotDataIfNeeded();
+
+        if (introTextData.TryGetValue(investigationId, out string intro))
+        {
+            var introTransform = panel.transform.Find("IntroText");
+            var introTmp = introTransform != null ? introTransform.GetComponent<TMP_Text>() : null;
+            if (introTmp != null) introTmp.text = intro;
+        }
+
+        foreach (var io in panel.GetComponentsInChildren<InvestigatableObject>(true))
+        {
+            if (!hotspotData.TryGetValue(investigationId + "|" + io.gameObject.name, out var data)) continue;
+
+            io.type = data.type;
+            io.objectName = data.objectName;
+            io.itemId = data.itemId;
+
+            if (data.type == HotspotType.Talk)
+            {
+                io.talkSpeaker = string.IsNullOrEmpty(data.speaker) ? data.objectName : data.speaker;
+                io.talkSentence = data.text;
+                io.description = "";
+            }
+            else
+            {
+                io.description = data.text;
+                io.talkSpeaker = "";
+                io.talkSentence = "";
+            }
+
+            var label = io.GetComponentInChildren<TMP_Text>();
+            if (label != null) label.text = data.objectName;
+        }
+    }
+
     private void Awake()
     {
         if (Instance == null) Instance = this;
@@ -82,6 +190,8 @@ public class InvestigationController : MonoBehaviour
             onExit?.Invoke();
             return;
         }
+
+        ApplyHotspotData(investigationId, screen.panel);
 
         inSession = true;
         IsShowingTalkLine = false;
