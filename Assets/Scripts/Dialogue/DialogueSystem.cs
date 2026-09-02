@@ -50,7 +50,7 @@ public class DialogueSystem : MonoBehaviour
     // 시간 경과/장소 전환처럼 급격한 배경·대사 전환을 암전으로 부드럽게 가리는 용도.
     public CanvasGroup fadeCanvasGroup;
     public float fadeDuration = 0.5f;   // 암전/복귀 각각에 걸리는 시간(초)
-    public float blackHoldDuration = 2f; // 완전히 검게 된 채로 유지되는 시간(초)
+    public float blackHoldDuration = 1f; // 완전히 검게 된 채로 유지되는 시간(초)
 
     // 암전 코루틴이 도는 동안 스페이스/클릭으로 대사를 건너뛰지 못하게 막는 플래그.
     private bool isFading;
@@ -223,6 +223,14 @@ public class DialogueSystem : MonoBehaviour
     {
         if (currentDialogue.choices == null || currentDialogue.choices.Count == 0)
         {
+            // 선택지가 없는 장면: 대사 행에 NextScenario가 적혀있었다면(autoNextScenarioCsv)
+            // 선택지 UI 없이 곧바로 다음 CSV로 이어간다.
+            if (!string.IsNullOrEmpty(currentDialogue.autoNextScenarioCsv))
+            {
+                LoadDialogueFromCSV(currentDialogue.autoNextScenarioCsv);
+                return;
+            }
+
             sentenceText.text = "[대사 세트 종료]";
             return;
         }
@@ -345,6 +353,11 @@ public class DialogueSystem : MonoBehaviour
     //
     // "Minigame" 행은 MinigameController.cs가 실제로 처리한다. TargetEnding 칸은 Choice
     // 행과 같은 컬럼이지만 여기서는 "실패 시 연결할 엔딩"이라는 뜻으로 재사용된다.
+    //
+    // 일반 대사 행(Normal/Narration)의 NextScenario 칸은 선택지(Choice)가 하나도 없는 CSV의
+    // 맨 마지막 행에만 채우면 된다 - 대사가 다 끝났을 때 선택지 UI 없이 바로 그 CSV로 이어간다
+    // (DialogueData.autoNextScenarioCsv, ShowChoices() 참고). Choice 행이 하나라도 있으면
+    // 이 칸은 무시되고 선택지 UI가 대신 뜬다.
     public void LoadDialogueFromCSV(string csvFileName)
     {
         // Resources/Dialogues/ 폴더 내의 CSV 파일 읽기
@@ -432,6 +445,14 @@ public class DialogueSystem : MonoBehaviour
             line.sentence = GetField(data[i], "Sentence");
             line.isFadeOut = GetField(data[i], "IsFadeOut").ToLower() == "true";
             line.acquireItemName = GetField(data[i], "Item");
+
+            // 선택지 없이 바로 다음 CSV로 넘어가야 하는 장면을 위한 칸 (DialogueData.autoNextScenarioCsv
+            // 참고). 보통 CSV 맨 마지막 대사 행에만 채워두면 된다.
+            string autoNextScenario = GetField(data[i], "NextScenario");
+            if (!string.IsNullOrEmpty(autoNextScenario))
+            {
+                currentDialogue.autoNextScenarioCsv = autoNextScenario;
+            }
 
             // 사운드 파일명이 적혀있다면 Resources 폴더에서 오디오 불러오기
             // 효과음(SFX)은 배경음악(BGM)과 구분하기 쉽도록 Sounds/SFX/ 하위 폴더에 모아둔다.

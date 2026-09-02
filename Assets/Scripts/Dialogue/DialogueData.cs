@@ -32,4 +32,10 @@ public class DialogueData : ScriptableObject
 
     [Header("대사 종료 후 선택지")]
     public List<Choice> choices;         // 선택지 리스트
+
+    // 선택지가 하나도 없을 때(choices가 비어있을 때) 자동으로 이어서 불러올 CSV 파일명
+    // (확장자 제외). CSV의 일반 대사 행(Normal/Narration 등)에 NextScenario 칸을 채워두면
+    // DialogueSystem.LoadDialogueFromCSV()가 여기에 담아준다 - 플레이어가 고를 선택지 없이
+    // 그냥 다음 장면으로 넘어가야 하는 경우에 쓴다 (DialogueSystem.ShowChoices() 참고).
+    public string autoNextScenarioCsv;
 }
