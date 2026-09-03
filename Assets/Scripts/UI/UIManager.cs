@@ -65,27 +65,40 @@ public class UIManager : MonoBehaviour
     }
     public void ToggleSettings() => TogglePanel(settingsPanel);
 
-    // 환경설정은 인게임 팝업이 아니라 별도로 만들어둔 Settings.unity 씬으로 이동한다
-    // (Title 화면과 동일한 환경설정 화면을 재사용). 뒤로가기를 누르면 이 씬(SampleScene)으로
-    // 돌아와야 하므로, 씬 전환 직전에 SettingsManager에 복귀할 씬 이름을 알려준다.
+    // 환경설정은 인게임 팝업이 아니라 별도로 만들어둔 Settings.unity 씬을 "덮어씌우는" 형태로
+    // additive 로드한다 (Title 화면과 동일한 환경설정 화면을 재사용). Single 모드로 씬을
+    // 통째로 바꿔버리면 되돌아올 때 이 씬(SampleScene)이 처음부터 다시 로드되면서 진행 중이던
+    // 대사/시나리오 진행 상태가 전부 초기화돼버리므로, 기존 씬은 그대로 살려두고 그 위에
+    // Settings 씬만 겹쳐 띄운 뒤 뒤로가기를 누르면 그 씬만 언로드한다
+    // (SettingsPanelController의 backButton 핸들러 참고).
     public void OpenSettingsScene()
     {
-        if (SettingsManager.Instance != null)
+        // 정상적으로는 Title 씬을 거쳐야 SettingsManager가 생성되어 있지만, 에디터에서
+        // SampleScene을 바로 Play해서 테스트하는 경우 등 Title을 거치지 않은 경우엔
+        // Instance가 아직 없을 수 있다. 이때 그냥 넘어가면 ReturnSceneName이 기본값인
+        // "Title"로 남아서 뒤로가기를 눌렀을 때 이 씬이 아니라 타이틀로 튕기는 버그가
+        // 생기므로, 없으면 여기서 만들어준다.
+        if (SettingsManager.Instance == null)
         {
-            SettingsManager.Instance.ReturnSceneName = SceneManager.GetActiveScene().name;
+            new GameObject("SettingsManager").AddComponent<SettingsManager>();
         }
-        SceneManager.LoadScene("Settings");
+        SettingsManager.Instance.ReturnSceneName = SceneManager.GetActiveScene().name;
+        SettingsManager.Instance.ReturnAdditive = true;
+        SceneManager.LoadScene("Settings", LoadSceneMode.Additive);
     }
 
     // 조사기록/인벤토리/사진첩/핸드폰/설정 팝업 중 하나라도 열려있는지 여부.
     // DialogueSystem이 대사 넘기기 클릭을 처리하기 전에 이 값을 확인해서, 모달 바깥을
     // 클릭했을 때 그 클릭이 뒤에 있는 대사창 등 다른 스크립트로 새어나가지 않게 막는다.
+    // 설정 화면은 이제 별도 씬(Additive)으로 겹쳐 뜨기 때문에 settingsPanel GameObject로는
+    // 감지가 안 되고, 대신 SettingsPanelController.IsOpen 정적 플래그로 확인한다.
     public bool IsAnyPanelOpen =>
         (inventoryPanel && inventoryPanel.activeSelf) ||
         (photoPanel && photoPanel.activeSelf) ||
         (phonePanel && phonePanel.activeSelf) ||
         (notePanel && notePanel.activeSelf) ||
-        (settingsPanel && settingsPanel.activeSelf);
+        (settingsPanel && settingsPanel.activeSelf) ||
+        SettingsPanelController.IsOpen;
 
     private void TogglePanel(GameObject targetPanel)
     {
