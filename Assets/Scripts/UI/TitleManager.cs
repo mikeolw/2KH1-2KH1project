@@ -37,6 +37,12 @@ public class TitleManager : MonoBehaviour
         saveDataButton.onClick.AddListener(() => SceneManager.LoadScene(saveDataSceneName));
 
         // "환경설정"은 별도의 설정 화면(Settings.unity)으로 이동.
-        settingsButton.onClick.AddListener(() => SceneManager.LoadScene(settingsSceneName));
+        // 인게임(SampleScene)에서 겹쳐 띄웠던 세션의 흔적(ReturnAdditive)이 남아있으면
+        // Settings의 뒤로가기가 씬을 언로드하려다 실패하므로, Title에서 열 때는 항상 초기화한다.
+        settingsButton.onClick.AddListener(() =>
+        {
+            if (SettingsManager.Instance != null) SettingsManager.Instance.ReturnAdditive = false;
+            SceneManager.LoadScene(settingsSceneName);
+        });
     }
 }

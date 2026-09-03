@@ -1,6 +1,7 @@
 using UnityEngine;
 using UnityEngine.UI;
 using UnityEngine.SceneManagement;
+using UnityEngine.EventSystems;
 
 // 환경설정 화면(탭 2개 + 슬라이더)의 UI 동작을 담당.
 //
@@ -40,8 +41,26 @@ public class SettingsPanelController : MonoBehaviour
     // 패널로 쓰일 때만 채워지는 콜백. 독립 씬으로 쓰일 땐 null로 두면 됨 (Awake의 backButton 참고).
     public System.Action onBack;
 
+    // 인게임(SampleScene)에서 UIManager.OpenSettingsScene()으로 이 씬이 additive로 겹쳐
+    // 떠 있는 동안 true. UIManager.IsAnyPanelOpen이 이 플래그를 확인해서, 설정 화면이 열려
+    // 있는 동안 뒤에 깔린 대사(스페이스바 등)가 몰래 진행되지 않도록 막는다.
+    public static bool IsOpen { get; private set; }
+
     private void Awake()
     {
+        // additive로 겹쳐 뜬 경우 이 씬에 딸려온 EventSystem이 기존 씬의 EventSystem과
+        // 중복돼서 "There are 2 event systems" 경고와 입력 충돌이 생긴다. 이 씬(Settings)
+        // 쪽 EventSystem만 제거하고 원래 씬 것 하나만 남긴다. 독립 씬으로 쓰일 땐(Single 로드)
+        // EventSystem이 원래 하나뿐이라 아무 효과 없다.
+        var eventSystems = FindObjectsOfType<EventSystem>();
+        if (eventSystems.Length > 1)
+        {
+            foreach (var es in eventSystems)
+            {
+                if (es.gameObject.scene == gameObject.scene) Destroy(es.gameObject);
+            }
+        }
+
         tabVolumeButton.onClick.AddListener(() => ShowTab(volumeContent));
         tabDisplayButton.onClick.AddListener(() => ShowTab(displayContent));
 
@@ -57,11 +76,25 @@ public class SettingsPanelController : MonoBehaviour
         });
 
         // 패널로 쓰일 땐 onBack이 지정되고, Settings.unity처럼 독립된 씬으로 쓰일 땐
-        // onBack이 비어있으므로 타이틀 씬으로 돌아간다.
+        // onBack이 비어있다. 이 경우 UIManager.OpenSettingsScene()이 additive로 겹쳐 띄운
+        // 것이면(ReturnAdditive) 원래 씬은 손대지 않고 이 씬만 언로드해서 대사/시나리오
+        // 진행 상태를 그대로 유지하고, 그게 아니면(Title에서 진입한 경우) 원래 하던 대로
+        // ReturnSceneName(기본 타이틀)으로 이동한다.
         if (backButton != null) backButton.onClick.AddListener(() =>
         {
-            if (onBack != null) onBack.Invoke();
-            else SceneManager.LoadScene(SettingsManager.Instance != null ? SettingsManager.Instance.ReturnSceneName : "Title");
+            if (onBack != null)
+            {
+                onBack.Invoke();
+            }
+            else if (SettingsManager.Instance != null && SettingsManager.Instance.ReturnAdditive)
+            {
+                SettingsManager.Instance.ReturnAdditive = false;
+                SceneManager.UnloadSceneAsync("Settings");
+            }
+            else
+            {
+                SceneManager.LoadScene(SettingsManager.Instance != null ? SettingsManager.Instance.ReturnSceneName : "Title");
+            }
         });
     }
 
@@ -70,6 +103,8 @@ public class SettingsPanelController : MonoBehaviour
     // 독립 씬으로 쓰일 땐 씬이 로드될 때 자동으로 한 번 호출된다.
     private void OnEnable()
     {
+        IsOpen = true;
+
         // SettingsManager는 Title.unity에서 생성되어 DontDestroyOnLoad로 유지된다.
         // 혹시라도 Title을 거치지 않고 이 씬에 바로 진입한 경우(테스트 등) Instance가
         // 없을 수 있으니 방어적으로 체크한다.
@@ -97,6 +132,11 @@ public class SettingsPanelController : MonoBehaviour
 
         // 화면을 열 때마다 항상 볼륨 탭부터 보여준다.
         ShowTab(volumeContent);
+    }
+
+    private void OnDisable()
+    {
+        IsOpen = false;
     }
 
     // 2개 탭 콘텐츠 중 target 하나만 켜고 나머지는 끈다 (라디오 버튼 방식).

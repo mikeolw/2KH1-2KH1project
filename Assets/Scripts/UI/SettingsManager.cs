@@ -34,6 +34,12 @@ public class SettingsManager : MonoBehaviour
     // 그 씬 이름으로 바꿔준다 (UIManager.OpenSettingsScene 참고).
     public string ReturnSceneName = "Title";
 
+    // OpenSettingsScene()에서 인게임(SampleScene 등)에 설정 화면을 "덮어씌우는" 형태로
+    // additive 로드했는지 여부. true면 뒤로가기를 눌렀을 때 원래 씬을 다시 로드하는 게 아니라
+    // Settings 씬만 언로드해서 원래 씬(대사 진행 상태 등)을 그대로 유지해야 한다.
+    // (SettingsPanelController의 backButton 핸들러 참고)
+    public bool ReturnAdditive = false;
+
     private void Awake()
     {
         if (Instance == null)
