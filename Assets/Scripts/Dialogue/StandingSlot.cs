@@ -111,6 +111,11 @@ public class StandingSlot : MonoBehaviour
             if (closedMouthSprite == null || openMouthSprite == null) return;
             if (flapRoutine != null) return; // 이미 돌고 있으면 그대로 둔다
 
+            // 조사 화면에 들어가 있는 동안에는 무대(배경+스탠딩)가 통째로 꺼져 있다
+            // (StageController.SetStageVisible 참고). 꺼진 GameObject에서 StartCoroutine을
+            // 부르면 유니티가 예외를 던지므로, 켜져 있을 때만 시작한다.
+            if (!isActiveAndEnabled) return;
+
             flapRoutine = StartCoroutine(FlapMouth());
         }
         else
