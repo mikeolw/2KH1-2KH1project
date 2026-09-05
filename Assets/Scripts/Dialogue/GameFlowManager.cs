@@ -76,9 +76,23 @@ public class GameFlowManager : MonoBehaviour
             return;
         }
 
-        // 엔딩 도중에 또 엔딩이 발동하면 대사가 뒤섞이므로 첫 번째만 인정한다.
         if (endingStarted)
         {
+            // ===== 엔딩 CSV 맨 끝의 [END] 버튼 =====
+            // 각 엔딩 대본은 마지막에 [END]라는 선택지 하나로 끝난다. 그 선택지에도
+            // TargetEnding이 자기 자신으로 적혀 있어서, 누르면 "지금 재생 중인 엔딩을
+            // 또 재생해달라"는 요청이 들어온다. 예전에는 이걸 경고만 찍고 무시해서
+            // 버튼을 눌러도 아무 일도 일어나지 않았다.
+            //
+            // 지금 진행 중인 엔딩과 같은 엔딩이 다시 들어왔다면 그건 "엔딩을 다 봤다"는
+            // 뜻이므로, 경고 대신 엔딩을 마무리하고 타이틀로 돌아간다.
+            if (ending == CurrentEnding)
+            {
+                FinishEnding();
+                return;
+            }
+
+            // 다른 엔딩이 끼어든 경우에만 진짜 경고. 대사가 뒤섞이므로 첫 번째만 인정한다.
             Debug.LogWarning($"[GameFlowManager] 이미 '{CurrentEnding}' 엔딩이 진행 중이라 '{ending}' 요청을 무시합니다.");
             return;
         }
@@ -106,6 +120,29 @@ public class GameFlowManager : MonoBehaviour
 
         DialogueSystem.Instance.LoadDialogueFromCSV(csvName);
     }
+
+    // ===== 엔딩을 다 본 뒤 =====
+    // 엔딩 대본 마지막의 [END] 버튼을 누르면 여기로 온다. 진행 상태를 정리하고
+    // 타이틀 화면으로 돌아간다.
+    public void FinishEnding()
+    {
+        Debug.Log($"[GameFlowManager] '{CurrentEnding}' 엔딩을 마쳤습니다. 타이틀로 돌아갑니다.");
+
+        // 다음 플레이를 위해 진행 상태를 전부 비운다.
+        // 이걸 안 하면 타이틀에서 새 게임을 눌러도 방금 엔딩을 본 지점부터 시작해 버린다.
+        ResetForNewGame();
+
+        if (SavePointManager.Instance != null) SavePointManager.Instance.ResetForNewGame();
+        if (InventoryManager.Instance != null) InventoryManager.Instance.ClearAll();
+        if (NoteManager.Instance != null) NoteManager.Instance.RestoreEntries(null);
+        if (SaveManager.Instance != null) SaveManager.Instance.SetActiveSave(null);
+        if (UIManager.Instance != null) UIManager.Instance.CloseAllPanels();
+
+        UnityEngine.SceneManagement.SceneManager.LoadScene(titleSceneName);
+    }
+
+    [Header("엔딩을 다 본 뒤 돌아갈 씬")]
+    public string titleSceneName = "Title";
 
     // 새 게임을 시작할 때 엔딩 상태를 초기화한다.
     public void ResetForNewGame()

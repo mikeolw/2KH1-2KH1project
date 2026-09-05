@@ -391,45 +391,96 @@ public class InventoryPanelUI : MonoBehaviour
     // ---------------------------------------------------------------------------------
     // UI 자동 생성 (씬을 아직 안 꾸민 상태에서도 동작하게 하는 편의 기능)
     // ---------------------------------------------------------------------------------
+    // 이 스크립트가 만든 UI를 담는 자식의 이름.
+    private const string ContentRootName = "__InventoryContent";
+
+    // 만들어진 UI를 담는 부모. 아래 Create* 함수들이 여기에 붙인다.
+    private Transform contentRoot;
+
     private void EnsureUI()
     {
-        // 아이템 목록 자리가 이미 연결되어 있으면 손대지 않는다.
+        // 아이템 목록 자리가 이미 인스펙터에 연결되어 있으면 손대지 않는다.
         if (itemListContainer != null) return;
 
+        // 이미 만들어둔 게 있으면 다시 만들지 않는다.
+        var existing = transform.Find(ContentRootName);
+        if (existing != null)
+        {
+            contentRoot = existing;
+            return;
+        }
+
+        // ----- 씬에 남아 있던 예전 오브젝트를 꺼둔다 -----
+        // InventoryPanel 안에는 프로토타입 시절 아이템 자리(ItemSlots, Slot_* 등)가 남아
+        // 있어서 그대로 두면 새 목록 위에 겹쳐 보인다. 지우지 않고 비활성화만 한다.
+        for (int i = transform.childCount - 1; i >= 0; i--)
+        {
+            var child = transform.GetChild(i);
+            if (child.name == ContentRootName) continue;
+            child.gameObject.SetActive(false);
+        }
+
+        // ----- 패널 크기/배경 -----
         var rootRt = GetComponent<RectTransform>();
         if (rootRt == null) rootRt = gameObject.AddComponent<RectTransform>();
 
-        // 배경
+        // 씬에 설정된 크기가 제각각이라 여기서 고정한다.
+        rootRt.anchorMin = new Vector2(0.5f, 0.5f);
+        rootRt.anchorMax = new Vector2(0.5f, 0.5f);
+        rootRt.pivot = new Vector2(0.5f, 0.5f);
+        rootRt.sizeDelta = new Vector2(1200f, 820f);
+        rootRt.anchoredPosition = Vector2.zero;
+
         var bg = gameObject.GetComponent<Image>();
         if (bg == null) bg = gameObject.AddComponent<Image>();
         bg.color = new Color(0f, 0f, 0f, 0.95f);
+        bg.raycastTarget = true;   // 뒤쪽 클릭이 새어나가지 않게 막는다
 
-        // 왼쪽: 아이템 격자
+        // ----- 내용 담을 전용 자식 -----
+        var root = new GameObject(ContentRootName, typeof(RectTransform));
+        root.transform.SetParent(transform, false);
+        var rr = root.GetComponent<RectTransform>();
+        rr.anchorMin = Vector2.zero;
+        rr.anchorMax = Vector2.one;
+        rr.offsetMin = Vector2.zero;
+        rr.offsetMax = Vector2.zero;
+        contentRoot = root.transform;
+
+        // ----- 제목 -----
+        var title = CreateText("Title", new Vector2(0.03f, 0.93f), new Vector2(0.55f, 0.99f), 30, TextAlignmentOptions.Left);
+        title.text = "가방";
+        title.fontStyle = FontStyles.Bold;
+        title.color = new Color(1f, 0.86f, 0.45f);
+
+        // ----- 왼쪽: 아이템 격자 -----
         var listGo = new GameObject("ItemList", typeof(RectTransform), typeof(GridLayoutGroup));
-        listGo.transform.SetParent(transform, false);
+        listGo.transform.SetParent(contentRoot, false);
         var listRt = listGo.GetComponent<RectTransform>();
         listRt.anchorMin = new Vector2(0.03f, 0.05f);
-        listRt.anchorMax = new Vector2(0.55f, 0.95f);
+        listRt.anchorMax = new Vector2(0.55f, 0.92f);
         listRt.offsetMin = Vector2.zero;
         listRt.offsetMax = Vector2.zero;
 
         var grid = listGo.GetComponent<GridLayoutGroup>();
-        grid.cellSize = new Vector2(140f, 140f);
-        grid.spacing = new Vector2(10f, 10f);
+        grid.cellSize = new Vector2(150f, 150f);
+        grid.spacing = new Vector2(12f, 12f);
         grid.padding = new RectOffset(10, 10, 10, 10);
+        grid.startCorner = GridLayoutGroup.Corner.UpperLeft;
+        grid.childAlignment = TextAnchor.UpperLeft;
         itemListContainer = listGo.transform;
 
-        // 오른쪽: 고른 아이템 정보
-        selectedIconImage = CreateImage("SelectedIcon", new Vector2(0.58f, 0.55f), new Vector2(0.97f, 0.93f));
-        selectedNameText = CreateText("SelectedName", new Vector2(0.58f, 0.46f), new Vector2(0.97f, 0.54f), 28, TextAlignmentOptions.Left);
-        selectedDescriptionText = CreateText("SelectedDescription", new Vector2(0.58f, 0.20f), new Vector2(0.97f, 0.45f), 20, TextAlignmentOptions.TopLeft);
-        messageText = CreateText("Message", new Vector2(0.58f, 0.05f), new Vector2(0.97f, 0.12f), 18, TextAlignmentOptions.Left);
+        // ----- 오른쪽: 고른 아이템 정보 -----
+        selectedIconImage = CreateImage("SelectedIcon", new Vector2(0.58f, 0.58f), new Vector2(0.97f, 0.92f));
+        selectedNameText = CreateText("SelectedName", new Vector2(0.58f, 0.49f), new Vector2(0.97f, 0.57f), 30, TextAlignmentOptions.Left);
+        selectedNameText.fontStyle = FontStyles.Bold;
+        selectedDescriptionText = CreateText("SelectedDescription", new Vector2(0.58f, 0.24f), new Vector2(0.97f, 0.48f), 22, TextAlignmentOptions.TopLeft);
+        messageText = CreateText("Message", new Vector2(0.58f, 0.05f), new Vector2(0.97f, 0.14f), 19, TextAlignmentOptions.TopLeft);
         messageText.color = new Color(1f, 0.85f, 0.4f);
 
         viewDetailButton = CreateButton("ViewDetailButton", "자세히 보기",
-            new Vector2(0.58f, 0.13f), new Vector2(0.76f, 0.19f), OnViewDetailClicked);
+            new Vector2(0.58f, 0.155f), new Vector2(0.765f, 0.225f), OnViewDetailClicked);
         combineButton = CreateButton("CombineButton", "조합하기",
-            new Vector2(0.78f, 0.13f), new Vector2(0.97f, 0.19f), OnCombineClicked);
+            new Vector2(0.785f, 0.155f), new Vector2(0.97f, 0.225f), OnCombineClicked);
 
         SetButtonVisible(viewDetailButton, false);
         SetButtonVisible(combineButton, false);
@@ -438,7 +489,7 @@ public class InventoryPanelUI : MonoBehaviour
     private Image CreateImage(string name, Vector2 anchorMin, Vector2 anchorMax)
     {
         var go = new GameObject(name, typeof(RectTransform), typeof(Image));
-        go.transform.SetParent(transform, false);
+        go.transform.SetParent(contentRoot, false);
         var rt = go.GetComponent<RectTransform>();
         rt.anchorMin = anchorMin;
         rt.anchorMax = anchorMax;
@@ -454,7 +505,7 @@ public class InventoryPanelUI : MonoBehaviour
     private TMP_Text CreateText(string name, Vector2 anchorMin, Vector2 anchorMax, float size, TextAlignmentOptions align)
     {
         var go = new GameObject(name, typeof(RectTransform));
-        go.transform.SetParent(transform, false);
+        go.transform.SetParent(contentRoot, false);
         var rt = go.GetComponent<RectTransform>();
         rt.anchorMin = anchorMin;
         rt.anchorMax = anchorMax;
@@ -481,7 +532,7 @@ public class InventoryPanelUI : MonoBehaviour
                                 UnityEngine.Events.UnityAction onClick)
     {
         var go = new GameObject(name, typeof(RectTransform), typeof(Image), typeof(Button));
-        go.transform.SetParent(transform, false);
+        go.transform.SetParent(contentRoot, false);
         var rt = go.GetComponent<RectTransform>();
         rt.anchorMin = anchorMin;
         rt.anchorMax = anchorMax;

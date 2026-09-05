@@ -103,7 +103,14 @@ public class SettingsPanelController : MonoBehaviour
 
         if (tabVolumeButton != null) tabVolumeButton.onClick.AddListener(() => ShowTab(volumeContent));
         if (tabDisplayButton != null) tabDisplayButton.onClick.AddListener(() => ShowTab(displayContent));
-        if (tabTextButton != null) tabTextButton.onClick.AddListener(() => ShowTab(textContent));
+
+        // 텍스트 설정은 탭이 아니라 화면을 덮는 별도 창이다(EnsureTextTabUI 주석 참고).
+        // 그래서 ShowTab을 쓰면 안 된다 - 그러면 볼륨/화면 탭이 꺼진 채로 남아서,
+        // 텍스트 창을 닫았을 때 옵션 화면이 텅 비어 보인다. 창만 켜고 끈다.
+        if (tabTextButton != null) tabTextButton.onClick.AddListener(() =>
+        {
+            if (textContent != null) textContent.SetActive(true);
+        });
 
         // 에디터에서는 플레이 모드를 끄고, 실제 빌드에서는 애플리케이션을 종료한다.
         if (quitButton != null) quitButton.onClick.AddListener(() =>
@@ -158,60 +165,21 @@ public class SettingsPanelController : MonoBehaviour
     }
 
     // 씬에 메인 화면 버튼이 없으면 만들어 붙인다.
+    //
+    // ===== 기존 버튼을 복제하지 않는 이유 =====
+    // 처음에는 뒤로가기 버튼을 복제해서 그 위에 놓으려고 했다. 그런데 씬의 버튼이 어떤
+    // 앵커/좌표계로 배치돼 있는지 코드가 알 수 없어서, 복제본이 엉뚱한 자리에 앉거나
+    // 다른 UI를 덮으면서 옵션 화면이 깨져 보였다.
+    // 그래서 복제 대신 화면 왼쪽 위 구석이라는 고정된 자리에 새로 만든다.
+    // 그 자리는 대부분의 옵션 화면에서 비어 있어 기존 UI와 겹칠 위험이 적다.
     private void EnsureMainMenuButton()
     {
         if (mainMenuButton == null)
         {
-            // 뒤로가기 버튼이 있으면 그 옆에 같은 모양으로 만든다.
-            if (backButton != null)
-            {
-                var clone = Instantiate(backButton.gameObject, backButton.transform.parent);
-                clone.name = "Btn_MainMenu";
-
-                mainMenuButton = clone.GetComponent<Button>();
-                mainMenuButton.onClick.RemoveAllListeners();
-
-                var srcRect = backButton.GetComponent<RectTransform>();
-                var cloneRect = clone.GetComponent<RectTransform>();
-                if (srcRect != null && cloneRect != null)
-                {
-                    // 뒤로가기 버튼 바로 위에 놓는다.
-                    cloneRect.anchoredPosition = srcRect.anchoredPosition
-                        + new Vector2(0f, srcRect.rect.height + 12f);
-                }
-            }
-            else
-            {
-                var go = new GameObject("Btn_MainMenu", typeof(RectTransform), typeof(Image), typeof(Button));
-                go.transform.SetParent(transform, false);
-
-                var rt = go.GetComponent<RectTransform>();
-                rt.anchorMin = new Vector2(1f, 0f);
-                rt.anchorMax = new Vector2(1f, 0f);
-                rt.pivot = new Vector2(1f, 0f);
-                rt.anchoredPosition = new Vector2(-24f, 84f);
-                rt.sizeDelta = new Vector2(200f, 52f);
-
-                var bg = go.GetComponent<Image>();
-                bg.color = new Color(1f, 1f, 1f, 0.20f);
-                bg.raycastTarget = true;
-
-                var textGo = new GameObject("Text", typeof(RectTransform));
-                textGo.transform.SetParent(go.transform, false);
-                var trt = textGo.GetComponent<RectTransform>();
-                trt.anchorMin = Vector2.zero;
-                trt.anchorMax = Vector2.one;
-                trt.offsetMin = Vector2.zero;
-                trt.offsetMax = Vector2.zero;
-                var tmp = textGo.AddComponent<TextMeshProUGUI>();
-                tmp.fontSize = 22;
-                tmp.alignment = TextAlignmentOptions.Center;
-                tmp.color = Color.white;
-                tmp.raycastTarget = false;
-
-                mainMenuButton = go.GetComponent<Button>();
-                mainMenuButton.targetGraphic = bg;
-            }
+            mainMenuButton = CreateOverlayButton(transform, "Btn_MainMenu", "메인 화면으로",
+                new Vector2(0f, 1f), new Vector2(0f, 1f),
+                new Vector2(140f, -28f), new Vector2(240f, 52f),
+                null);
         }
 
         SetMainMenuLabel("메인 화면으로");
@@ -284,8 +252,6 @@ public class SettingsPanelController : MonoBehaviour
         var scene = gameObject.scene;
         if (!scene.IsValid()) return;
 
-        Camera mainCam = Camera.main;
-
         foreach (var root in scene.GetRootGameObjects())
         {
             foreach (var canvas in root.GetComponentsInChildren<Canvas>(true))
@@ -294,16 +260,14 @@ public class SettingsPanelController : MonoBehaviour
                 if (canvas.transform.parent != null &&
                     canvas.transform.parent.GetComponentInParent<Canvas>() != null) continue;
 
-                if (mainCam != null)
-                {
-                    // 인게임과 같은 방식으로 맞춰야 검은 여백(레터박스) 안에 함께 들어간다.
-                    canvas.renderMode = RenderMode.ScreenSpaceCamera;
-                    canvas.worldCamera = mainCam;
-                    canvas.planeDistance = 50f;   // 인게임 캔버스(100)보다 카메라에 가깝게 = 앞에 그려짐
-                }
-
+                // ===== 그리는 방식(renderMode)은 절대 건드리지 않는다 =====
+                // 예전에는 여기서 Screen Space - Camera로 바꿨는데, 그러면 이 씬에 맞춰
+                // 설정해둔 캔버스 스케일러 기준이 어긋나면서 옵션 화면 레이아웃이 통째로
+                // 무너졌다. Screen Space - Overlay 캔버스는 원래 카메라 기준 캔버스보다
+                // 항상 나중에(= 위에) 그려지므로, 방식을 바꿀 필요 자체가 없다.
+                // 정렬 순서만 올려두면 확실히 맨 위에 온다.
                 canvas.overrideSorting = true;
-                canvas.sortingOrder = 500;        // 인게임 UI보다 확실히 위
+                canvas.sortingOrder = 500;
             }
         }
     }
@@ -345,6 +309,9 @@ public class SettingsPanelController : MonoBehaviour
         // 화면을 닫았다 다시 열면 "정말 나가시겠습니까?" 확인 상태는 초기화한다.
         mainMenuConfirming = false;
         SetMainMenuLabel("메인 화면으로");
+
+        // 텍스트 설정 창도 닫아둔 상태로 시작한다.
+        if (textContent != null) textContent.SetActive(false);
 
         // 화면을 열 때마다 항상 볼륨 탭부터 보여준다.
         ShowTab(volumeContent);
@@ -409,147 +376,173 @@ public class SettingsPanelController : MonoBehaviour
     }
 
     // 탭 하나만 켜고 나머지는 끈다 (라디오 버튼 방식).
+    // 텍스트 설정은 탭이 아니라 별도 창이므로 여기서 다루지 않는다.
     private void ShowTab(GameObject target)
     {
         if (volumeContent != null) volumeContent.SetActive(target == volumeContent);
         if (displayContent != null) displayContent.SetActive(target == displayContent);
-        if (textContent != null) textContent.SetActive(target == textContent);
     }
 
     // ---------------------------------------------------------------------------------
     // 텍스트 탭 UI 자동 생성
     // ---------------------------------------------------------------------------------
     // 씬에 텍스트 탭이 아직 없을 때, 볼륨 탭 패널을 기준 삼아 같은 자리에 새 패널을 만든다.
+    // ---------------------------------------------------------------------------------
+    // 텍스트 설정 화면 만들기 (글꼴 / 글씨 크기 / 출력 속도 / 자동 진행)
+    // ---------------------------------------------------------------------------------
+    // ===== 왜 "탭"이 아니라 독립 오버레이인가 =====
+    // 처음에는 씬에 있던 볼륨/화면 탭 옆에 같은 모양의 탭을 하나 더 만들려고, 기존 탭 버튼을
+    // 복제해서 옆으로 밀어 붙였다. 그런데 씬의 옵션 화면이 어떤 좌표계로 짜여 있는지 코드가
+    // 알 수 없다 보니, 복제한 버튼과 새 패널이 기존 UI 위에 겹쳐 앉으면서 옵션 화면 전체가
+    // 깨져 보였다.
+    //
+    // 그래서 방식을 바꿨다. 기존 UI는 손끝 하나 대지 않고,
+    //   - 화면 위쪽 가운데에 "텍스트 설정" 버튼 하나만 새로 놓고,
+    //   - 그 버튼을 누르면 화면 전체를 덮는 별도 창이 열리게
+    // 했다. 창이 열리면 기존 UI를 완전히 가리므로 겹쳐서 깨져 보일 일이 없고,
+    // 닫으면 원래 옵션 화면이 그대로 돌아온다.
     private void EnsureTextTabUI()
     {
-        if (textContent != null) return;           // 이미 씬에 있으면 그대로 쓴다
+        if (textContent != null) return;   // 이미 씬에 만들어둔 것이 있으면 그대로 쓴다
 
-        // ===== 기준이 될 부모 찾기 =====
-        // 보통은 볼륨 탭 패널 옆에 나란히 만든다. 그런데 씬에서 volumeContent를 연결해두지
-        // 않은 경우에도 텍스트 설정(자동 진행 등)은 반드시 보여야 하므로, 그럴 때는
-        // 이 오브젝트 아래에 직접 만든다. (예전에는 volumeContent가 없으면 그냥 포기해서
-        // 자동 진행 항목이 아예 화면에 나타나지 않았다)
-        Transform parent;
-        RectTransform reference = null;
+        // ===== 화면 전체를 덮는 창 =====
+        textContent = new GameObject("TextSettingsOverlay", typeof(RectTransform), typeof(Image));
+        textContent.transform.SetParent(transform, false);
 
-        if (volumeContent != null)
-        {
-            parent = volumeContent.transform.parent;
-            reference = volumeContent.GetComponent<RectTransform>();
-        }
-        else
-        {
-            parent = transform;
-            Debug.LogWarning("[SettingsPanelController] 볼륨 탭 패널이 연결되어 있지 않아 " +
-                             "텍스트 설정을 설정 화면 위에 직접 만듭니다.");
-        }
+        var overlayRect = textContent.GetComponent<RectTransform>();
+        overlayRect.anchorMin = Vector2.zero;
+        overlayRect.anchorMax = Vector2.one;
+        overlayRect.offsetMin = Vector2.zero;
+        overlayRect.offsetMax = Vector2.zero;
 
-        textContent = new GameObject("Content_Text", typeof(RectTransform));
-        textContent.transform.SetParent(parent, false);
+        var overlayBg = textContent.GetComponent<Image>();
+        overlayBg.color = new Color(0f, 0f, 0f, 0.97f);
+        overlayBg.raycastTarget = true;   // 뒤쪽 UI가 눌리지 않게 막는다
 
-        var textRect = textContent.GetComponent<RectTransform>();
-        if (reference != null)
-        {
-            CopyRectTransform(reference, textRect);
-        }
-        else
-        {
-            // 기준이 없으면 화면 가운데에 적당한 크기로 놓는다.
-            textRect.anchorMin = new Vector2(0.2f, 0.15f);
-            textRect.anchorMax = new Vector2(0.8f, 0.85f);
-            textRect.offsetMin = Vector2.zero;
-            textRect.offsetMax = Vector2.zero;
-
-            // 배경이 없으면 글씨가 안 보이므로 어두운 판을 깐다.
-            var bg = textContent.AddComponent<Image>();
-            bg.color = new Color(0f, 0f, 0f, 0.95f);
-        }
-
+        // 항상 기존 UI보다 앞에 그려지도록 계층 맨 끝으로 보낸다.
+        textContent.transform.SetAsLastSibling();
         textContent.SetActive(false);
 
-        // 세로로 차곡차곡 쌓이도록 레이아웃을 붙인다.
-        var layout = textContent.AddComponent<VerticalLayoutGroup>();
-        layout.padding = new RectOffset(30, 30, 20, 20);
-        layout.spacing = 14f;
+        // ===== 창 제목 =====
+        var header = CreateOverlayLabel(textContent.transform, "Header", "텍스트 설정",
+            new Vector2(0f, 1f), new Vector2(1f, 1f),
+            new Vector2(60f, -96f), new Vector2(-60f, -36f), 34, TextAlignmentOptions.Left);
+        header.fontStyle = FontStyles.Bold;
+        header.color = new Color(1f, 0.86f, 0.45f);
+
+        // ===== 항목들이 세로로 쌓이는 영역 =====
+        var list = new GameObject("Items", typeof(RectTransform), typeof(VerticalLayoutGroup));
+        list.transform.SetParent(textContent.transform, false);
+
+        var listRect = list.GetComponent<RectTransform>();
+        listRect.anchorMin = new Vector2(0f, 0f);
+        listRect.anchorMax = new Vector2(1f, 1f);
+        listRect.offsetMin = new Vector2(60f, 110f);   // 아래는 닫기 버튼 자리를 비워둔다
+        listRect.offsetMax = new Vector2(-60f, -110f); // 위는 제목 자리를 비워둔다
+
+        var layout = list.GetComponent<VerticalLayoutGroup>();
+        layout.padding = new RectOffset(0, 0, 0, 0);
+        layout.spacing = 10f;
         layout.childControlHeight = false;
+        layout.childControlWidth = true;
         layout.childForceExpandHeight = false;
+        layout.childForceExpandWidth = true;
         layout.childAlignment = TextAnchor.UpperLeft;
 
-        // 항목들
-        fontDropdown = CreateLabeledDropdown(textContent.transform, "글꼴");
-        fontScaleSlider = CreateLabeledSlider(textContent.transform, "글씨 크기", 0.7f, 1.6f);
-        fontPreviewText = CreateRow(textContent.transform, "", 20);
-        textSpeedDropdown = CreateLabeledDropdown(textContent.transform, "텍스트 속도");
-        autoAdvanceToggle = CreateLabeledToggle(textContent.transform, "자동 진행");
-        autoAdvanceDelaySlider = CreateLabeledSlider(textContent.transform, "자동 진행 대기시간", 0.2f, 5f);
+        // ===== 항목 =====
+        fontDropdown = CreateLabeledDropdown(list.transform, "글꼴");
+        fontScaleSlider = CreateLabeledSlider(list.transform, "글씨 크기", 0.7f, 1.6f);
+        fontPreviewText = CreateRow(list.transform, "", 20);
+        textSpeedDropdown = CreateLabeledDropdown(list.transform, "텍스트 속도");
+        autoAdvanceToggle = CreateLabeledToggle(list.transform, "자동 진행 (대사가 저절로 넘어갑니다)");
+        autoAdvanceDelaySlider = CreateLabeledSlider(list.transform, "자동 진행 대기시간(초)", 0.2f, 5f);
 
-        // ===== 탭 버튼 만들기 =====
-        // 화면 탭 버튼을 복제하면 기존 디자인과 자연스럽게 어울린다.
-        // 복제할 원본이 없으면 화면 왼쪽 위에 최소한의 버튼을 직접 만든다
-        // (버튼이 없으면 텍스트 탭을 열 방법이 아예 없어지므로 반드시 하나는 만들어야 한다).
-        if (tabTextButton != null) return;
+        // ===== 닫기 버튼 =====
+        CreateOverlayButton(textContent.transform, "Btn_CloseTextSettings", "닫기",
+            new Vector2(0.5f, 0f), new Vector2(0.5f, 0f), new Vector2(0f, 34f), new Vector2(240f, 56f),
+            () => textContent.SetActive(false));
 
-        if (tabDisplayButton != null)
+        // ===== 이 창을 여는 버튼 =====
+        // 화면 위쪽 가운데는 대부분의 옵션 화면에서 비어 있는 자리라 기존 UI와 겹칠 위험이 적다.
+        if (tabTextButton == null)
         {
-            var clone = Instantiate(tabDisplayButton.gameObject, tabDisplayButton.transform.parent);
-            clone.name = "Tab_Text";
-
-            // 복제본에는 원본의 onClick이 그대로 따라오므로 지우고 새로 연결한다.
-            tabTextButton = clone.GetComponent<Button>();
-            tabTextButton.onClick.RemoveAllListeners();
-
-            var label = clone.GetComponentInChildren<TMP_Text>();
-            if (label != null) label.text = "텍스트";
-
-            // 복제본이 원본과 정확히 겹쳐 버리면 누를 수 없으므로 오른쪽으로 살짝 밀어둔다.
-            var cloneRect = clone.GetComponent<RectTransform>();
-            var srcRect = tabDisplayButton.GetComponent<RectTransform>();
-            if (cloneRect != null && srcRect != null)
-            {
-                cloneRect.anchoredPosition = srcRect.anchoredPosition
-                    + new Vector2(srcRect.rect.width + 10f, 0f);
-            }
-        }
-        else
-        {
-            var go = new GameObject("Tab_Text", typeof(RectTransform), typeof(Image), typeof(Button));
-            go.transform.SetParent(transform, false);
-
-            var rt = go.GetComponent<RectTransform>();
-            rt.anchorMin = new Vector2(0f, 1f);
-            rt.anchorMax = new Vector2(0f, 1f);
-            rt.pivot = new Vector2(0f, 1f);
-            rt.anchoredPosition = new Vector2(24f, -24f);
-            rt.sizeDelta = new Vector2(120f, 44f);
-            go.GetComponent<Image>().color = new Color(1f, 1f, 1f, 0.18f);
-
-            var textGo = new GameObject("Text", typeof(RectTransform));
-            textGo.transform.SetParent(go.transform, false);
-            var trt = textGo.GetComponent<RectTransform>();
-            trt.anchorMin = Vector2.zero;
-            trt.anchorMax = Vector2.one;
-            trt.offsetMin = Vector2.zero;
-            trt.offsetMax = Vector2.zero;
-            var tmp = textGo.AddComponent<TextMeshProUGUI>();
-            tmp.text = "텍스트";
-            tmp.fontSize = 20;
-            tmp.alignment = TextAlignmentOptions.Center;
-            tmp.color = Color.white;
-            tmp.raycastTarget = false;
-
-            tabTextButton = go.GetComponent<Button>();
+            tabTextButton = CreateOverlayButton(transform, "Btn_OpenTextSettings", "텍스트 설정",
+                new Vector2(0.5f, 1f), new Vector2(0.5f, 1f), new Vector2(0f, -28f), new Vector2(240f, 52f),
+                null);
         }
     }
 
-    private void CopyRectTransform(RectTransform from, RectTransform to)
+    // 오버레이용 글자 한 줄.
+    private TMP_Text CreateOverlayLabel(Transform parent, string name, string text,
+                                        Vector2 anchorMin, Vector2 anchorMax,
+                                        Vector2 offsetMin, Vector2 offsetMax,
+                                        float fontSize, TextAlignmentOptions align)
     {
-        if (from == null || to == null) return;
-        to.anchorMin = from.anchorMin;
-        to.anchorMax = from.anchorMax;
-        to.pivot = from.pivot;
-        to.anchoredPosition = from.anchoredPosition;
-        to.sizeDelta = from.sizeDelta;
+        var go = new GameObject(name, typeof(RectTransform));
+        go.transform.SetParent(parent, false);
+
+        var rt = go.GetComponent<RectTransform>();
+        rt.anchorMin = anchorMin;
+        rt.anchorMax = anchorMax;
+        rt.offsetMin = offsetMin;
+        rt.offsetMax = offsetMax;
+
+        var tmp = go.AddComponent<TextMeshProUGUI>();
+        tmp.text = text;
+        tmp.fontSize = fontSize;
+        tmp.alignment = align;
+        tmp.color = Color.white;
+        tmp.raycastTarget = false;
+        return tmp;
     }
+
+    // 오버레이용 버튼. 위치를 앵커 + 오프셋 + 크기로 직접 지정한다.
+    private Button CreateOverlayButton(Transform parent, string name, string label,
+                                       Vector2 anchorMin, Vector2 anchorMax,
+                                       Vector2 anchoredPosition, Vector2 size,
+                                       UnityEngine.Events.UnityAction onClick)
+    {
+        var go = new GameObject(name, typeof(RectTransform), typeof(Image), typeof(Button));
+        go.transform.SetParent(parent, false);
+
+        var rt = go.GetComponent<RectTransform>();
+        rt.anchorMin = anchorMin;
+        rt.anchorMax = anchorMax;
+        rt.pivot = new Vector2(0.5f, anchorMin.y >= 1f ? 1f : (anchorMin.y <= 0f ? 0f : 0.5f));
+        rt.anchoredPosition = anchoredPosition;
+        rt.sizeDelta = size;
+
+        var bg = go.GetComponent<Image>();
+        bg.color = new Color(1f, 1f, 1f, 0.20f);
+        bg.raycastTarget = true;   // 이게 꺼져 있으면 버튼이 눌리지 않는다
+
+        var textGo = new GameObject("Text", typeof(RectTransform));
+        textGo.transform.SetParent(go.transform, false);
+        var trt = textGo.GetComponent<RectTransform>();
+        trt.anchorMin = Vector2.zero;
+        trt.anchorMax = Vector2.one;
+        trt.offsetMin = Vector2.zero;
+        trt.offsetMax = Vector2.zero;
+        var tmp = textGo.AddComponent<TextMeshProUGUI>();
+        tmp.text = label;
+        tmp.fontSize = 22;
+        tmp.alignment = TextAlignmentOptions.Center;
+        tmp.color = Color.white;
+        tmp.raycastTarget = false;
+
+        var btn = go.GetComponent<Button>();
+        btn.targetGraphic = bg;
+        btn.transition = Selectable.Transition.ColorTint;
+        var colors = btn.colors;
+        colors.highlightedColor = new Color(1f, 0.95f, 0.7f);
+        colors.pressedColor = new Color(0.8f, 0.7f, 0.35f);
+        btn.colors = colors;
+
+        if (onClick != null) btn.onClick.AddListener(onClick);
+        return btn;
+    }
+
+
 
     // 한 줄짜리 텍스트를 만든다.
     private TMP_Text CreateRow(Transform parent, string label, float fontSize)
