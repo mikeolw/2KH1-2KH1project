@@ -114,8 +114,29 @@ public class DialogueSystem : MonoBehaviour
         AudioManager.RegisterSafe(sfxSource, AudioManager.Channel.Sfx);
         AudioManager.RegisterSafe(bgmSource, AudioManager.Channel.Bgm);
 
-        // 게임 시작 시 scenario_01.csv(프롤로그)부터 자동 로드
-        LoadDialogueFromCSV("scenario_01");
+        // ===== 이어하기 vs 새 게임 =====
+        // 세이브 슬롯을 골라 들어온 경우(SaveManager.ActiveSave가 있는 경우)에는 저장된
+        // 지점부터 이어서 재생하고, 그렇지 않으면(타이틀의 "시작하기") 프롤로그부터 시작한다.
+        // 예전에는 무조건 scenario_01부터 시작해서 세이브를 불러와도 처음으로 돌아가버렸다.
+        var activeSave = SaveManager.Instance != null ? SaveManager.Instance.ActiveSave : null;
+
+        if (activeSave != null && !string.IsNullOrEmpty(activeSave.scenarioCsv))
+        {
+            // 가방/조사기록/플레이 시간 등도 함께 되돌린다.
+            if (SavePointManager.Instance != null) SavePointManager.Instance.RestoreFrom(activeSave);
+
+            LoadDialogueFromCSV(activeSave.scenarioCsv, activeSave.lineIndex);
+        }
+        else
+        {
+            // 새 게임: 이전 플레이의 흔적(가방, 조사기록, 엔딩 상태)을 깨끗이 비운다.
+            if (InventoryManager.Instance != null) InventoryManager.Instance.ClearAll();
+            if (NoteManager.Instance != null) NoteManager.Instance.RestoreEntries(null);
+            if (SavePointManager.Instance != null) SavePointManager.Instance.ResetForNewGame();
+            if (GameFlowManager.Instance != null) GameFlowManager.Instance.ResetForNewGame();
+
+            LoadDialogueFromCSV("scenario_01");
+        }
     }
 
     //void Start()
@@ -128,12 +149,22 @@ public class DialogueSystem : MonoBehaviour
 
     public void StartDialogue(DialogueData data)
     {
+        StartDialogue(data, 0);
+    }
+
+    // startLineIndex부터 대사를 재생한다. 세이브를 불러올 때 저장된 줄부터 이어가기 위해 쓴다.
+    public void StartDialogue(DialogueData data, int startLineIndex)
+    {
         // BGM 재생/정지는 줄 단위로 ShowNextSentence()에서 처리한다 (필드 선언부의
         // "CSV의 BGM 칸 사용법" 주석 참고). 여기서 따로 끊지 않아도 새 CSV의 첫 줄이
         // 비어있으면 알아서 끊기고, 같은 곡 이름이면 알아서 이어진다.
         currentDialogue = data;
-        lineIndex = 0;
-        choicePanel.SetActive(false);
+
+        // 저장된 줄 번호가 CSV 길이를 넘는 경우(대사를 고쳐서 줄 수가 줄어든 경우 등)에
+        // 대비해 범위를 잘라준다. 안 그러면 바로 "대사 세트 종료"로 튕긴다.
+        lineIndex = Mathf.Clamp(startLineIndex, 0, data.lines != null ? data.lines.Count : 0);
+
+        if (choicePanel != null) choicePanel.SetActive(false);
         ShowNextSentence();
     }
 
@@ -171,6 +202,18 @@ public class DialogueSystem : MonoBehaviour
             InvestigationController.Instance.Enter(
                 line.investigationId,
                 onExit: () => ShowNextSentence()
+            );
+            return;
+        }
+
+        // LineType이 "Deduction"인 줄은 대사 대신 추리 문제를 띄운다 (DeductionController.cs
+        // 상단 주석 참고). 미니게임/조사와 완전히 같은 콜백 구조이고, 문제를 전부 맞히면
+        // ShowNextSentence()로 이어진다. 틀리면 DeductionController가 직접 엔딩으로 넘긴다.
+        if (line.isDeduction)
+        {
+            DeductionController.Instance.Enter(
+                line.deductionId,
+                onSuccess: () => ShowNextSentence()
             );
             return;
         }
@@ -520,6 +563,7 @@ public class DialogueSystem : MonoBehaviour
         if (UIManager.Instance != null && UIManager.Instance.IsAnyPanelOpen) return true;
         if (MinigameController.Instance != null && MinigameController.Instance.IsActive) return true;
         if (DocumentViewerController.Instance != null && DocumentViewerController.Instance.IsOpen) return true;
+        if (DeductionController.Instance != null && DeductionController.Instance.IsActive) return true;
         return false;
     }
 
@@ -622,6 +666,12 @@ public class DialogueSystem : MonoBehaviour
     // 이 칸은 무시되고 선택지 UI가 대신 뜬다.
     public void LoadDialogueFromCSV(string csvFileName)
     {
+        LoadDialogueFromCSV(csvFileName, 0);
+    }
+
+    // startLineIndex부터 재생을 시작하는 버전. 세이브 불러오기에서 쓴다.
+    public void LoadDialogueFromCSV(string csvFileName, int startLineIndex)
+    {
         // 지금 어떤 CSV를 진행 중인지 기억해둔다. 세이브할 때 "어느 파일 몇 번째 줄에서
         // 저장했는지"를 남겨야 나중에 정확히 그 지점부터 이어할 수 있기 때문이다
         // (SavePointManager.cs 참고).
@@ -690,6 +740,18 @@ public class DialogueSystem : MonoBehaviour
                 continue;
             }
 
+            if (string.Equals(lineTypeStr, "Deduction", StringComparison.OrdinalIgnoreCase))
+            {
+                // 추리 문제 자체는 DeductionData.csv에 따로 적혀 있으므로, 여기서는
+                // 어떤 추리 묶음을 띄울지 가리키는 식별자만 읽어오면 된다.
+                var deductionLine = new DialogueLine();
+                deductionLine.isDeduction = true;
+                deductionLine.deductionId = GetField(data[i], "DeductionId");
+
+                currentDialogue.lines.Add(deductionLine);
+                continue;
+            }
+
             if (string.Equals(lineTypeStr, "Investigate", StringComparison.OrdinalIgnoreCase))
             {
                 // 조사 화면은 CSV가 아니라 씬에 직접 배치해두므로, 여기서는 어떤 조사 화면을
@@ -755,8 +817,8 @@ public class DialogueSystem : MonoBehaviour
             currentDialogue.lines.Add(line);
         }
 
-        // 대사 시작
-        StartDialogue(currentDialogue);
+        // 대사 시작 (이어하기면 저장된 줄부터)
+        StartDialogue(currentDialogue, startLineIndex);
     }
 
     // CSVReader가 만든 행(Dictionary)에서 값을 안전하게 꺼낸다. 컬럼 자체가 없거나(예전 CSV처럼

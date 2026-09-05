@@ -107,4 +107,14 @@ public class DialogueLine
     // 파싱부에서 채워주면 된다.
     public bool isInvestigation;
     public string investigationId;
+
+    [Header("추리 파트 (선택)")]
+    // CSV의 LineType이 "Deduction"인 행에서만 채워진다. 미니게임/조사와 완전히 같은
+    // 배관 구조이고, 자리만 DeductionController로 바뀐 것뿐이다.
+    //
+    // deductionId는 Resources/Dialogues/DeductionData.csv의 DeductionId 칸과 매칭된다.
+    // 문제를 전부 맞히면 다음 대사로 이어지고, 하나라도 틀리면 그 보기에 지정된 엔딩
+    // (기본값 Bad_D)으로 바로 넘어간다. 자세한 내용은 DeductionController.cs 참고.
+    public bool isDeduction;
+    public string deductionId;
 }
