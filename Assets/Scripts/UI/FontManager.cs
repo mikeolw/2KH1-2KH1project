@@ -113,12 +113,39 @@ public class FontManager : MonoBehaviour
     private System.Collections.IEnumerator ApplyNextFrame()
     {
         yield return null;
+
+        // 새 씬에는 아직 글꼴이 안 맞춰진 글자들이 있으므로, 설정값이 그대로여도
+        // 반드시 한 번 훑어야 한다. (ApplyToAllTexts의 "값이 같으면 건너뛰기"를 무시)
+        ForceApplyToAllTexts();
+    }
+
+    // 설정값이 바뀌지 않았어도 무조건 다시 적용한다.
+    // 씬이 바뀌어 새 글자가 생겼을 때 쓴다.
+    public void ForceApplyToAllTexts()
+    {
+        lastAppliedFontIndex = -1;
+        lastAppliedScale = -1f;
+
+        // 씬이 바뀌면 이전 씬 글자들의 원래 크기 기록은 의미가 없다.
+        // 그대로 두면 파괴된 오브젝트가 계속 쌓인다.
+        CleanupDestroyedTexts();
+
         ApplyToAllTexts();
     }
 
     // ---------------------------------------------------------------------------------
     // 적용
     // ---------------------------------------------------------------------------------
+
+    // 마지막으로 적용한 값. 값이 그대로면 다시 훑을 필요가 없다.
+    //
+    // ===== 왜 이 검사가 필요한가 =====
+    // 설정은 슬라이더를 드래그하는 동안 값이 바뀔 때마다 저장되고, 그때마다 이 함수가
+    // 불린다. 그런데 이 함수는 씬의 모든 글자를 찾아 훑기 때문에 꽤 무겁다.
+    // 볼륨 슬라이더처럼 글꼴과 무관한 설정을 움직일 때도 매번 전체를 훑고 있었으므로,
+    // 글꼴이나 크기가 실제로 바뀐 경우에만 일하도록 걸러낸다.
+    private int lastAppliedFontIndex = -1;
+    private float lastAppliedScale = -1f;
 
     // 화면에 있는 모든 TMP 텍스트에 현재 글꼴/크기 설정을 적용한다.
     public void ApplyToAllTexts()
@@ -128,6 +155,14 @@ public class FontManager : MonoBehaviour
         var settings = SettingsManager.Instance.Current;
         TMP_FontAsset font = GetFont(settings.fontIndex);
         float scale = Mathf.Clamp(settings.fontScale, 0.5f, 2f);
+
+        // 글꼴/크기가 그대로면 아무것도 하지 않는다.
+        if (settings.fontIndex == lastAppliedFontIndex && Mathf.Approximately(scale, lastAppliedScale))
+        {
+            return;
+        }
+        lastAppliedFontIndex = settings.fontIndex;
+        lastAppliedScale = scale;
 
         // 꺼져 있는(비활성) 오브젝트의 텍스트까지 포함해서 찾는다.
         // FindObjectsInactive.Include를 빼면 지금 닫혀 있는 팝업 안의 글씨는 안 바뀐다.

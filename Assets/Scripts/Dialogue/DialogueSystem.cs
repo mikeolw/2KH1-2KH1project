@@ -283,20 +283,28 @@ public class DialogueSystem : MonoBehaviour
     }
 
     // ▼ 표시를 깜빡이게 한다. 대사가 다 찍혔을 때만 보인다.
+    // ▼ 표시가 지금 켜져 있는지. 매 프레임 SetActive를 부르지 않기 위해 기억해둔다.
+    // (SetActive는 값이 같아도 내부적으로 계층을 훑는 비용이 있어서, 상태가 바뀔 때만 부른다)
+    private bool continueIndicatorShown;
+
     private void Update_ContinueIndicator()
     {
         if (continueIndicator == null) return;
 
         bool show = !isTyping && !IsBlockedByOtherUI();
-        continueIndicator.gameObject.SetActive(show);
 
-        if (show)
+        if (show != continueIndicatorShown)
         {
-            // 0.6초 주기로 부드럽게 깜빡인다.
-            float a = 0.35f + 0.55f * Mathf.Abs(Mathf.Sin(Time.time * Mathf.PI / 0.6f));
-            var c = continueIndicator.color;
-            continueIndicator.color = new Color(c.r, c.g, c.b, a);
+            continueIndicatorShown = show;
+            continueIndicator.gameObject.SetActive(show);
         }
+
+        if (!show) return;
+
+        // 0.6초 주기로 부드럽게 깜빡인다.
+        float a = 0.35f + 0.55f * Mathf.Abs(Mathf.Sin(Time.time * Mathf.PI / 0.6f));
+        var c = continueIndicator.color;
+        continueIndicator.color = new Color(c.r, c.g, c.b, a);
     }
 
     void Start()
@@ -388,6 +396,15 @@ public class DialogueSystem : MonoBehaviour
         // 실제로 호출되진 않지만, 나중에 진짜 실패 조건이 생겨도 이 호출부는 그대로 두면 된다.
         if (line.isMinigame)
         {
+            // 미니게임 담당이 씬에 없으면(팀원이 아직 만들지 않은 구간 등) 게임이 멈추는
+            // 대신 그냥 다음 대사로 넘어간다. 조사/추리 쪽과 같은 방침이다.
+            if (MinigameController.Instance == null)
+            {
+                Debug.LogWarning("[DialogueSystem] MinigameController가 없어 미니게임을 건너뜁니다.");
+                ShowNextSentence();
+                return;
+            }
+
             MinigameController.Instance.StartMinigame(
                 line.minigameLabel,
                 onSuccessCallback: () => ShowNextSentence(),
@@ -401,6 +418,13 @@ public class DialogueSystem : MonoBehaviour
         // ShowNextSentence()가 다시 호출되어 CSV의 다음 줄부터 이어간다.
         if (line.isInvestigation)
         {
+            if (InvestigationController.Instance == null)
+            {
+                Debug.LogWarning("[DialogueSystem] InvestigationController가 없어 조사를 건너뜁니다.");
+                ShowNextSentence();
+                return;
+            }
+
             InvestigationController.Instance.Enter(
                 line.investigationId,
                 onExit: () => ShowNextSentence()
@@ -413,6 +437,13 @@ public class DialogueSystem : MonoBehaviour
         // ShowNextSentence()로 이어진다. 틀리면 DeductionController가 직접 엔딩으로 넘긴다.
         if (line.isDeduction)
         {
+            if (DeductionController.Instance == null)
+            {
+                Debug.LogWarning("[DialogueSystem] DeductionController가 없어 추리를 건너뜁니다.");
+                ShowNextSentence();
+                return;
+            }
+
             DeductionController.Instance.Enter(
                 line.deductionId,
                 onSuccess: () => ShowNextSentence()
@@ -832,7 +863,14 @@ public class DialogueSystem : MonoBehaviour
                 if (isEnding)
                 {
                     // 엔딩 분기 처리
-                    GameFlowManager.Instance.TriggerEnding(ending);
+                    if (GameFlowManager.Instance != null)
+                    {
+                        GameFlowManager.Instance.TriggerEnding(ending);
+                    }
+                    else
+                    {
+                        Debug.LogError("[DialogueSystem] GameFlowManager가 없어 엔딩으로 넘어갈 수 없습니다.");
+                    }
                 }
                 else if (next != null)
                 {
@@ -924,15 +962,25 @@ public class DialogueSystem : MonoBehaviour
         }
     }
 
+    // 클릭 판정에 쓰는 임시 그릇들. 클릭할 때마다 새로 만들면 쓰레기가 계속 쌓이므로
+    // 하나를 만들어두고 재사용한다. (클릭은 자주 일어나므로 티끌이라도 모으지 않는 편이 좋다)
+    private readonly List<RaycastResult> raycastResults = new List<RaycastResult>();
+    private PointerEventData reusablePointerData;
+
     private bool IsPointerOverButton()
     {
         if (EventSystem.current == null) return false;
 
-        var pointerData = new PointerEventData(EventSystem.current) { position = Input.mousePosition };
-        var results = new List<RaycastResult>();
-        EventSystem.current.RaycastAll(pointerData, results);
+        if (reusablePointerData == null)
+        {
+            reusablePointerData = new PointerEventData(EventSystem.current);
+        }
+        reusablePointerData.position = Input.mousePosition;
 
-        foreach (var result in results)
+        raycastResults.Clear();
+        EventSystem.current.RaycastAll(reusablePointerData, raycastResults);
+
+        foreach (var result in raycastResults)
         {
             if (result.gameObject.GetComponentInParent<Button>() != null)
             {

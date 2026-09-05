@@ -82,6 +82,11 @@ public static class GameBootstrap
         if (NoteManager.Instance == null) Create<NoteManager>("NoteManager");
         if (DeductionController.Instance == null) Create<DeductionController>("DeductionController");
 
+        // 아래 둘은 보통 씬에 이미 있지만, 없으면 대사 진행이 통째로 막히는 핵심 부품이라
+        // 확실히 확보해둔다. (엔딩 분기와 조사 화면 담당)
+        if (GameFlowManager.Instance == null) Create<GameFlowManager>("GameFlowManager");
+        if (InvestigationController.Instance == null) Create<InvestigationController>("InvestigationController");
+
         // 아래 둘은 Canvas 위에 UI를 만들어야 하므로, 씬에 Canvas가 있을 때만 만든다.
         // FindAnyObjectByType: "아무거나 하나만 찾으면 된다"는 뜻. 예전 FindObjectOfType은
         // 유니티 6에서 사용 중단(deprecated)되어 경고가 뜬다.
