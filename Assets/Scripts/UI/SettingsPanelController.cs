@@ -82,7 +82,10 @@ public class SettingsPanelController : MonoBehaviour
     {
         // additive로 겹쳐 뜬 경우 이 씬에 딸려온 EventSystem이 기존 씬 것과 중복돼서
         // "There are 2 event systems" 경고와 입력 충돌이 생긴다. 이 씬 쪽만 제거한다.
-        var eventSystems = FindObjectsOfType<EventSystem>();
+        // FindObjectsByType은 유니티 6에서 예전 FindObjectsOfType을 대체한 함수다.
+        // EventSystem은 켜져 있는 것만 문제가 되므로 비활성은 찾지 않고,
+        // 순서도 상관없으므로 정렬하지 않는다(그게 더 빠르다).
+        var eventSystems = FindObjectsByType<EventSystem>(FindObjectsSortMode.None);
         if (eventSystems.Length > 1)
         {
             foreach (var es in eventSystems)

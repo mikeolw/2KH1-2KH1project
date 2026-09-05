@@ -124,8 +124,10 @@ public class FontManager : MonoBehaviour
         float scale = Mathf.Clamp(settings.fontScale, 0.5f, 2f);
 
         // 꺼져 있는(비활성) 오브젝트의 텍스트까지 포함해서 찾는다.
-        // true를 안 넣으면 지금 닫혀 있는 팝업 안의 글씨는 안 바뀐다.
-        TMP_Text[] texts = FindObjectsOfType<TMP_Text>(true);
+        // FindObjectsInactive.Include를 빼면 지금 닫혀 있는 팝업 안의 글씨는 안 바뀐다.
+        // (FindObjectsByType은 유니티 6에서 예전 FindObjectsOfType을 대체한 함수다.
+        //  FindObjectsSortMode.None은 "정렬하지 않음" - 순서가 상관없어서 이게 더 빠르다.)
+        TMP_Text[] texts = FindObjectsByType<TMP_Text>(FindObjectsInactive.Include, FindObjectsSortMode.None);
 
         foreach (var text in texts)
         {

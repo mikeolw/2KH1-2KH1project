@@ -92,7 +92,9 @@ public class StageController : MonoBehaviour
     // (씬을 아직 안 꾸민 상태에서도 바로 돌아가게 하기 위한 편의 기능)
     private void EnsureStageObjects()
     {
-        if (targetCanvas == null) targetCanvas = FindObjectOfType<Canvas>();
+        // FindAnyObjectByType: 씬에서 Canvas 아무거나 하나를 찾는다.
+        // (예전 FindObjectOfType은 유니티 6에서 사용 중단되어 경고가 뜬다)
+        if (targetCanvas == null) targetCanvas = FindAnyObjectByType<Canvas>();
         if (targetCanvas == null)
         {
             Debug.LogError("[StageController] 씬에 Canvas가 없습니다. 배경/스탠딩을 표시할 수 없습니다.");

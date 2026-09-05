@@ -189,7 +189,9 @@ public class DocumentViewerController : MonoBehaviour
     {
         if (panel != null) return; // 인스펙터에서 이미 연결해뒀으면 그대로 쓴다
 
-        if (targetCanvas == null) targetCanvas = FindObjectOfType<Canvas>();
+        // FindAnyObjectByType: 씬에서 Canvas 아무거나 하나를 찾는다.
+        // (예전 FindObjectOfType은 유니티 6에서 사용 중단되어 경고가 뜬다)
+        if (targetCanvas == null) targetCanvas = FindAnyObjectByType<Canvas>();
         if (targetCanvas == null)
         {
             Debug.LogError("[DocumentViewerController] 씬에 Canvas가 없어 자료 뷰어를 만들 수 없습니다.");

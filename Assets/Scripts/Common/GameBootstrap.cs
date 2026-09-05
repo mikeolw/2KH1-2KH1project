@@ -83,7 +83,9 @@ public static class GameBootstrap
         if (DeductionController.Instance == null) Create<DeductionController>("DeductionController");
 
         // 아래 둘은 Canvas 위에 UI를 만들어야 하므로, 씬에 Canvas가 있을 때만 만든다.
-        if (Object.FindObjectOfType<Canvas>() != null)
+        // FindAnyObjectByType: "아무거나 하나만 찾으면 된다"는 뜻. 예전 FindObjectOfType은
+        // 유니티 6에서 사용 중단(deprecated)되어 경고가 뜬다.
+        if (Object.FindAnyObjectByType<Canvas>() != null)
         {
             if (StageController.Instance == null) Create<StageController>("StageController");
             if (DocumentViewerController.Instance == null) Create<DocumentViewerController>("DocumentViewer");

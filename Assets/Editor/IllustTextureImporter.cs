@@ -57,9 +57,8 @@ public class IllustTextureImporter : AssetPostprocessor
         importer.spriteImportMode = SpriteImportMode.Single;
 
         // 투명 픽셀 클릭 무시 기능(alphaHitTestMinimumThreshold)이 알파값을 읽으려면
-        // 이 두 가지가 반드시 필요하다.
-        importer.isReadable = true;                              // Read/Write Enabled
-        importer.spriteMeshType = SpriteMeshType.FullRect;       // Mesh Type = Full Rect
+        // Read/Write Enabled가 켜져 있어야 한다.
+        importer.isReadable = true;
 
         // 알파 채널을 그대로 보존한다. (반투명/투명 배경 PNG가 많으므로)
         importer.alphaIsTransparency = true;
@@ -69,13 +68,28 @@ public class IllustTextureImporter : AssetPostprocessor
         // 이 줄을 TextureImporterCompression.Compressed 로 바꾸면 된다.)
         importer.textureCompression = TextureImporterCompression.Uncompressed;
 
-        // 스프라이트의 기준점을 가운데로. 배경/스탠딩 모두 코드에서 위치를 잡으므로
-        // 기준점이 제각각이면 배치가 어긋난다.
-        importer.spritePivot = new Vector2(0.5f, 0.5f);
-
         // pixelsPerUnit: UI(Canvas) 위에 올리는 그림이라 실제로는 영향이 적지만,
         // 100(유니티 기본값)으로 통일해두면 나중에 월드 스페이스로 옮겨도 크기가 일정하다.
         importer.spritePixelsPerUnit = 100f;
+
+        // ===== Mesh Type과 Pivot은 TextureImporterSettings를 거쳐야 한다 =====
+        // spriteMeshType / spriteAlignment 같은 세부 설정은 TextureImporter에 직접 달려 있지 않고
+        // TextureImporterSettings라는 별도 묶음 안에 들어 있다. 그래서
+        //   1) ReadTextureSettings()로 현재 설정을 꺼내오고
+        //   2) 원하는 값을 바꾼 다음
+        //   3) SetTextureSettings()로 다시 넣어주는
+        // 세 단계를 거쳐야 한다. (importer.spriteMeshType = ... 로 바로 쓰면 컴파일되지 않는다)
+        var settings = new TextureImporterSettings();
+        importer.ReadTextureSettings(settings);
+
+        // Full Rect가 아니면(기본값 Tight) 투명 픽셀 클릭 판정이 어긋난다.
+        settings.spriteMeshType = SpriteMeshType.FullRect;
+
+        // 스프라이트의 기준점을 가운데로. 배경/스탠딩 모두 코드에서 위치를 잡으므로
+        // 기준점이 제각각이면 배치가 어긋난다.
+        settings.spriteAlignment = (int)SpriteAlignment.Center;
+
+        importer.SetTextureSettings(settings);
     }
 
     // ===== 이미 들어와 있는 그림에 일괄 적용하는 메뉴 =====
