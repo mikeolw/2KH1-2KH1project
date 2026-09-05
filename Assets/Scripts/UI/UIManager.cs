@@ -68,40 +68,46 @@ public class UIManager : MonoBehaviour
     }
     public void ToggleSettings() => TogglePanel(settingsPanel);
 
-    // 환경설정은 인게임 팝업이 아니라 별도로 만들어둔 Settings.unity 씬을 "덮어씌우는" 형태로
-    // additive 로드한다 (Title 화면과 동일한 환경설정 화면을 재사용). Single 모드로 씬을
-    // 통째로 바꿔버리면 되돌아올 때 이 씬(SampleScene)이 처음부터 다시 로드되면서 진행 중이던
-    // 대사/시나리오 진행 상태가 전부 초기화돼버리므로, 기존 씬은 그대로 살려두고 그 위에
-    // Settings 씬만 겹쳐 띄운 뒤 뒤로가기를 누르면 그 씬만 언로드한다
-    // (SettingsPanelController의 backButton 핸들러 참고).
+    // ===== 인게임 환경설정 =====
+    // 예전에는 Settings.unity 씬을 게임 화면 위에 "겹쳐 띄우는(additive)" 방식이었다.
+    // 그런데 이 방식에서 문제가 반복해서 나왔다:
+    //   - 뒤로가기를 눌러도 씬이 내려가기까지 몇 프레임이 걸려, 그 사이 옵션 창이
+    //     게임 화면 뒤에 깔린 것처럼 다시 보였다.
+    //   - 두 씬의 캔버스가 서로 다른 기준으로 그려져 앞뒤 순서가 뒤엉켰다.
+    //   - 씬마다 EventSystem이 하나씩 있어 입력이 충돌했다.
+    //
+    // 그래서 씬을 오가는 방식을 버리고, 이 게임 씬 안에서 패널 하나를 켜고 끄는 방식으로
+    // 바꿨다. 씬 전환이 아예 없으므로 위 문제가 구조적으로 생길 수 없고, 진행 중이던
+    // 대사 상태도 당연히 그대로 유지된다. (SettingsPanelUI.cs 참고)
     public void OpenSettingsScene()
     {
-        // 정상적으로는 Title 씬을 거쳐야 SettingsManager가 생성되어 있지만, 에디터에서
-        // SampleScene을 바로 Play해서 테스트하는 경우 등 Title을 거치지 않은 경우엔
-        // Instance가 아직 없을 수 있다. 이때 그냥 넘어가면 ReturnSceneName이 기본값인
-        // "Title"로 남아서 뒤로가기를 눌렀을 때 이 씬이 아니라 타이틀로 튕기는 버그가
-        // 생기므로, 없으면 여기서 만들어준다.
+        // Title 씬을 거치지 않고 게임 씬을 바로 실행한 경우를 대비해 설정 매니저를 확보한다.
         if (SettingsManager.Instance == null)
         {
             new GameObject("SettingsManager").AddComponent<SettingsManager>();
         }
-        SettingsManager.Instance.ReturnSceneName = SceneManager.GetActiveScene().name;
-        SettingsManager.Instance.ReturnAdditive = true;
-        SceneManager.LoadScene("Settings", LoadSceneMode.Additive);
+
+        // 설정 패널이 아직 없으면 만든다(GameBootstrap이 미리 만들어두지만 안전장치).
+        if (SettingsPanelUI.Instance == null)
+        {
+            new GameObject("SettingsPanel").AddComponent<SettingsPanelUI>();
+        }
+
+        // 다른 팝업(가방/수첩 등)이 열려 있으면 닫고 설정만 보여준다.
+        CloseAllPanels();
+        SettingsPanelUI.Instance.Open();
     }
 
     // 조사기록/인벤토리/사진첩/핸드폰/설정 팝업 중 하나라도 열려있는지 여부.
     // DialogueSystem이 대사 넘기기 클릭을 처리하기 전에 이 값을 확인해서, 모달 바깥을
     // 클릭했을 때 그 클릭이 뒤에 있는 대사창 등 다른 스크립트로 새어나가지 않게 막는다.
-    // 설정 화면은 이제 별도 씬(Additive)으로 겹쳐 뜨기 때문에 settingsPanel GameObject로는
-    // 감지가 안 되고, 대신 SettingsPanelController.IsOpen 정적 플래그로 확인한다.
     public bool IsAnyPanelOpen =>
         (inventoryPanel && inventoryPanel.activeSelf) ||
         (photoPanel && photoPanel.activeSelf) ||
         (phonePanel && phonePanel.activeSelf) ||
         (notePanel && notePanel.activeSelf) ||
         (settingsPanel && settingsPanel.activeSelf) ||
-        SettingsPanelController.IsOpen;
+        (SettingsPanelUI.Instance != null && SettingsPanelUI.Instance.IsOpen);
 
     private void TogglePanel(GameObject targetPanel)
     {

@@ -90,6 +90,7 @@ public static class GameBootstrap
             if (StageController.Instance == null) Create<StageController>("StageController");
             if (DocumentViewerController.Instance == null) Create<DocumentViewerController>("DocumentViewer");
             if (SaveSlotDialog.Instance == null) Create<SaveSlotDialog>("SaveSlotDialog");
+            if (SettingsPanelUI.Instance == null) Create<SettingsPanelUI>("SettingsPanel");
         }
         else
         {
