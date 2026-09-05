@@ -54,6 +54,15 @@ public static class IllustLoader
     // 곤란하므로(특히 아직 아트가 안 나온 부분), 예외를 던지지 않는다.
     public static Sprite Load(string folder, string fileName)
     {
+        return Load(folder, fileName, warnIfMissing: true);
+    }
+
+    // warnIfMissing를 false로 주면 파일이 없어도 조용히 null만 돌려준다.
+    // "있으면 좋고 없어도 그만"인 그림(예: 입 벌린 표정)을 찾을 때 쓴다.
+    // 이걸 구분하지 않았더니 입 벌린 그림이 없는 캐릭터마다 경고가 쌓여서
+    // 콘솔이 의미 없는 경고로 가득 찼다.
+    public static Sprite Load(string folder, string fileName, bool warnIfMissing)
+    {
         if (string.IsNullOrWhiteSpace(fileName)) return null;
 
         // CSV에서 복사/붙여넣기 하다 보면 앞뒤에 공백이 섞이는 일이 잦아서 미리 잘라낸다.
@@ -73,7 +82,7 @@ public static class IllustLoader
         Sprite sprite = Resources.Load<Sprite>(path);
         cache[path] = sprite;
 
-        if (sprite == null && warnedPaths.Add(path))
+        if (sprite == null && warnIfMissing && warnedPaths.Add(path))
         {
             Debug.LogWarning(
                 $"[IllustLoader] 그림을 찾을 수 없습니다: Assets/Resources/{path}.png\n" +
@@ -91,7 +100,10 @@ public static class IllustLoader
     public static Sprite LoadOpenMouthVariant(string standingFileName)
     {
         if (string.IsNullOrWhiteSpace(standingFileName)) return null;
-        return Load(StandingFolder, standingFileName.Trim() + "_OpenMouse");
+
+        // 입 벌린 그림은 있는 캐릭터도 있고 없는 캐릭터도 있다. 없는 게 정상적인 경우이므로
+        // 경고를 남기지 않는다 (warnIfMissing: false).
+        return Load(StandingFolder, standingFileName.Trim() + "_OpenMouse", warnIfMissing: false);
     }
 
     // 씬을 완전히 새로 시작할 때처럼 메모리를 정리하고 싶을 때 호출한다.

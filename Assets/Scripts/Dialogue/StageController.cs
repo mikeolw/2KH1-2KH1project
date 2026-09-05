@@ -353,6 +353,32 @@ public class StageController : MonoBehaviour
         return -1;
     }
 
+    // ===== 무대(배경+스탠딩)가 캔버스 계층에서 어디까지 차지하는지 알려준다 =====
+    // 암전(페이드) 연출용 검은 판을 "배경/캐릭터는 덮되 대화창과 버튼은 덮지 않는" 자리에
+    // 놓아야 하는데, 그 경계가 바로 무대의 맨 마지막 자식이다.
+    // (유니티 UI는 계층에서 아래에 있을수록 앞에 그려진다)
+    public int GetTopStageSiblingIndex()
+    {
+        int top = -1;
+
+        if (backgroundImage != null && backgroundImage.transform.parent == targetCanvas?.transform)
+        {
+            top = Mathf.Max(top, backgroundImage.transform.GetSiblingIndex());
+        }
+
+        if (standingSlots != null)
+        {
+            foreach (var slot in standingSlots)
+            {
+                if (slot == null) continue;
+                if (slot.transform.parent != targetCanvas?.transform) continue;
+                top = Mathf.Max(top, slot.transform.GetSiblingIndex());
+            }
+        }
+
+        return top;
+    }
+
     // 무대(배경+스탠딩)를 통째로 숨기거나 다시 보여준다.
     //
     // 조사 모드는 이제 이 배경을 그대로 쓰므로(InvestigationController가 ApplyBackground를

@@ -253,7 +253,7 @@ public class IllustPlacementWindow : EditorWindow
         Rect area = GUILayoutUtility.GetRect(w, h, GUILayout.ExpandWidth(false), GUILayout.ExpandHeight(false));
 
         // 배경
-        EditorGUI.DrawRect(area, new Color(0.15f, 0.15f, 0.15f));
+        EditorGUI.DrawRect(area, Color.black);
         if (backgroundTexture != null) GUI.DrawTexture(area, backgroundTexture, ScaleMode.StretchToFill);
 
         // 그림들

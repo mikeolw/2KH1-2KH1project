@@ -125,9 +125,7 @@ public class FontManager : MonoBehaviour
 
         // 꺼져 있는(비활성) 오브젝트의 텍스트까지 포함해서 찾는다.
         // FindObjectsInactive.Include를 빼면 지금 닫혀 있는 팝업 안의 글씨는 안 바뀐다.
-        // (FindObjectsByType은 유니티 6에서 예전 FindObjectsOfType을 대체한 함수다.
-        //  FindObjectsSortMode.None은 "정렬하지 않음" - 순서가 상관없어서 이게 더 빠르다.)
-        TMP_Text[] texts = FindObjectsByType<TMP_Text>(FindObjectsInactive.Include, FindObjectsSortMode.None);
+        TMP_Text[] texts = FindObjectsByType<TMP_Text>(FindObjectsInactive.Include);
 
         foreach (var text in texts)
         {
@@ -148,6 +146,14 @@ public class FontManager : MonoBehaviour
         CleanupDestroyedTexts();
     }
 
+    // 만들기에 실패한 글꼴 번호. 실패도 기억해둬야 매번 다시 시도하지 않는다.
+    //
+    // ===== 왜 이게 중요한가 =====
+    // 예전에는 실패했을 때 아무것도 기억하지 않아서, 글자 크기를 조절하거나 씬이 바뀔 때마다
+    // 매번 글꼴 만들기를 다시 시도하고 그때마다 경고를 찍었다. 그 결과 콘솔에 똑같은 경고가
+    // 400개 넘게 쌓였다. 한 번 실패한 글꼴은 다시 시도하지 않고 조용히 기본 글꼴을 쓴다.
+    private readonly HashSet<int> failedFonts = new HashSet<int>();
+
     // fontIndex에 해당하는 TMP 폰트를 얻는다. 실패하면 기본 글꼴(null 가능)을 돌려준다.
     private TMP_FontAsset GetFont(int fontIndex)
     {
@@ -157,29 +163,25 @@ public class FontManager : MonoBehaviour
         // 이미 만들어둔 게 있으면 재사용
         if (fontCache.TryGetValue(fontIndex, out var cached) && cached != null) return cached;
 
+        // 이미 실패한 적 있는 글꼴이면 조용히 기본 글꼴을 쓴다.
+        if (failedFonts.Contains(fontIndex)) return defaultFont;
+
         if (fontIndex >= SystemFontNames.Length)
         {
             Debug.LogWarning($"[FontManager] 글꼴 번호 {fontIndex}는 목록에 없습니다. 기본 글꼴을 씁니다.");
+            failedFonts.Add(fontIndex);
             return defaultFont;
         }
 
         string osFontName = SystemFontNames[fontIndex];
+        TMP_FontAsset tmpFont = TryCreateSystemFont(osFontName);
 
-        // 윈도우에 설치된 글꼴을 읽어온다. 크기(16)는 여기서 의미가 없다
-        // (TMP가 알아서 필요한 크기로 그린다). 글꼴이 없으면 null이 아니라
-        // "이름만 다른 기본 글꼴"이 돌아올 수 있어서, 아래에서 실제 생성 결과를 확인한다.
-        Font osFont = Font.CreateDynamicFontFromOSFont(osFontName, 16);
-        if (osFont == null)
-        {
-            Debug.LogWarning($"[FontManager] 시스템 글꼴 '{osFontName}'을 찾지 못했습니다. 기본 글꼴을 씁니다.");
-            return defaultFont;
-        }
-
-        // 시스템 글꼴(Font)을 TextMeshPro가 쓸 수 있는 형식(TMP_FontAsset)으로 바꾼다.
-        TMP_FontAsset tmpFont = TMP_FontAsset.CreateFontAsset(osFont);
         if (tmpFont == null)
         {
-            Debug.LogWarning($"[FontManager] '{osFontName}'을 TMP 글꼴로 변환하지 못했습니다. 기본 글꼴을 씁니다.");
+            // 경고는 글꼴 하나당 딱 한 번만 남긴다.
+            Debug.LogWarning($"[FontManager] 시스템 글꼴 '{osFontName}'을 쓸 수 없어 기본 글꼴로 표시합니다. " +
+                             "(이 PC에 해당 글꼴이 없거나 TextMeshPro가 변환하지 못한 경우입니다)");
+            failedFonts.Add(fontIndex);
             return defaultFont;
         }
 
@@ -188,6 +190,39 @@ public class FontManager : MonoBehaviour
 
         fontCache[fontIndex] = tmpFont;
         return tmpFont;
+    }
+
+    // 윈도우에 설치된 글꼴을 TextMeshPro가 쓸 수 있는 형식으로 바꾼다.
+    //
+    // 만드는 방법이 유니티 버전에 따라 두 가지라서 순서대로 시도한다:
+    //   1) 글꼴 이름으로 바로 만들기 - 유니티 6 계열에서 권장하는 방법
+    //   2) 시스템 글꼴 객체를 거쳐 만들기 - 예전 방법
+    // 둘 다 실패하면 null을 돌려주고, 부르는 쪽이 기본 글꼴을 쓴다.
+    private TMP_FontAsset TryCreateSystemFont(string osFontName)
+    {
+        // 방법 1
+        try
+        {
+            var direct = TMP_FontAsset.CreateFontAsset(osFontName, "Regular", 90);
+            if (direct != null) return direct;
+        }
+        catch (System.Exception)
+        {
+            // 이 유니티 버전에 이 방식이 없거나 실패한 경우 - 다음 방법으로 넘어간다.
+        }
+
+        // 방법 2
+        try
+        {
+            Font osFont = Font.CreateDynamicFontFromOSFont(osFontName, 90);
+            if (osFont == null) return null;
+
+            return TMP_FontAsset.CreateFontAsset(osFont);
+        }
+        catch (System.Exception)
+        {
+            return null;
+        }
     }
 
     // 파괴된 텍스트를 기록에서 지운다(메모리 누수 방지).

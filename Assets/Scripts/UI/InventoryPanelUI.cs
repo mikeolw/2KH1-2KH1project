@@ -72,11 +72,10 @@ public class InventoryPanelUI : MonoBehaviour
         }
 
         // 가방을 닫았다 열면 조합 모드는 초기화한다(헷갈림 방지).
-        combineMode = false;
-        combineSourceItemId = null;
+        SetCombineMode(false, null);
 
         Refresh();
-        ShowMessage("");
+        ShowMessage("아이템을 눌러 설명을 보세요. 두 개를 합치려면 하나를 고른 뒤 [조합하기]를 누르세요.");
     }
 
     private void OnDisable()
@@ -146,10 +145,24 @@ public class InventoryPanelUI : MonoBehaviour
         }
         else
         {
-            // 프리팹이 없으면 최소한의 버튼을 코드로 만든다.
+            // 프리팹이 없으면 버튼을 코드로 만든다.
             go = new GameObject($"Item_{info.itemId}", typeof(RectTransform), typeof(Image), typeof(Button));
             go.transform.SetParent(itemListContainer, false);
-            go.GetComponent<Image>().color = new Color(1f, 1f, 1f, 0.12f);
+
+            var slotBg = go.GetComponent<Image>();
+            slotBg.color = new Color(1f, 1f, 1f, 0.14f);
+            slotBg.raycastTarget = true;
+
+            // targetGraphic을 지정해야 클릭 판정과 색 변화가 동작한다.
+            // (이게 빠져 있어서 아이템을 눌러도 아무 반응이 없었다)
+            var slotBtn = go.GetComponent<Button>();
+            slotBtn.targetGraphic = slotBg;
+            slotBtn.transition = Selectable.Transition.ColorTint;
+
+            var c = slotBtn.colors;
+            c.highlightedColor = new Color(1f, 0.95f, 0.7f);
+            c.pressedColor = new Color(0.8f, 0.7f, 0.35f);
+            slotBtn.colors = c;
         }
 
         // 아이콘: 버튼 안에 Image가 두 개 이상이면 두 번째를 아이콘으로 본다.
@@ -279,22 +292,52 @@ public class InventoryPanelUI : MonoBehaviour
     }
 
     // "조합하기" 버튼. 지금 고른 아이템을 첫 번째 재료로 잡고 조합 모드로 들어간다.
+    //
+    // ===== 조합하는 방법 =====
+    //   1) 아이템 하나를 누른다 (예: SD카드)
+    //   2) [조합하기] 버튼을 누른다 -> 조합 모드로 들어간다
+    //   3) 함께 쓸 다른 아이템을 누른다 (예: 카메라) -> 조합 시도
+    // 조합이 되면 결과 아이템이 가방에 들어오고 안내 문구가 뜬다.
+    // 안 되는 조합이면 "같이 쓸 수 없다"고 알려주고 조합 모드가 풀린다.
     public void OnCombineClicked()
     {
-        if (string.IsNullOrEmpty(selectedItemId)) return;
+        if (string.IsNullOrEmpty(selectedItemId))
+        {
+            ShowMessage("먼저 아이템을 하나 고르세요.");
+            return;
+        }
 
         // 이미 조합 모드면 취소로 동작한다(같은 버튼으로 켜고 끄기).
         if (combineMode)
         {
-            combineMode = false;
-            combineSourceItemId = null;
+            SetCombineMode(false, null);
             ShowMessage("조합을 취소했다.");
             return;
         }
 
-        combineMode = true;
-        combineSourceItemId = selectedItemId;
+        SetCombineMode(true, selectedItemId);
         ShowMessage($"'{ItemDatabase.GetDisplayName(selectedItemId)}'와(과) 함께 쓸 물건을 고르세요.");
+    }
+
+    // 조합 모드를 켜고 끄면서 화면 표시도 함께 바꾼다.
+    // 버튼 글씨와 색이 바뀌지 않으면 지금 조합 모드인지 알 수 없어서 혼란스럽다.
+    private void SetCombineMode(bool on, string sourceItemId)
+    {
+        combineMode = on;
+        combineSourceItemId = on ? sourceItemId : null;
+
+        if (combineButton == null) return;
+
+        var label = combineButton.GetComponentInChildren<TMP_Text>();
+        if (label != null) label.text = on ? "조합 취소" : "조합하기";
+
+        var bg = combineButton.GetComponent<Image>();
+        if (bg != null)
+        {
+            bg.color = on
+                ? new Color(1f, 0.75f, 0.25f, 0.55f)   // 조합 모드일 땐 눈에 띄는 주황빛
+                : new Color(1f, 1f, 1f, 0.20f);
+        }
     }
 
     // 조합 모드에서 두 번째 아이템을 눌렀을 때.
@@ -303,8 +346,7 @@ public class InventoryPanelUI : MonoBehaviour
         string sourceId = combineSourceItemId;
 
         // 조합 모드는 시도 즉시 해제한다(성공/실패 무관).
-        combineMode = false;
-        combineSourceItemId = null;
+        SetCombineMode(false, null);
 
         if (sourceId == targetItemId)
         {
@@ -360,7 +402,7 @@ public class InventoryPanelUI : MonoBehaviour
         // 배경
         var bg = gameObject.GetComponent<Image>();
         if (bg == null) bg = gameObject.AddComponent<Image>();
-        bg.color = new Color(0.05f, 0.05f, 0.08f, 0.95f);
+        bg.color = new Color(0f, 0f, 0f, 0.95f);
 
         // 왼쪽: 아이템 격자
         var listGo = new GameObject("ItemList", typeof(RectTransform), typeof(GridLayoutGroup));
@@ -429,6 +471,12 @@ public class InventoryPanelUI : MonoBehaviour
         return tmp;
     }
 
+    // ===== 실제로 누를 수 있는 버튼 만들기 =====
+    // 예전에는 글씨만 있고 눌리지 않는 버튼이 만들어졌다. 원인은 두 가지였다:
+    //   1) Button에 targetGraphic이 연결되지 않아 클릭 판정이 잡히지 않았다.
+    //   2) 배경 Image의 raycastTarget이 꺼져 있으면 클릭이 아예 통과해 버린다.
+    // 아래에서 둘 다 확실히 지정한다. 눌렀을 때 색이 변하는 것도 함께 넣어서
+    // "지금 눌리는 버튼이다"라는 게 눈에 보이게 했다.
     private Button CreateButton(string name, string label, Vector2 anchorMin, Vector2 anchorMax,
                                 UnityEngine.Events.UnityAction onClick)
     {
@@ -439,7 +487,10 @@ public class InventoryPanelUI : MonoBehaviour
         rt.anchorMax = anchorMax;
         rt.offsetMin = Vector2.zero;
         rt.offsetMax = Vector2.zero;
-        go.GetComponent<Image>().color = new Color(1f, 1f, 1f, 0.18f);
+
+        var bg = go.GetComponent<Image>();
+        bg.color = new Color(1f, 1f, 1f, 0.20f);
+        bg.raycastTarget = true;   // 이게 꺼져 있으면 클릭이 통과해 버튼이 안 눌린다
 
         var textGo = new GameObject("Text", typeof(RectTransform));
         textGo.transform.SetParent(go.transform, false);
@@ -450,12 +501,22 @@ public class InventoryPanelUI : MonoBehaviour
         textRt.offsetMax = Vector2.zero;
         var tmp = textGo.AddComponent<TextMeshProUGUI>();
         tmp.text = label;
-        tmp.fontSize = 20;
+        tmp.fontSize = 22;
         tmp.alignment = TextAlignmentOptions.Center;
         tmp.color = Color.white;
-        tmp.raycastTarget = false;
+        tmp.raycastTarget = false;   // 글씨가 클릭을 가로채지 않게
 
         var btn = go.GetComponent<Button>();
+        btn.targetGraphic = bg;      // 클릭 판정과 색 변화의 기준이 되는 그래픽
+        btn.transition = Selectable.Transition.ColorTint;
+
+        var colors = btn.colors;
+        colors.normalColor = Color.white;
+        colors.highlightedColor = new Color(1f, 0.95f, 0.7f);
+        colors.pressedColor = new Color(0.8f, 0.7f, 0.35f);
+        colors.selectedColor = Color.white;
+        btn.colors = colors;
+
         btn.onClick.AddListener(onClick);
         return btn;
     }

@@ -123,6 +123,14 @@ public class DialogueSystem : MonoBehaviour
     //   - 넘치는 글자는 다음 쪽으로 넘기도록 설정 (StartTyping의 쪽 나누기와 짝을 이룬다)
     //   - 화자 이름을 굵게, 살짝 크게, 강조색으로
     //   - 오른쪽 아래에 "계속" 표시(▼)를 붙인다
+    // 대화창 크기 기준값. 캔버스가 1440x1080이라는 전제로 잡은 값이다.
+    private const float DialogueBoxHeight = 300f;   // 대화창 전체 높이
+    private const float DialogueSideMargin = 60f;   // 좌우 여백
+    private const float DialogueBottomMargin = 40f; // 아래 여백
+    private const float SpeakerBoxHeight = 56f;     // 이름 칸 높이
+    private const float SentenceFontSize = 34f;     // 대사 글자 크기
+    private const float SpeakerFontSize = 30f;      // 이름 글자 크기
+
     private void StyleDialogueBox()
     {
         if (!autoStyleDialogueBox) return;
@@ -133,47 +141,121 @@ public class DialogueSystem : MonoBehaviour
             var t = sentenceText.transform.parent;
             if (t != null) dialoguePanel = t.gameObject;
         }
+        if (dialoguePanel == null) return;
 
-        // ----- 대화창 배경 -----
-        if (dialoguePanel != null)
+        // ----- 대화창 전체 크기/위치 -----
+        // 씬에 만들어져 있던 크기가 제각각이라 글자가 넘치거나 잘렸다. 화면 아래쪽에
+        // 일정한 크기로 고정한다.
+        var panelRect = dialoguePanel.GetComponent<RectTransform>();
+        if (panelRect != null)
         {
-            var bg = dialoguePanel.GetComponent<UnityEngine.UI.Image>();
-            if (bg != null)
-            {
-                // 선화(흰 바탕 + 검은 선) 위에 흰 글자를 올려야 하므로 어두운 판을 깐다.
-                bg.color = new Color(0.06f, 0.07f, 0.11f, 0.88f);
-            }
+            panelRect.anchorMin = new Vector2(0f, 0f);
+            panelRect.anchorMax = new Vector2(1f, 0f);
+            panelRect.pivot = new Vector2(0.5f, 0f);
+            panelRect.offsetMin = new Vector2(DialogueSideMargin, DialogueBottomMargin);
+            panelRect.offsetMax = new Vector2(-DialogueSideMargin, DialogueBottomMargin + DialogueBoxHeight);
         }
 
-        // ----- 대사 글자 -----
-        if (sentenceText != null)
+        // ----- 대화창 배경 (검은색) -----
+        var bg = dialoguePanel.GetComponent<UnityEngine.UI.Image>();
+        if (bg != null)
         {
-            // 넘치면 다음 쪽으로 (창 밖으로 삐져나가지 않게 하는 핵심 설정)
-            sentenceText.overflowMode = TMPro.TextOverflowModes.Page;
-
-            // 안쪽 여백 (왼, 위, 오른, 아래). 오른쪽은 "계속" 표시 자리를 조금 남긴다.
-            sentenceText.margin = new Vector4(28f, 16f, 44f, 16f);
-
-            sentenceText.alignment = TMPro.TextAlignmentOptions.TopLeft;
-            sentenceText.color = new Color(0.96f, 0.96f, 0.94f);
-
-            // 줄 간격을 조금 띄우면 한글이 훨씬 읽기 편하다.
-            sentenceText.lineSpacing = 12f;
+            // 선화(흰 바탕 + 검은 선) 위에 흰 글자를 올려야 하므로 검은 판을 깐다.
+            bg.color = new Color(0f, 0f, 0f, 0.86f);
         }
 
-        // ----- 화자 이름 -----
+        // ----- 화자 이름 칸 -----
+        // 대화창 왼쪽 위에 얹는다. 이름이 없는 지문일 때는 통째로 숨긴다.
         if (speakerText != null)
         {
+            var nameRect = speakerText.GetComponent<RectTransform>();
+            if (nameRect != null && speakerText.transform.parent == dialoguePanel.transform)
+            {
+                nameRect.anchorMin = new Vector2(0f, 1f);
+                nameRect.anchorMax = new Vector2(0f, 1f);
+                nameRect.pivot = new Vector2(0f, 1f);
+                nameRect.anchoredPosition = new Vector2(30f, -14f);
+                nameRect.sizeDelta = new Vector2(400f, SpeakerBoxHeight);
+            }
+
             speakerText.fontStyle = TMPro.FontStyles.Bold;
+            speakerText.fontSize = SpeakerFontSize;
             speakerText.color = new Color(1f, 0.86f, 0.45f);   // 옅은 금색 - 대사와 구분되게
-            speakerText.margin = new Vector4(12f, 0f, 12f, 0f);
             speakerText.alignment = TMPro.TextAlignmentOptions.Left;
+            speakerText.margin = Vector4.zero;
+            speakerText.raycastTarget = false;
 
             // 이름 칸을 감싸는 상자를 못 받았으면 이름 텍스트 자체를 상자로 삼는다.
             if (speakerNameBox == null) speakerNameBox = speakerText.gameObject;
         }
 
+        // ----- 대사 글자 -----
+        // 이름 칸 아래부터 대화창 바닥까지를 전부 쓴다.
+        if (sentenceText != null)
+        {
+            var textRect = sentenceText.GetComponent<RectTransform>();
+            if (textRect != null && sentenceText.transform.parent == dialoguePanel.transform)
+            {
+                textRect.anchorMin = Vector2.zero;
+                textRect.anchorMax = Vector2.one;
+                textRect.pivot = new Vector2(0.5f, 0.5f);
+                // 위쪽은 이름 칸만큼 비우고, 오른쪽은 "계속" 표시(▼) 자리를 남긴다.
+                textRect.offsetMin = new Vector2(30f, 24f);
+                textRect.offsetMax = new Vector2(-52f, -(SpeakerBoxHeight + 10f));
+            }
+
+            // 넘치면 다음 쪽으로 (창 밖으로 삐져나가지 않게 하는 핵심 설정)
+            sentenceText.overflowMode = TMPro.TextOverflowModes.Page;
+
+            sentenceText.fontSize = SentenceFontSize;
+            sentenceText.alignment = TMPro.TextAlignmentOptions.TopLeft;
+            sentenceText.color = new Color(0.96f, 0.96f, 0.94f);
+            sentenceText.margin = Vector4.zero;   // 여백은 위 offset으로 이미 줬다
+            sentenceText.lineSpacing = 14f;       // 한글은 줄을 조금 띄워야 읽기 편하다
+            sentenceText.raycastTarget = false;
+
+            // 글자 크기를 자동으로 줄이는 기능은 꺼둔다.
+            // 켜져 있으면 긴 대사일 때 글씨가 제멋대로 작아져서 줄마다 크기가 달라 보인다.
+            // (길이 문제는 쪽 나누기로 해결한다)
+            sentenceText.enableAutoSizing = false;
+        }
+
         CreateContinueIndicator();
+        FixFadeOverlayOrder();
+    }
+
+    // ===== 페이드(암전) 연출이 UI까지 가리던 문제 =====
+    // 암전용 검은 판(FadeOverlay)이 대화창이나 퀵바보다 앞에 그려져 있으면, 장면이 어두워질 때
+    // 대화창과 버튼까지 같이 사라져 버린다. 암전은 "배경과 캐릭터"에만 걸려야 하므로,
+    // 검은 판을 대화창 바로 뒤로 옮겨서 배경/스탠딩만 덮게 한다.
+    private void FixFadeOverlayOrder()
+    {
+        if (fadeCanvasGroup == null) return;
+
+        Transform overlay = fadeCanvasGroup.transform;
+
+        // 무대(배경 + 캐릭터 스탠딩)의 맨 마지막 자식 바로 다음 자리에 놓는다.
+        // 그러면 배경과 캐릭터는 덮지만, 그 뒤에 있는 대화창·퀵바·팝업은 덮지 않는다.
+        var stage = StageController.Instance;
+        bool sameParentAsStage = stage != null
+                                 && stage.backgroundImage != null
+                                 && overlay.parent == stage.backgroundImage.transform.parent;
+
+        if (sameParentAsStage)
+        {
+            int stageTop = stage.GetTopStageSiblingIndex();
+            if (stageTop >= 0)
+            {
+                overlay.SetSiblingIndex(stageTop + 1);
+                return;
+            }
+        }
+
+        // 무대를 못 찾으면 차선책: 대화창 바로 앞자리(= 대화창보다 뒤)에 둔다.
+        if (dialoguePanel != null && overlay.parent == dialoguePanel.transform.parent)
+        {
+            overlay.SetSiblingIndex(dialoguePanel.transform.GetSiblingIndex());
+        }
     }
 
     // 대사가 더 남아 있음을 알려주는 ▼ 표시를 대화창 오른쪽 아래에 만든다.
@@ -775,6 +857,7 @@ public class DialogueSystem : MonoBehaviour
         if (MinigameController.Instance != null && MinigameController.Instance.IsActive) return true;
         if (DocumentViewerController.Instance != null && DocumentViewerController.Instance.IsOpen) return true;
         if (DeductionController.Instance != null && DeductionController.Instance.IsActive) return true;
+        if (SaveSlotDialog.Instance != null && SaveSlotDialog.Instance.IsOpen) return true;
         return false;
     }
 

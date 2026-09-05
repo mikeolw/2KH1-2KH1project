@@ -333,7 +333,7 @@ public class InvestigationController : MonoBehaviour
         rt.sizeDelta = new Vector2(180f, 52f);
 
         var img = go.GetComponent<Image>();
-        img.color = new Color(0.08f, 0.08f, 0.10f, 0.82f);
+        img.color = new Color(0f, 0f, 0f, 0.82f);
 
         var textGo = new GameObject("Text", typeof(RectTransform));
         textGo.transform.SetParent(go.transform, false);

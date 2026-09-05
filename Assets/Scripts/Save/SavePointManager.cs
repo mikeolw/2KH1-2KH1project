@@ -81,6 +81,14 @@ public class SavePointManager : MonoBehaviour
 
         Debug.Log($"[SavePointManager] 세이브포인트 도달: {LastSavePointId} ({scenarioCsv} {lineIndex}번째 줄)");
         OnSavePointReached?.Invoke(LastSavePointId);
+
+        // 세이브포인트를 지날 때마다 "어느 슬롯에 저장할까요?" 창을 띄운다.
+        // 플레이어는 슬롯을 고르거나 "저장하지 않고 계속"을 눌러 넘어갈 수 있다.
+        // (자동으로 한 곳에 덮어쓰면 앞 지점으로 되돌아갈 수 없어서 슬롯을 고르게 한다)
+        if (SaveSlotDialog.Instance != null)
+        {
+            SaveSlotDialog.Instance.Open(LastSavePointId);
+        }
     }
 
     // ---------------------------------------------------------------------------------

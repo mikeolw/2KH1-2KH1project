@@ -67,6 +67,31 @@ public class NoteManager : MonoBehaviour
         else { Destroy(gameObject); return; }
 
         LoadEntries();
+        AddInitialEntries();
+    }
+
+    // ===== 게임 시작 시점에 이미 적혀 있는 메모 =====
+    // 수첩은 주인공 재훈이 업무용으로 쓰던 물건이라, 게임을 시작할 때부터 백지가 아니라
+    // 회사 관련 메모가 적혀 있어야 한다. NoteEntries.csv에서 TriggerType이 "Initial"인
+    // 줄들을 게임 시작과 동시에 수첩에 올린다.
+    //
+    // 조사로 얻는 메모는 그때그때 추가되지만(OnItemAcquired 등), 이 메모들은 조사와 무관하게
+    // 처음부터 있어야 하므로 여기서 한 번에 넣는다.
+    private void AddInitialEntries()
+    {
+        if (allEntries == null) return;
+
+        foreach (var pair in allEntries)
+        {
+            var entry = pair.Value;
+            if (!string.Equals(entry.triggerType, "Initial", System.StringComparison.OrdinalIgnoreCase)) continue;
+
+            // AddEntry를 쓰지 않고 직접 넣는 이유: 시작 메모는 #07 구간의 보류 규칙과
+            // 무관하게 항상 바로 보여야 하기 때문이다.
+            if (!recordedEntryIds.Contains(entry.entryId)) recordedEntryIds.Add(entry.entryId);
+        }
+
+        if (recordedEntryIds.Count > 0) OnNoteChanged?.Invoke();
     }
 
     // ---------------------------------------------------------------------------------

@@ -44,10 +44,11 @@ public class AspectRatioKeeper : MonoBehaviour
     {
         cam = GetComponent<Camera>();
 
-        // 카메라가 아무것도 그리지 않는 영역(검은 띠)에 보일 색.
-        // clearFlags를 SolidColor로 해야 그 색으로 칠해진다.
+        // 카메라가 아무것도 그리지 않는 영역(검은 띠)과 배경이 비었을 때 보일 색.
+        // clearFlags를 SolidColor로 해야 이 색으로 칠해진다.
+        // (URP에서는 이 설정이 카메라 인스펙터의 Background Type = Solid Color 에 해당한다)
         cam.clearFlags = CameraClearFlags.SolidColor;
-        cam.backgroundColor = letterboxColor;
+        cam.backgroundColor = letterboxColor;   // 기본값 Color.black
     }
 
     private void Start()
@@ -111,12 +112,10 @@ public class AspectRatioKeeper : MonoBehaviour
     // 안에만 그려진다.
     private void SetupCanvases()
     {
-        // FindObjectsByType: 여러 개를 한꺼번에 찾는다. 유니티 6에서 예전 FindObjectsOfType을
-        // 대체한 함수이며, 인자 두 개로 동작을 정확히 지정한다.
-        //   FindObjectsInactive.Include : 꺼져 있는 오브젝트도 포함해서 찾는다
-        //                                 (지금 닫혀 있는 팝업의 Canvas도 맞춰줘야 하므로)
-        //   FindObjectsSortMode.None    : 정렬하지 않는다. 순서가 상관없을 때 이게 더 빠르다
-        Canvas[] canvases = FindObjectsByType<Canvas>(FindObjectsInactive.Include, FindObjectsSortMode.None);
+        // FindObjectsByType: 여러 개를 한꺼번에 찾는다(유니티 6에서 FindObjectsOfType을 대체).
+        // FindObjectsInactive.Include는 꺼져 있는 오브젝트도 포함해서 찾으라는 뜻이다.
+        // 지금 닫혀 있는 팝업의 Canvas도 맞춰줘야 하므로 반드시 포함해야 한다.
+        Canvas[] canvases = FindObjectsByType<Canvas>(FindObjectsInactive.Include);
         foreach (var canvas in canvases)
         {
             // 다른 Canvas의 자식으로 딸려 있는 것(중첩 Canvas)은 부모를 따라가므로 건드리지 않는다.

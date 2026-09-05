@@ -66,6 +66,11 @@ public class SettingsPanelController : MonoBehaviour
     [Header("공용 버튼")]
     public Button quitButton;
     public Button backButton;
+    [Tooltip("메인(타이틀) 화면으로 돌아가는 버튼. 비워두면 자동 생성된다.")]
+    public Button mainMenuButton;
+
+    [Header("메인 화면 씬 이름")]
+    public string titleSceneName = "Title";
 
     // 패널로 쓰일 때만 채워지는 콜백. 독립 씬으로 쓰일 땐 null로 두면 됨.
     public System.Action onBack;
@@ -83,9 +88,8 @@ public class SettingsPanelController : MonoBehaviour
         // additive로 겹쳐 뜬 경우 이 씬에 딸려온 EventSystem이 기존 씬 것과 중복돼서
         // "There are 2 event systems" 경고와 입력 충돌이 생긴다. 이 씬 쪽만 제거한다.
         // FindObjectsByType은 유니티 6에서 예전 FindObjectsOfType을 대체한 함수다.
-        // EventSystem은 켜져 있는 것만 문제가 되므로 비활성은 찾지 않고,
-        // 순서도 상관없으므로 정렬하지 않는다(그게 더 빠르다).
-        var eventSystems = FindObjectsByType<EventSystem>(FindObjectsSortMode.None);
+        // EventSystem은 켜져 있는 것만 문제가 되므로 비활성은 찾지 않는다.
+        var eventSystems = FindObjectsByType<EventSystem>();
         if (eventSystems.Length > 1)
         {
             foreach (var es in eventSystems)
@@ -114,6 +118,105 @@ public class SettingsPanelController : MonoBehaviour
         // 뒤로가기: 인게임에서 additive로 열렸으면 이 씬만 언로드해서 진행 상태를 보존하고,
         // 타이틀에서 진입한 경우엔 원래 씬으로 이동한다.
         if (backButton != null) backButton.onClick.AddListener(OnClickBack);
+
+        EnsureMainMenuButton();
+    }
+
+    // ===== 메인 화면으로 돌아가기 =====
+    // 인게임 도중 옵션을 열었을 때 타이틀로 나갈 방법이 없었다.
+    // 저장하지 않은 진행 상황이 날아가므로 한 번 더 확인하는 절차를 둔다.
+    private bool mainMenuConfirming;
+
+    private void OnClickMainMenu()
+    {
+        // 첫 번째 클릭: 정말 나갈 건지 확인 문구로 바꾼다.
+        if (!mainMenuConfirming)
+        {
+            mainMenuConfirming = true;
+            SetMainMenuLabel("정말 나가시겠습니까?");
+            return;
+        }
+
+        // 두 번째 클릭: 실제로 타이틀로 나간다.
+        //
+        // 겹쳐 띄운 상태(additive)에서 그냥 씬을 바꾸면 옵션 씬이 남아 떠다닐 수 있으므로,
+        // 플래그를 정리하고 Single 모드로 타이틀을 불러온다(그러면 모든 씬이 정리된다).
+        if (SettingsManager.Instance != null) SettingsManager.Instance.ReturnAdditive = false;
+
+        // 이어서 하던 세이브 정보도 비운다. 안 그러면 타이틀에서 새 게임을 눌러도
+        // 직전에 하던 지점부터 시작해 버린다.
+        if (SavePointManager.Instance != null) SavePointManager.Instance.ResetForNewGame();
+
+        SceneManager.LoadScene(titleSceneName, LoadSceneMode.Single);
+    }
+
+    private void SetMainMenuLabel(string text)
+    {
+        if (mainMenuButton == null) return;
+        var label = mainMenuButton.GetComponentInChildren<TMP_Text>();
+        if (label != null) label.text = text;
+    }
+
+    // 씬에 메인 화면 버튼이 없으면 만들어 붙인다.
+    private void EnsureMainMenuButton()
+    {
+        if (mainMenuButton == null)
+        {
+            // 뒤로가기 버튼이 있으면 그 옆에 같은 모양으로 만든다.
+            if (backButton != null)
+            {
+                var clone = Instantiate(backButton.gameObject, backButton.transform.parent);
+                clone.name = "Btn_MainMenu";
+
+                mainMenuButton = clone.GetComponent<Button>();
+                mainMenuButton.onClick.RemoveAllListeners();
+
+                var srcRect = backButton.GetComponent<RectTransform>();
+                var cloneRect = clone.GetComponent<RectTransform>();
+                if (srcRect != null && cloneRect != null)
+                {
+                    // 뒤로가기 버튼 바로 위에 놓는다.
+                    cloneRect.anchoredPosition = srcRect.anchoredPosition
+                        + new Vector2(0f, srcRect.rect.height + 12f);
+                }
+            }
+            else
+            {
+                var go = new GameObject("Btn_MainMenu", typeof(RectTransform), typeof(Image), typeof(Button));
+                go.transform.SetParent(transform, false);
+
+                var rt = go.GetComponent<RectTransform>();
+                rt.anchorMin = new Vector2(1f, 0f);
+                rt.anchorMax = new Vector2(1f, 0f);
+                rt.pivot = new Vector2(1f, 0f);
+                rt.anchoredPosition = new Vector2(-24f, 84f);
+                rt.sizeDelta = new Vector2(200f, 52f);
+
+                var bg = go.GetComponent<Image>();
+                bg.color = new Color(1f, 1f, 1f, 0.20f);
+                bg.raycastTarget = true;
+
+                var textGo = new GameObject("Text", typeof(RectTransform));
+                textGo.transform.SetParent(go.transform, false);
+                var trt = textGo.GetComponent<RectTransform>();
+                trt.anchorMin = Vector2.zero;
+                trt.anchorMax = Vector2.one;
+                trt.offsetMin = Vector2.zero;
+                trt.offsetMax = Vector2.zero;
+                var tmp = textGo.AddComponent<TextMeshProUGUI>();
+                tmp.fontSize = 22;
+                tmp.alignment = TextAlignmentOptions.Center;
+                tmp.color = Color.white;
+                tmp.raycastTarget = false;
+
+                mainMenuButton = go.GetComponent<Button>();
+                mainMenuButton.targetGraphic = bg;
+            }
+        }
+
+        SetMainMenuLabel("메인 화면으로");
+        mainMenuButton.onClick.RemoveAllListeners();
+        mainMenuButton.onClick.AddListener(OnClickMainMenu);
     }
 
     // ===== 뒤로가기 =====
@@ -239,6 +342,10 @@ public class SettingsPanelController : MonoBehaviour
 
         UpdateFontPreview();
 
+        // 화면을 닫았다 다시 열면 "정말 나가시겠습니까?" 확인 상태는 초기화한다.
+        mainMenuConfirming = false;
+        SetMainMenuLabel("메인 화면으로");
+
         // 화면을 열 때마다 항상 볼륨 탭부터 보여준다.
         ShowTab(volumeContent);
     }
@@ -355,7 +462,7 @@ public class SettingsPanelController : MonoBehaviour
 
             // 배경이 없으면 글씨가 안 보이므로 어두운 판을 깐다.
             var bg = textContent.AddComponent<Image>();
-            bg.color = new Color(0.08f, 0.08f, 0.11f, 0.95f);
+            bg.color = new Color(0f, 0f, 0f, 0.95f);
         }
 
         textContent.SetActive(false);
@@ -505,7 +612,7 @@ public class SettingsPanelController : MonoBehaviour
         templateRt.pivot = new Vector2(0.5f, 1f);
         templateRt.anchoredPosition = new Vector2(0f, 2f);
         templateRt.sizeDelta = new Vector2(0f, 150f);
-        template.GetComponent<Image>().color = new Color(0.1f, 0.1f, 0.12f, 0.98f);
+        template.GetComponent<Image>().color = new Color(0f, 0f, 0f, 0.98f);
 
         var viewport = new GameObject("Viewport", typeof(RectTransform), typeof(Image), typeof(Mask));
         viewport.transform.SetParent(template.transform, false);
@@ -630,25 +737,40 @@ public class SettingsPanelController : MonoBehaviour
         return slider;
     }
 
+    // ===== 켜고 끌 수 있는 토글(체크박스) 만들기 =====
+    // 예전에는 글씨만 보이고 눌러도 아무 반응이 없었다. 원인:
+    //   - 라벨 영역이 체크박스 위까지 덮고 있는데 라벨의 raycastTarget이 꺼져 있어서,
+    //     체크박스 아주 작은 부분 말고는 클릭이 잡히지 않았다.
+    //   - 클릭 판정을 받아줄 투명한 배경이 없었다.
+    // 그래서 줄 전체를 덮는 투명한 클릭 영역을 깔고, 그 위에 체크박스와 글씨를 올렸다.
+    // 이제 줄 아무 데나 눌러도 켜고 끌 수 있다.
     private Toggle CreateLabeledToggle(Transform parent, string label)
     {
-        var go = new GameObject($"Toggle_{label}", typeof(RectTransform), typeof(LayoutElement));
+        var go = new GameObject($"Toggle_{label}", typeof(RectTransform), typeof(Image), typeof(LayoutElement));
         go.transform.SetParent(parent, false);
-        go.GetComponent<LayoutElement>().preferredHeight = 34f;
+        go.GetComponent<LayoutElement>().preferredHeight = 40f;
+
+        // 줄 전체를 덮는 클릭 영역. 거의 투명하지만 raycastTarget이 켜져 있어야 클릭이 잡힌다.
+        var rowBg = go.GetComponent<Image>();
+        rowBg.color = new Color(1f, 1f, 1f, 0.06f);
+        rowBg.raycastTarget = true;
 
         var toggle = go.AddComponent<Toggle>();
 
-        // 체크박스
+        // 체크박스 테두리
         var box = new GameObject("Background", typeof(RectTransform), typeof(Image));
         box.transform.SetParent(go.transform, false);
         var boxRt = box.GetComponent<RectTransform>();
         boxRt.anchorMin = new Vector2(0f, 0.5f);
         boxRt.anchorMax = new Vector2(0f, 0.5f);
         boxRt.pivot = new Vector2(0f, 0.5f);
-        boxRt.sizeDelta = new Vector2(26f, 26f);
-        boxRt.anchoredPosition = Vector2.zero;
-        box.GetComponent<Image>().color = new Color(1f, 1f, 1f, 0.2f);
+        boxRt.sizeDelta = new Vector2(28f, 28f);
+        boxRt.anchoredPosition = new Vector2(8f, 0f);
+        var boxImg = box.GetComponent<Image>();
+        boxImg.color = new Color(1f, 1f, 1f, 0.25f);
+        boxImg.raycastTarget = false;   // 클릭은 줄 전체(rowBg)가 받는다
 
+        // 체크 표시 (켜졌을 때만 보인다)
         var check = new GameObject("Checkmark", typeof(RectTransform), typeof(Image));
         check.transform.SetParent(box.transform, false);
         var checkRt = check.GetComponent<RectTransform>();
@@ -656,7 +778,9 @@ public class SettingsPanelController : MonoBehaviour
         checkRt.anchorMax = Vector2.one;
         checkRt.offsetMin = new Vector2(5f, 5f);
         checkRt.offsetMax = new Vector2(-5f, -5f);
-        check.GetComponent<Image>().color = new Color(0.9f, 0.8f, 0.4f);
+        var checkImg = check.GetComponent<Image>();
+        checkImg.color = new Color(1f, 0.82f, 0.35f);
+        checkImg.raycastTarget = false;
 
         // 라벨
         var labelGo = new GameObject("Label", typeof(RectTransform));
@@ -664,8 +788,8 @@ public class SettingsPanelController : MonoBehaviour
         var labelRt = labelGo.GetComponent<RectTransform>();
         labelRt.anchorMin = new Vector2(0f, 0f);
         labelRt.anchorMax = new Vector2(1f, 1f);
-        labelRt.offsetMin = new Vector2(36f, 0f);
-        labelRt.offsetMax = Vector2.zero;
+        labelRt.offsetMin = new Vector2(46f, 0f);
+        labelRt.offsetMax = new Vector2(-8f, 0f);
         var tmp = labelGo.AddComponent<TextMeshProUGUI>();
         tmp.text = label;
         tmp.fontSize = 22;
@@ -673,8 +797,17 @@ public class SettingsPanelController : MonoBehaviour
         tmp.color = Color.white;
         tmp.raycastTarget = false;
 
-        toggle.targetGraphic = box.GetComponent<Image>();
-        toggle.graphic = check.GetComponent<Image>();
+        // targetGraphic : 클릭 판정과 강조 색의 기준
+        // graphic       : 켜졌을 때 보여줄 체크 표시
+        toggle.targetGraphic = rowBg;
+        toggle.graphic = checkImg;
+        toggle.transition = Selectable.Transition.ColorTint;
+
+        var colors = toggle.colors;
+        colors.normalColor = Color.white;
+        colors.highlightedColor = new Color(1f, 0.95f, 0.75f);
+        colors.pressedColor = new Color(0.85f, 0.75f, 0.4f);
+        toggle.colors = colors;
 
         return toggle;
     }
