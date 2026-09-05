@@ -84,11 +84,19 @@ public class StandingSlot : MonoBehaviour
         image.sprite = closedMouthSprite;
         image.enabled = true;
 
-        // 그림마다 크기가 제각각이므로(예: 836x569, 797x1080) 원본 픽셀 크기 그대로 표시한다.
-        // 배경이 1440x1080 캔버스에 딱 맞게 그려져 있고 스탠딩도 같은 기준으로 그려졌으므로,
-        // 원본 크기로 놓는 것이 아트가 의도한 크기와 가장 가깝다.
-        image.SetNativeSize();
+        // ===== 화면 위치 잡기 =====
+        // 스탠딩도 조사 오브젝트와 똑같이, 1440x1080 화면의 정해진 자리에 그려진 그림이다.
+        // 그림이 1440x1080(여백 포함)이면 화면에 꽉 채우기만 하면 제자리에 나타나고,
+        // 여백이 잘려 있으면 IllustLayout.csv에 적어둔 좌표대로 놓는다.
+        // 배치 정보가 아직 없으면 이 자리의 기본 좌표(왼쪽/가운데/오른쪽)에 놓여서,
+        // 최소한 여러 명이 한자리에 겹쳐 보이지는 않는다.
+        IllustLayout.Apply(image.rectTransform, closedMouthSprite, fileName, fallbackPosition);
     }
+
+    // 배치표에 정보가 없을 때 쓸 이 자리의 기본 좌표.
+    // StageController가 자리를 만들 때(왼쪽/가운데/오른쪽) 넣어준다.
+    [HideInInspector]
+    public Vector2 fallbackPosition;
 
     // 이 자리를 비운다(캐릭터 퇴장).
     public void Hide()

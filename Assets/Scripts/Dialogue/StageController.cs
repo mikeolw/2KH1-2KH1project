@@ -153,14 +153,20 @@ public class StageController : MonoBehaviour
         go.transform.SetParent(targetCanvas.transform, false);
 
         var rt = go.GetComponent<RectTransform>();
-        // 화면 아래 가운데(0.5, 0)를 기준점으로 삼는다. 캐릭터는 보통 바닥에 서 있으므로
-        // 아래쪽을 기준으로 두면 키가 다른 그림들도 발끝이 자연스럽게 맞는다.
-        rt.anchorMin = new Vector2(0.5f, 0f);
-        rt.anchorMax = new Vector2(0.5f, 0f);
-        rt.pivot = new Vector2(0.5f, 0f);
+        // 실제 위치는 그림을 올릴 때 IllustLayout이 다시 잡는다(IllustLayout.Apply 참고).
+        // 여기서는 화면 한가운데를 기준으로만 맞춰둔다.
+        rt.anchorMin = new Vector2(0.5f, 0.5f);
+        rt.anchorMax = new Vector2(0.5f, 0.5f);
+        rt.pivot = new Vector2(0.5f, 0.5f);
         rt.anchoredPosition = new Vector2(x, 0f);
 
-        return go.GetComponent<StandingSlot>();
+        var slot = go.GetComponent<StandingSlot>();
+
+        // 배치표(IllustLayout.csv)에 아직 위치가 없는 스탠딩은 이 좌표에 놓인다.
+        // 배치를 잡기 전에도 여러 명이 한자리에 겹쳐 보이지 않게 하기 위한 임시값이다.
+        slot.fallbackPosition = new Vector2(x, 0f);
+
+        return slot;
     }
 
     // Characters.csv를 읽어서 "한글 이름 -> 영문 토큰" 표를 만든다.

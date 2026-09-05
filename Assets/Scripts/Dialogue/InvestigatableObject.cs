@@ -107,12 +107,15 @@ public class InvestigatableObject : MonoBehaviour
             {
                 image.sprite = sprite;
 
-                // 그림을 원본 크기로 표시한다. 조사 오브젝트는 배경 위 특정 위치에 딱 맞게
-                // 그려져 있으므로 늘리거나 줄이면 배경과 어긋난다.
-                image.SetNativeSize();
-
                 // placeholder였을 때 들어가 있던 반투명 색을 원래대로(흰색 = 그림 그대로) 되돌린다.
                 image.color = Color.white;
+
+                // ===== 화면 위치 잡기 =====
+                // 조사 오브젝트는 배경 그림 위의 특정 자리에 딱 맞게 그려진 조각이다.
+                // 그림이 1440x1080(여백 포함)이면 화면에 꽉 채우기만 하면 제자리에 나타나고,
+                // 여백이 잘려 있으면 IllustLayout.csv에 적어둔 좌표대로 놓는다.
+                // 자세한 이유는 IllustLayout.cs 상단 주석 참고.
+                IllustLayout.Apply(image.rectTransform, sprite, spriteName);
             }
         }
 

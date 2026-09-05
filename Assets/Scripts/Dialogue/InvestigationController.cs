@@ -301,48 +301,55 @@ public class InvestigationController : MonoBehaviour
             case HotspotType.Item:
                 InventoryManager.Instance.AddItem(obj.itemId);
 
-                // 서류/사진처럼 "자료 자체를 펼쳐 봐야 하는" 아이템이면 큰 화면으로 띄운다.
-                // ItemData.csv의 ViewerType이 Document/Photo인 아이템만 해당된다.
-                // 뷰어를 열지 않은 경우(ViewerType=None)에는 기존처럼 설명 팝업을 띄운다.
+                // 서류/사진처럼 "자료 자체를 읽어야 하는" 것만 큰 화면으로 펼친다
+                // (ItemData.csv의 ViewerType이 Document/Photo인 아이템).
+                // 그 외에는 조사 내용을 대화창에 출력한다.
                 if (!TryOpenDocumentViewer(obj.itemId))
                 {
-                    ShowModal(obj);
+                    ShowInDialogueBox(obj);
                 }
                 break;
 
             case HotspotType.Description:
-                // Description 타입도 자료 뷰어를 쓸 수 있게 해둔다. 얻지는 못하지만
-                // 읽어봐야 하는 서류(예: 회의실 사용 대장)가 있기 때문이다.
+                // Description도 마찬가지. 읽어봐야 하는 서류(예: 회의실 사용 대장)는
+                // 뷰어로 펼치고, 그냥 살펴보는 것은 대화창에 출력한다.
                 if (!TryOpenDocumentViewer(obj.itemId))
                 {
-                    ShowModal(obj);
+                    ShowInDialogueBox(obj);
                 }
                 break;
 
             case HotspotType.Talk:
-                if (activeScreenPanel != null) activeScreenPanel.SetActive(false);
-                IsShowingTalkLine = true;
-                if (dialoguePanel != null) dialoguePanel.SetActive(true);
-                DialogueSystem.Instance.ShowInvestigationLine(obj.talkSpeaker, obj.talkSentence);
+                ShowInDialogueBox(obj);
                 break;
         }
     }
 
-    // 조사 오브젝트의 설명 팝업(작은 모달)을 띄운다.
+    // ===== 조사 결과를 대화창에 출력한다 =====
+    // 이 게임은 그림 화면에서 오브젝트를 바로 클릭해 조사하는 방식이고, 조사한 내용은
+    // (서류나 사진처럼 자료 자체를 봐야 하는 경우가 아니라면) 별도 팝업이 아니라
+    // 평소 쓰던 대화창에 그대로 출력된다.
     //
-    // 모달에 띄울 그림은 두 경로로 정해진다:
-    //   1) CSV의 Sprite 칸에 그림 이름이 있으면 그 그림을 쓴다 (권장, git 공유 문제 없음)
-    //   2) 없으면 인스펙터에 꽂아둔 modalImage를 쓴다 (예전 placeholder 방식과의 호환)
-    private void ShowModal(InvestigatableObject obj)
+    // 조사 화면 자체는 계속 보이게 둔다. 예전에는 Talk 타입일 때 조사 화면을 통째로
+    // 꺼버렸는데, 그러면 "누구에게 말을 걸었는지" 화면에서 사라져 흐름이 끊긴다.
+    // 대화창만 위에 겹쳐 띄우는 편이 이 게임 방식에 맞다.
+    private void ShowInDialogueBox(InvestigatableObject obj)
     {
-        Sprite image = obj.modalImage;
-        if (!string.IsNullOrWhiteSpace(obj.spriteName))
-        {
-            Sprite fromCsv = IllustLoader.LoadObject(obj.spriteName);
-            if (fromCsv != null) image = fromCsv;
-        }
+        IsShowingTalkLine = true;
 
-        ItemModalController.Instance.Show(image, obj.objectName, obj.description);
+        if (dialoguePanel != null) dialoguePanel.SetActive(true);
+
+        // Talk 타입은 화자 이름을 함께 보여주고, 조사(Item/Description)는 화자 없이
+        // 지문처럼 보여준다.
+        if (obj.type == HotspotType.Talk)
+        {
+            string speaker = string.IsNullOrEmpty(obj.talkSpeaker) ? obj.objectName : obj.talkSpeaker;
+            DialogueSystem.Instance.ShowInvestigationLine(speaker, obj.talkSentence);
+        }
+        else
+        {
+            DialogueSystem.Instance.ShowInvestigationLine("", obj.description);
+        }
     }
 
     // 자료 뷰어(서류/사진 큰 화면)를 열어본다. 열었으면 true.
@@ -360,7 +367,9 @@ public class InvestigationController : MonoBehaviour
         if (!IsShowingTalkLine) return;
 
         IsShowingTalkLine = false;
-        if (activeScreenPanel != null) activeScreenPanel.SetActive(true);
+
+        // 조사 화면은 조사 중 계속 켜져 있으므로(ShowInDialogueBox 참고) 다시 켤 필요가 없다.
+        // 대화창만 닫아서 조사 화면을 가리지 않게 한다.
         if (dialoguePanel != null) dialoguePanel.SetActive(false);
     }
 }
