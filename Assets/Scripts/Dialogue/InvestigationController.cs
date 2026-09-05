@@ -53,6 +53,10 @@ public class InvestigationController : MonoBehaviour
     // 지금 열려 있는 조사 화면의 Panel. Talk 오버레이 중에는 잠깐 꺼두기 위해 따로 들고 있는다.
     private GameObject activeScreenPanel;
 
+    // 지금 열려 있는 조사 화면의 id (CSV의 InvestigationId). 조사기록(수첩)에 "어느 화면의
+    // 어떤 오브젝트를 살펴봤는지"를 남길 때 쓴다.
+    private string activeScreenId;
+
     // Exit()에서 호출할 콜백. DialogueSystem.ShowNextSentence()가 Enter()를 호출할 때
     // "() => ShowNextSentence()"를 넘겨준다 - 즉 조사가 끝나면 CSV의 다음 줄로 이어간다.
     private Action onExitCallback;
@@ -88,7 +92,15 @@ public class InvestigationController : MonoBehaviour
         public string speaker;
         public string text;
         public string itemId;
+
+        // CSV의 Sprite 칸. Resources/Illusts/Objects/ 안의 파일 이름(확장자 제외).
+        // 비어 있으면 씬에 미리 넣어둔 placeholder 그림을 그대로 쓴다.
+        public string spriteName;
     }
+
+    // 조사 화면 하나의 배경 그림 이름. CSV에서 HotspotKey를 "Background"로 적은 줄의
+    // Text 칸에 배경 파일 이름을 넣어두면 여기에 담긴다 (IntroText와 같은 방식의 특수 키).
+    private Dictionary<string, string> backgroundData;
 
     private Dictionary<string, HotspotData> hotspotData; // key: investigationId + "|" + hotspotKey
     private Dictionary<string, string> introTextData;    // key: investigationId
@@ -98,6 +110,7 @@ public class InvestigationController : MonoBehaviour
         if (hotspotData != null) return;
         hotspotData = new Dictionary<string, HotspotData>();
         introTextData = new Dictionary<string, string>();
+        backgroundData = new Dictionary<string, string>();
 
         var rows = CSVReader.Read("Dialogues/" + InvestigationDataCsv);
         foreach (var row in rows)
@@ -109,6 +122,17 @@ public class InvestigationController : MonoBehaviour
             if (key == "IntroText")
             {
                 introTextData[id] = GetField(row, "Text");
+                continue;
+            }
+
+            // HotspotKey를 "Background"로 적은 줄은 핫스팟이 아니라 "이 조사 화면의 배경 그림"을
+            // 지정하는 특수 줄이다. Sprite 칸(없으면 Text 칸)에 배경 파일 이름을 적어둔다.
+            //   예) office_desk,Background,,,,,,BG_01_MyDesk
+            if (key == "Background")
+            {
+                string bg = GetField(row, "Sprite");
+                if (string.IsNullOrWhiteSpace(bg)) bg = GetField(row, "Text");
+                backgroundData[id] = bg.Trim();
                 continue;
             }
 
@@ -124,7 +148,8 @@ public class InvestigationController : MonoBehaviour
                 objectName = GetField(row, "ObjectName"),
                 speaker = GetField(row, "Speaker"),
                 text = GetField(row, "Text"),
-                itemId = GetField(row, "ItemId")
+                itemId = GetField(row, "ItemId"),
+                spriteName = GetField(row, "Sprite")
             };
         }
     }
@@ -146,6 +171,27 @@ public class InvestigationController : MonoBehaviour
             if (introTmp != null) introTmp.text = intro;
         }
 
+        // 이 조사 화면의 배경 그림을 깐다. CSV에 Background 줄이 있으면 그 그림으로 바꾼다.
+        // 패널 안에 "Background"라는 이름의 Image가 있어야 하며, 없으면 조용히 넘어간다
+        // (아직 배경을 안 만든 화면도 그대로 동작해야 하므로).
+        if (backgroundData.TryGetValue(investigationId, out string bgName) && !string.IsNullOrWhiteSpace(bgName))
+        {
+            var bgTransform = panel.transform.Find("Background");
+            var bgImage = bgTransform != null ? bgTransform.GetComponent<UnityEngine.UI.Image>() : null;
+            if (bgImage != null)
+            {
+                Sprite bgSprite = IllustLoader.LoadBackground(bgName);
+                if (bgSprite != null)
+                {
+                    bgImage.sprite = bgSprite;
+                    bgImage.color = Color.white;
+                    bgImage.enabled = true;
+                    // 배경은 클릭 대상이 아니다. 켜두면 그 위의 조사 오브젝트 클릭을 가로챈다.
+                    bgImage.raycastTarget = false;
+                }
+            }
+        }
+
         foreach (var io in panel.GetComponentsInChildren<InvestigatableObject>(true))
         {
             if (!hotspotData.TryGetValue(investigationId + "|" + io.gameObject.name, out var data)) continue;
@@ -153,6 +199,10 @@ public class InvestigationController : MonoBehaviour
             io.type = data.type;
             io.objectName = data.objectName;
             io.itemId = data.itemId;
+            io.spriteName = data.spriteName;
+
+            // CSV에 적힌 그림을 실제로 올리고, 투명한 부분은 클릭이 통과하도록 설정한다.
+            io.ApplyIllust();
 
             if (data.type == HotspotType.Talk)
             {
@@ -196,9 +246,14 @@ public class InvestigationController : MonoBehaviour
         inSession = true;
         IsShowingTalkLine = false;
         onExitCallback = onExit;
+        activeScreenId = investigationId;
         activeScreenPanel = screen.panel;
         activeScreenPanel.SetActive(true);
         if (dialoguePanel != null) dialoguePanel.SetActive(false);
+
+        // 조사 화면은 자기 배경을 따로 가지고 있으므로, 대사 장면의 배경/캐릭터 스탠딩은
+        // 잠시 숨긴다. 안 그러면 조사 화면 뒤로 대사 배경이 비쳐 보인다.
+        if (StageController.Instance != null) StageController.Instance.SetStageVisible(false);
     }
 
     // 조사 화면 안의 "조사 그만하기" 버튼 OnClick에 연결한다.
@@ -212,6 +267,17 @@ public class InvestigationController : MonoBehaviour
         IsShowingTalkLine = false;
         if (dialoguePanel != null) dialoguePanel.SetActive(true);
 
+        // 숨겨뒀던 대사 장면의 배경/스탠딩을 다시 보여준다.
+        if (StageController.Instance != null) StageController.Instance.SetStageVisible(true);
+
+        // 이 조사 화면을 마쳤다는 사실을 조사기록(수첩)에 남긴다.
+        // NoteEntries.csv에서 TriggerType=Investigate, TriggerKey=이 화면 id인 줄이 추가된다.
+        if (NoteManager.Instance != null && !string.IsNullOrEmpty(activeScreenId))
+        {
+            NoteManager.Instance.OnInvestigationFinished(activeScreenId);
+        }
+        activeScreenId = null;
+
         // 콜백을 지역변수로 빼서 먼저 null로 지운 뒤 호출한다 - 콜백(ShowNextSentence) 안에서
         // 다시 Enter()가 호출되는 경우(다음 대사가 또 조사 행인 경우)에도 이전 콜백이 남아있지
         // 않도록 하기 위함.
@@ -223,15 +289,34 @@ public class InvestigationController : MonoBehaviour
     // InvestigatableObject.OnClickInspect()가 호출한다. 타입별로 반응이 갈린다.
     public void Inspect(InvestigatableObject obj)
     {
+        // 무엇을 살펴봤는지 조사기록(수첩)에 남긴다. NoteEntries.csv에서
+        // TriggerType=Hotspot, TriggerKey="조사화면id|핫스팟이름"인 줄이 있으면 추가된다.
+        if (NoteManager.Instance != null && !string.IsNullOrEmpty(activeScreenId))
+        {
+            NoteManager.Instance.OnHotspotInspected(activeScreenId, obj.gameObject.name);
+        }
+
         switch (obj.type)
         {
             case HotspotType.Item:
-                ItemModalController.Instance.Show(obj.modalImage, obj.objectName, obj.description);
                 InventoryManager.Instance.AddItem(obj.itemId);
+
+                // 서류/사진처럼 "자료 자체를 펼쳐 봐야 하는" 아이템이면 큰 화면으로 띄운다.
+                // ItemData.csv의 ViewerType이 Document/Photo인 아이템만 해당된다.
+                // 뷰어를 열지 않은 경우(ViewerType=None)에는 기존처럼 설명 팝업을 띄운다.
+                if (!TryOpenDocumentViewer(obj.itemId))
+                {
+                    ShowModal(obj);
+                }
                 break;
 
             case HotspotType.Description:
-                ItemModalController.Instance.Show(obj.modalImage, obj.objectName, obj.description);
+                // Description 타입도 자료 뷰어를 쓸 수 있게 해둔다. 얻지는 못하지만
+                // 읽어봐야 하는 서류(예: 회의실 사용 대장)가 있기 때문이다.
+                if (!TryOpenDocumentViewer(obj.itemId))
+                {
+                    ShowModal(obj);
+                }
                 break;
 
             case HotspotType.Talk:
@@ -241,6 +326,32 @@ public class InvestigationController : MonoBehaviour
                 DialogueSystem.Instance.ShowInvestigationLine(obj.talkSpeaker, obj.talkSentence);
                 break;
         }
+    }
+
+    // 조사 오브젝트의 설명 팝업(작은 모달)을 띄운다.
+    //
+    // 모달에 띄울 그림은 두 경로로 정해진다:
+    //   1) CSV의 Sprite 칸에 그림 이름이 있으면 그 그림을 쓴다 (권장, git 공유 문제 없음)
+    //   2) 없으면 인스펙터에 꽂아둔 modalImage를 쓴다 (예전 placeholder 방식과의 호환)
+    private void ShowModal(InvestigatableObject obj)
+    {
+        Sprite image = obj.modalImage;
+        if (!string.IsNullOrWhiteSpace(obj.spriteName))
+        {
+            Sprite fromCsv = IllustLoader.LoadObject(obj.spriteName);
+            if (fromCsv != null) image = fromCsv;
+        }
+
+        ItemModalController.Instance.Show(image, obj.objectName, obj.description);
+    }
+
+    // 자료 뷰어(서류/사진 큰 화면)를 열어본다. 열었으면 true.
+    private bool TryOpenDocumentViewer(string itemId)
+    {
+        if (string.IsNullOrWhiteSpace(itemId)) return false;
+        if (DocumentViewerController.Instance == null) return false;
+
+        return DocumentViewerController.Instance.ShowItem(itemId);
     }
 
     // DialogueSystem.Update()가 Talk 오버레이 중 스페이스/클릭을 감지했을 때 호출한다.

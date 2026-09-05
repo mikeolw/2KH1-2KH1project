@@ -52,15 +52,12 @@ public class BgmPlayer : MonoBehaviour
 
         source.Play();
         SceneManager.sceneLoaded += OnSceneLoaded;
-    }
 
-    private void Update()
-    {
-        // 환경설정에서 배경음악 크기 슬라이더를 움직이면 바로 반영되도록 매 프레임 동기화.
-        if (SettingsManager.Instance != null && source != null)
-        {
-            source.volume = SettingsManager.Instance.Current.bgmVolume;
-        }
+        // 배경음악 볼륨 설정을 따르도록 등록한다.
+        // (예전에는 Update()에서 매 프레임 source.volume을 덮어쓰고 있었다. 동작은 했지만
+        //  1초에 60번씩 필요 없는 계산을 하는 셈이라, 설정이 "바뀔 때만" 반영하는
+        //  AudioManager 방식으로 바꿨다. 볼륨을 다루는 곳이 한 군데로 모여서 관리도 쉬워진다.)
+        AudioManager.RegisterSafe(source, AudioManager.Channel.Bgm);
     }
 
     private void OnSceneLoaded(Scene scene, LoadSceneMode mode)

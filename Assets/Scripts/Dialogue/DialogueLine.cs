@@ -19,9 +19,43 @@ public class DialogueLine
     public string sentence;            // 대사 내용
 
     [Header("화면 연출 (선택)")]
-    public Sprite backgroundImage;     // 변경할 배경 이미지 (없으면 유지)
+    public Sprite backgroundImage;     // (구버전) 인스펙터로 직접 꽂던 배경. 지금은 아래 backgroundName을 쓴다.
     public bool isFadeOut;             // 체크 시 화면 암전(Fade) 연출
-    public bool isSavePoint;           // {세이브포인트} 여부[cite: 2]
+    // 시나리오 문서의 {세이브포인트}에 해당하는 줄인지. CSV의 IsSavePoint 칸이 TRUE면 켜진다.
+    // 이 줄을 지나가야만 플레이어가 "저장하기"를 쓸 수 있다 (SavePointManager.cs 참고).
+    public bool isSavePoint;
+
+    // 세이브포인트를 사람이 알아볼 수 있게 붙이는 이름. CSV의 SavePointId 칸.
+    // 세이브 슬롯 목록에 "#01 사무실"처럼 표시된다. 비워두면 CSV 파일 이름이 대신 쓰인다.
+    public string savePointId;
+
+    [Header("배경 / 캐릭터 스탠딩 (StageController.cs가 처리)")]
+    // ===== 왜 Sprite가 아니라 "파일 이름 문자열"인가? =====
+    // 그림은 Assets/Resources/Illusts/ 아래에 있는데 이 폴더는 git으로 공유되지 않는다
+    // (구글 드라이브로 따로 주고받음). 인스펙터로 Sprite를 꽂아두면 팀원마다 .meta의 GUID가
+    // 달라져서 연결이 깨지므로, BGM/SFX와 똑같이 "파일 이름"으로 불러온다.
+    // 자세한 이유는 IllustLoader.cs 상단 주석 참고.
+    //
+    // 아래 4개는 CSV의 Background / Standing / StandingPos / Talker 컬럼에서 그대로 들어온다.
+    // 값이 비어 있으면 "이전 줄의 상태를 그대로 유지"한다는 뜻이라, 장면이나 표정이 바뀌는
+    // 줄에만 적어주면 된다 (매 줄마다 채울 필요 없음).
+
+    // 배경 파일 이름 (예: BG_01_Office). 빈 값 = 유지, "none" = 배경 지움.
+    public string backgroundName;
+
+    // 캐릭터 스탠딩 파일 이름. 두 명 이상은 세로줄(|)로 구분한다.
+    // 예: STD_Past01_Hansung_Default|STD_Past01_Jaehoon_Default
+    // 빈 값 = 유지(표정 안 바뀜), "none" = 전원 퇴장.
+    public string standingNames;
+
+    // 각 스탠딩이 설 자리. L=왼쪽 C=가운데 R=오른쪽, 세로줄(|)로 구분 (예: L|R).
+    // 빈 값이면 인원수에 맞춰 자동 배치한다.
+    public string standingPositions;
+
+    // 지금 말하는 캐릭터의 자리(L/C/R). 대사가 타이핑되는 동안 그 캐릭터만 입을 뻐끔거린다.
+    // 빈 값이면 Speaker 이름으로 자동 인식한다 (Dialogues/Characters.csv의 매핑 사용).
+    // "none"이면 아무도 입을 움직이지 않는다 (나레이션 등).
+    public string talkerSlot;
 
     [Header("사운드 연출 (선택)")]
     public AudioClip bgmToPlay;        // 재생할 BGM (예: 빗소리, 천둥소리)[cite: 2]

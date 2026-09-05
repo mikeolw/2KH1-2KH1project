@@ -48,6 +48,23 @@ public class InvestigatableObject : MonoBehaviour
     public string description;         // 모달에 표시할 설명 문구
     public Sprite modalImage;          // 모달에 표시할 그림 (아트 없으면 비워둬도 됨)
 
+    [Header("일러스트 (CSV의 Sprite 칸에서 자동으로 채워진다)")]
+    // Resources/Illusts/Objects/ 안의 파일 이름 (확장자 제외, 예: OBJ_01_Notepad).
+    // InvestigationController.Enter() 시점에 CSV를 읽어 이 값을 채우고, 그 그림을 이
+    // 오브젝트의 Image에 올린다. 인스펙터에서 Sprite를 직접 꽂지 않는 이유는
+    // IllustLoader.cs 상단 주석 참고(Resources 폴더가 git으로 공유되지 않아 GUID가 깨지기 때문).
+    public string spriteName;
+
+    // 투명한 부분은 클릭이 통과하고, 그림이 그려진 부분만 클릭되게 할지 여부.
+    // 조사 오브젝트는 대부분 투명 배경 PNG라서 이걸 켜두지 않으면 네모난 판때기처럼
+    // 클릭되어, 뒤에 겹쳐 있는 다른 오브젝트를 누를 수 없게 된다.
+    [Tooltip("체크하면 그림의 불투명한 부분만 클릭된다. 투명 배경 PNG라면 켜두는 것을 권장.")]
+    public bool usePixelPerfectClick = true;
+
+    [Tooltip("이 값보다 알파(불투명도)가 낮은 픽셀은 클릭이 통과한다. 0.1이면 10% 미만.")]
+    [Range(0.01f, 1f)]
+    public float alphaClickThreshold = 0.1f;
+
     [Header("Item 타입 전용")]
     // InventoryManager.AddItem()에 넘길 식별자. 수첩의 InventorySlotUI.itemId와
     // 반드시 똑같은 문자열로 맞춰야 그 슬롯이 켜진다.
@@ -62,5 +79,63 @@ public class InvestigatableObject : MonoBehaviour
     public void OnClickInspect()
     {
         InvestigationController.Instance.Inspect(this);
+    }
+
+    // =================================================================================
+    // 일러스트 적용 + 투명 픽셀 클릭 무시
+    // =================================================================================
+    // InvestigationController.ApplyHotspotData()가 조사 화면을 열기 직전에 호출한다.
+    // CSV에 적힌 그림 이름으로 실제 Sprite를 불러와 이 오브젝트의 Image에 올리고,
+    // 투명한 부분은 클릭이 통과하도록 설정한다.
+    //
+    // ===== 투명 픽셀 클릭 무시가 동작하는 조건 (중요) =====
+    // Image.alphaHitTestMinimumThreshold는 그림의 픽셀을 코드에서 읽을 수 있어야 동작한다.
+    // 그래서 텍스처 임포트 설정에서 "Read/Write Enabled"가 켜져 있고 Mesh Type이
+    // Full Rect여야 하는데, 이건 Assets/Editor/IllustTextureImporter.cs가 자동으로
+    // 맞춰주므로 따로 신경 쓸 필요 없다. (설정이 안 맞으면 클릭 시 예외가 나므로
+    // 아래에서 try-catch로 감싸 안전하게 처리한다.)
+    public void ApplyIllust()
+    {
+        var image = GetComponent<UnityEngine.UI.Image>();
+        if (image == null) return;
+
+        // CSV에 그림 이름이 없으면 씬에 미리 넣어둔 placeholder 그림을 그대로 쓴다.
+        if (!string.IsNullOrWhiteSpace(spriteName))
+        {
+            Sprite sprite = IllustLoader.LoadObject(spriteName);
+            if (sprite != null)
+            {
+                image.sprite = sprite;
+
+                // 그림을 원본 크기로 표시한다. 조사 오브젝트는 배경 위 특정 위치에 딱 맞게
+                // 그려져 있으므로 늘리거나 줄이면 배경과 어긋난다.
+                image.SetNativeSize();
+
+                // placeholder였을 때 들어가 있던 반투명 색을 원래대로(흰색 = 그림 그대로) 되돌린다.
+                image.color = Color.white;
+            }
+        }
+
+        // 투명 픽셀 클릭 무시 설정
+        if (usePixelPerfectClick)
+        {
+            try
+            {
+                image.alphaHitTestMinimumThreshold = alphaClickThreshold;
+            }
+            catch (System.Exception e)
+            {
+                // 텍스처의 Read/Write Enabled가 꺼져 있으면 여기서 예외가 난다.
+                // 게임을 멈추는 대신 경고만 남기고 "네모 전체가 클릭되는" 기본 동작으로 둔다.
+                Debug.LogWarning(
+                    $"[InvestigatableObject] '{gameObject.name}'의 투명 픽셀 클릭 설정에 실패했습니다. " +
+                    $"유니티 상단 메뉴 [2KH1] > [Illusts 폴더 그림 임포트 설정 다시 적용]을 실행해 주세요.\n{e.Message}");
+                image.alphaHitTestMinimumThreshold = 0f;
+            }
+        }
+        else
+        {
+            image.alphaHitTestMinimumThreshold = 0f;
+        }
     }
 }

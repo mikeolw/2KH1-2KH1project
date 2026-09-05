@@ -34,6 +34,9 @@ public class UIManager : MonoBehaviour
         sfxSource = GetComponent<AudioSource>();
         if (sfxSource == null) sfxSource = gameObject.AddComponent<AudioSource>();
         sfxSource.playOnAwake = false;
+
+        // 환경설정의 효과음 볼륨이 UI 버튼 소리에도 적용되도록 등록한다 (AudioManager.cs 참고).
+        AudioManager.RegisterSafe(sfxSource, AudioManager.Channel.Sfx);
     }
 
     void Start()

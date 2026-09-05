@@ -2,26 +2,71 @@ using System;
 
 // 환경설정 값 모음. 세이브 슬롯과 달리 슬롯 구분 없이 기기(플레이어)당 1개만 존재하며,
 // SettingsManager가 PlayerPrefs에 JSON 문자열로 통째로 저장/로드한다.
-// 값 범위는 전부 0~1 (슬라이더 min/max와 맞춤).
+//
+// ===== 필드를 추가할 때 주의 =====
+// JsonUtility로 저장하므로, 필드를 새로 추가하면 예전에 저장된 JSON에는 그 값이 없어서
+// "필드 선언부에 적어둔 기본값"이 그대로 쓰인다. 즉 기존 유저 설정이 깨지지 않는다.
+// 반대로 필드 "이름"을 바꾸면 그 값은 초기화되므로, 이름은 되도록 바꾸지 말 것.
 [Serializable]
 public class GameSettings
 {
-    // 마스터 볼륨. SettingsManager.Apply()에서 AudioListener.volume에 바로 반영된다.
+    // ---------------------------------------------------------------------------------
+    // 사운드
+    // ---------------------------------------------------------------------------------
+
+    // 마스터 볼륨(0~1). SettingsManager.Apply()에서 AudioListener.volume에 반영된다.
+    // AudioListener.volume은 게임의 모든 소리에 곱해지는 값이라, 이것만 0으로 하면 전부 음소거된다.
     public float masterVolume = 1f;
 
-    // 배경음악(BGM) 볼륨. TODO: 이 값을 실제로 적용할 BGM 전용 AudioSource/AudioMixer가
-    // 프로젝트에 아직 없다. DialogueLine.bgmToPlay를 재생하는 코드가 생기면, 그 AudioSource의
-    // volume을 SettingsManager.Current.bgmVolume에 연동해야 한다.
+    // 배경음악(BGM) 볼륨(0~1). AudioManager가 BGM용 AudioSource.volume에 반영한다.
     public float bgmVolume = 1f;
 
-    // 효과음(SFX) 볼륨. TODO: bgmVolume과 마찬가지로 아직 적용할 대상이 없다.
-    // DialogueLine.sfxToPlay 재생용 AudioSource가 생기면 여기에 연결.
+    // 효과음(SFX) 볼륨(0~1). AudioManager가 SFX용 AudioSource들의 volume에 반영한다.
     public float sfxVolume = 1f;
 
-    // 창 모드 여부. true면 SettingsManager.Apply()가 Screen.SetResolution을
-    // 1080x810(FullScreenMode.Windowed)으로 호출하고, false면 프로젝트 기본값인
-    // 1920x1080(FullScreenMode.FullScreenWindow)으로 되돌린다.
-    // 에디터 Game 뷰에서는 Screen.SetResolution이 아무 효과가 없으므로(빌드에서만 동작),
-    // 실제 창 크기 변화는 빌드에서만 확인 가능하다.
+    // ---------------------------------------------------------------------------------
+    // 화면
+    // ---------------------------------------------------------------------------------
+
+    // 창 모드 여부. true면 창 모드, false면 전체화면.
+    //
+    // ===== 전체화면일 때 검은 여백(레터박스)에 대해 =====
+    // 이 게임의 그림은 전부 1440x1080(4:3 비율)로 그려져 있다. 요즘 모니터는 대부분
+    // 16:9(예: 1920x1080)라서 전체화면으로 늘리면 그림이 옆으로 찌그러진다.
+    // 그래서 AspectRatioKeeper.cs가 카메라의 표시 영역을 4:3으로 고정하고, 남는 좌우 공간은
+    // 검은색으로 채운다(레터박스/필러박스). 자세한 내용은 AspectRatioKeeper.cs 참고.
     public bool windowed = false;
+
+    // ---------------------------------------------------------------------------------
+    // 텍스트 (글꼴 / 크기)
+    // ---------------------------------------------------------------------------------
+
+    // 글꼴 선택. FontManager.FontOptions 배열의 인덱스와 대응된다.
+    //   0 = 기본 (프로젝트에 원래 설정되어 있던 글꼴)
+    //   1 = 맑은 고딕
+    //   2 = 바탕
+    //   3 = 굴림
+    public int fontIndex = 0;
+
+    // 글씨 크기 배율. 1.0이 원래 크기이고, 0.8이면 20% 작게, 1.4면 40% 크게 표시된다.
+    // 절댓값(pt)이 아니라 배율인 이유: 대사창/버튼/설명글 등 원래 크기가 제각각인 텍스트를
+    // 하나의 값으로 일괄 조절하기 위해서다.
+    public float fontScale = 1f;
+
+    // ---------------------------------------------------------------------------------
+    // 대사 진행
+    // ---------------------------------------------------------------------------------
+
+    // 텍스트가 한 글자씩 찍히는 속도 단계.
+    //   0 = 느리게, 1 = 보통, 2 = 빠르게, 3 = 즉시(타이핑 없이 한 번에 표시)
+    // 실제 초당 글자 수는 SettingsManager.TextSpeedCharsPerSecond가 계산한다.
+    public int textSpeedLevel = 1;
+
+    // 자동 진행 사용 여부. 켜면 대사가 다 출력된 뒤 잠시 기다렸다가 알아서 다음 줄로 넘어간다.
+    public bool autoAdvance = false;
+
+    // 자동 진행일 때, 대사가 다 출력되고 나서 다음 줄로 넘어가기까지 기다리는 시간(초).
+    // 글자 수와 무관한 고정 대기시간 + 글자 수에 비례한 읽기 시간을 합쳐서 쓴다
+    // (DialogueSystem.AutoAdvanceAfterLine 참고).
+    public float autoAdvanceDelay = 1.2f;
 }

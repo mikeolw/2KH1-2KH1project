@@ -44,12 +44,106 @@ public class InventoryManager : MonoBehaviour
     {
         if (string.IsNullOrEmpty(itemId)) return;
 
+        itemId = itemId.Trim();
+
         if (acquiredItemIds.Add(itemId))
         {
+            // 아이템을 새로 얻었을 때 조사기록(수첩)에도 관련 메모가 있으면 함께 추가한다.
+            // NoteEntries.csv에서 TriggerType=Item, TriggerKey=이 itemId인 줄을 찾는다.
+            if (NoteManager.Instance != null) NoteManager.Instance.OnItemAcquired(itemId);
+
             OnInventoryChanged?.Invoke();
         }
     }
 
     // InventorySlotUI가 자기 슬롯을 보여줄지 말지 판단할 때 쓴다.
     public bool HasItem(string itemId) => acquiredItemIds.Contains(itemId);
+
+    // =================================================================================
+    // 아이템 조합 (예: SD카드 + 카메라 -> 사진이 들어있는 카메라)
+    // =================================================================================
+    // ===== 어떻게 동작하나 =====
+    // 가방 화면에서 아이템 하나를 고른 뒤 다른 아이템을 고르면, 그 두 개의 조합 규칙이
+    // ItemCombinations.csv에 있는지 찾아본다. 있으면 결과 아이템을 새로 얻고, 규칙에 따라
+    // 재료를 없앤다. 없으면 "조합할 수 없다"는 뜻으로 false를 돌려준다.
+    //
+    // 조합 규칙 자체는 코드가 아니라 CSV에 있으므로, 새로운 조합을 추가할 때 스크립트를
+    // 고칠 필요가 없다 (ItemDatabase.cs 상단 주석의 ItemCombinations.csv 설명 참고).
+
+    // 조합에 성공하면 화면에 띄울 안내 문구가 여기에 담긴다(실패하면 빈 문자열).
+    public string LastCombinationMessage { get; private set; } = "";
+
+    // 조합이 성공했을 때 발생. 가방 UI가 구독해서 안내 문구를 띄우는 데 쓴다.
+    public event Action<string> OnCombinationSucceeded;
+
+    // 두 아이템을 조합해본다.
+    // 반환값: 조합에 성공하면 true, 규칙이 없거나 재료가 없으면 false.
+    public bool TryCombine(string itemA, string itemB)
+    {
+        LastCombinationMessage = "";
+
+        if (string.IsNullOrWhiteSpace(itemA) || string.IsNullOrWhiteSpace(itemB)) return false;
+
+        // 같은 아이템끼리는 조합할 수 없다(실수로 두 번 클릭한 경우).
+        if (itemA.Trim() == itemB.Trim()) return false;
+
+        // 두 아이템을 실제로 가지고 있어야 한다.
+        if (!HasItem(itemA.Trim()) || !HasItem(itemB.Trim())) return false;
+
+        var rule = ItemDatabase.FindCombination(itemA, itemB);
+        if (rule == null) return false;
+
+        // 재료 소모. 규칙에서 ConsumeA/ConsumeB가 TRUE인 것만 없앤다.
+        // (예: SD카드는 카메라에 꽂으면 사라지지만, 카메라 자체는 남는 식)
+        //
+        // rule.itemA / rule.itemB는 CSV에 적힌 순서이고, 호출자가 넘긴 순서와 다를 수 있다.
+        // ItemDatabase.FindCombination이 순서를 바꿔서도 찾아주기 때문이다.
+        // 그래서 "누가 A였는지"는 rule 쪽 이름을 기준으로 판단해야 한다.
+        if (rule.consumeA) acquiredItemIds.Remove(rule.itemA);
+        if (rule.consumeB) acquiredItemIds.Remove(rule.itemB);
+
+        // 결과 아이템 획득. AddItem을 거치므로 수첩 메모도 자동으로 연동된다.
+        acquiredItemIds.Add(rule.resultItem);
+        if (NoteManager.Instance != null) NoteManager.Instance.OnItemAcquired(rule.resultItem);
+
+        LastCombinationMessage = string.IsNullOrEmpty(rule.resultMessage)
+            ? $"{ItemDatabase.GetDisplayName(rule.itemA)}와(과) {ItemDatabase.GetDisplayName(rule.itemB)}를 합쳤다."
+            : rule.resultMessage;
+
+        OnInventoryChanged?.Invoke();
+        OnCombinationSucceeded?.Invoke(LastCombinationMessage);
+
+        Debug.Log($"[InventoryManager] 조합 성공: {rule.itemA} + {rule.itemB} -> {rule.resultItem}");
+        return true;
+    }
+
+    // =================================================================================
+    // 세이브 / 로드 연동
+    // =================================================================================
+    // SaveData.acquiredItemIds에 담아 저장하고, 불러올 때 되돌린다.
+    // (HashSet은 JsonUtility가 직렬화하지 못하므로 List로 바꿔서 주고받는다.)
+
+    // 세이브용: 지금까지 얻은 아이템 목록.
+    public List<string> GetAcquiredItemList() => new List<string>(acquiredItemIds);
+
+    // 로드용: 세이브에서 읽어온 목록으로 통째로 되돌린다.
+    public void RestoreItems(List<string> itemIds)
+    {
+        acquiredItemIds.Clear();
+        if (itemIds != null)
+        {
+            foreach (string id in itemIds)
+            {
+                if (!string.IsNullOrWhiteSpace(id)) acquiredItemIds.Add(id.Trim());
+            }
+        }
+        OnInventoryChanged?.Invoke();
+    }
+
+    // 새 게임을 시작할 때 가방을 비운다.
+    public void ClearAll()
+    {
+        acquiredItemIds.Clear();
+        OnInventoryChanged?.Invoke();
+    }
 }
