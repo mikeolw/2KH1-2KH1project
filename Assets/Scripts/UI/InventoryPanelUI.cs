@@ -71,6 +71,15 @@ public class InventoryPanelUI : MonoBehaviour
             InventoryManager.Instance.OnInventoryChanged += Refresh;
         }
 
+        if (overlay == null) EnsureUI();
+
+        // 실제 화면은 캔버스 아래에 따로 만들어져 있으므로, 이 패널이 켜질 때 함께 켠다.
+        if (overlay != null)
+        {
+            overlay.SetActive(true);
+            overlay.transform.SetAsLastSibling();   // 다른 UI에 가리지 않게
+        }
+
         // 가방을 닫았다 열면 조합 모드는 초기화한다(헷갈림 방지).
         SetCombineMode(false, null);
 
@@ -84,6 +93,8 @@ public class InventoryPanelUI : MonoBehaviour
         {
             InventoryManager.Instance.OnInventoryChanged -= Refresh;
         }
+
+        if (overlay != null) overlay.SetActive(false);
     }
 
     // ---------------------------------------------------------------------------------
@@ -400,54 +411,79 @@ public class InventoryPanelUI : MonoBehaviour
     // 만들어진 UI를 담는 부모. 아래 Create* 함수들이 여기에 붙인다.
     private Transform contentRoot;
 
+    // 캔버스 아래에 만드는 가방 화면. 아래 Create* 함수들이 여기에 붙는다.
+    private GameObject overlay;
+
+    // ===== 왜 UI를 캔버스에 직접 만드나 (중요) =====
+    // 처음에는 씬의 InventoryPanel 안에 목록을 만들었다. 그런데 그 패널은 프로토타입 시절
+    // 크기와 위치가 제각각으로 잡혀 있고 안에 옛날 오브젝트도 남아 있어서, 코드에서 크기를
+    // 다시 잡아도 화면 구석에 작게 뜨거나 잘려 보였다.
+    // 그래서 가방 화면을 씬의 패널 안이 아니라 캔버스 바로 아래에 따로 만든다.
+    // 씬이 어떻게 짜여 있든 영향받지 않으므로 항상 같은 자리에 같은 크기로 뜬다.
+    // 씬의 InventoryPanel은 "열렸는지 닫혔는지"를 알려주는 스위치 역할만 한다.
     private void EnsureUI()
     {
         // 아이템 목록 자리가 이미 인스펙터에 연결되어 있으면 손대지 않는다.
         if (itemListContainer != null) return;
 
-        // 이미 만들어둔 게 있으면 다시 만들지 않는다.
-        var existing = transform.Find(ContentRootName);
+        Canvas canvas = FindAnyObjectByType<Canvas>();
+        if (canvas == null)
+        {
+            Debug.LogError("[InventoryPanelUI] 씬에 Canvas가 없어 가방 화면을 만들 수 없습니다.");
+            return;
+        }
+
+        // 이미 만들어둔 게 있으면 그것을 쓴다.
+        var existing = canvas.transform.Find(ContentRootName);
         if (existing != null)
         {
+            overlay = existing.gameObject;
             contentRoot = existing;
             return;
         }
 
-        // ----- 씬에 남아 있던 예전 오브젝트를 꺼둔다 -----
-        // InventoryPanel 안에는 프로토타입 시절 아이템 자리(ItemSlots, Slot_* 등)가 남아
-        // 있어서 그대로 두면 새 목록 위에 겹쳐 보인다. 지우지 않고 비활성화만 한다.
+        // ----- 씬의 원래 패널은 안 보이게 한다 -----
+        // (UIManager가 이 패널을 켜고 끄면서 여닫음을 관리하므로 오브젝트 자체는 남겨둔다)
+        var panelImg = GetComponent<Image>();
+        if (panelImg != null)
+        {
+            panelImg.color = new Color(0f, 0f, 0f, 0f);
+            panelImg.raycastTarget = false;
+        }
         for (int i = transform.childCount - 1; i >= 0; i--)
         {
-            var child = transform.GetChild(i);
-            if (child.name == ContentRootName) continue;
-            child.gameObject.SetActive(false);
+            transform.GetChild(i).gameObject.SetActive(false);
         }
 
-        // ----- 패널 크기/배경 -----
-        var rootRt = GetComponent<RectTransform>();
-        if (rootRt == null) rootRt = gameObject.AddComponent<RectTransform>();
+        // ----- 화면 전체를 덮는 막 -----
+        overlay = new GameObject(ContentRootName, typeof(RectTransform), typeof(Image));
+        overlay.transform.SetParent(canvas.transform, false);
+        var oRt = overlay.GetComponent<RectTransform>();
+        oRt.anchorMin = Vector2.zero;
+        oRt.anchorMax = Vector2.one;
+        oRt.offsetMin = Vector2.zero;
+        oRt.offsetMax = Vector2.zero;
+        var dim = overlay.GetComponent<Image>();
+        dim.color = new Color(0f, 0f, 0f, 0.72f);
+        dim.raycastTarget = true;
 
-        // 씬에 설정된 크기가 제각각이라 여기서 고정한다.
-        rootRt.anchorMin = new Vector2(0.5f, 0.5f);
-        rootRt.anchorMax = new Vector2(0.5f, 0.5f);
-        rootRt.pivot = new Vector2(0.5f, 0.5f);
-        rootRt.sizeDelta = new Vector2(1200f, 820f);
-        rootRt.anchoredPosition = Vector2.zero;
+        // ----- 가운데 상자 -----
+        var box = new GameObject("Box", typeof(RectTransform), typeof(Image));
+        box.transform.SetParent(overlay.transform, false);
+        var boxRt = box.GetComponent<RectTransform>();
+        boxRt.anchorMin = new Vector2(0.5f, 0.5f);
+        boxRt.anchorMax = new Vector2(0.5f, 0.5f);
+        boxRt.pivot = new Vector2(0.5f, 0.5f);
+        boxRt.sizeDelta = new Vector2(1200f, 820f);
+        boxRt.anchoredPosition = Vector2.zero;
+        box.GetComponent<Image>().color = new Color(0f, 0f, 0f, 0.97f);
 
-        var bg = gameObject.GetComponent<Image>();
-        if (bg == null) bg = gameObject.AddComponent<Image>();
-        bg.color = new Color(0f, 0f, 0f, 0.95f);
-        bg.raycastTarget = true;   // 뒤쪽 클릭이 새어나가지 않게 막는다
+        contentRoot = box.transform;
 
-        // ----- 내용 담을 전용 자식 -----
-        var root = new GameObject(ContentRootName, typeof(RectTransform));
-        root.transform.SetParent(transform, false);
-        var rr = root.GetComponent<RectTransform>();
-        rr.anchorMin = Vector2.zero;
-        rr.anchorMax = Vector2.one;
-        rr.offsetMin = Vector2.zero;
-        rr.offsetMax = Vector2.zero;
-        contentRoot = root.transform;
+        // 닫기 버튼. 씬의 InventoryPanel을 끄면 OnDisable에서 이 화면도 함께 닫힌다.
+        CreateButton("Btn_CloseInventory", "닫기",
+            new Vector2(0.40f, 0.015f), new Vector2(0.60f, 0.07f),
+            () => gameObject.SetActive(false));
 
         // ----- 제목 -----
         var title = CreateText("Title", new Vector2(0.03f, 0.93f), new Vector2(0.55f, 0.99f), 30, TextAlignmentOptions.Left);
@@ -491,7 +527,7 @@ public class InventoryPanelUI : MonoBehaviour
         // ===== 글꼴 물려주기 =====
         // 코드로 만든 글자는 기본 글꼴에 한글 글자 모양이 없어 깨져 보인다.
         // 화면에서 한글이 잘 나오는 글꼴을 찾아 물려준다 (UIFontHelper.cs 참고).
-        UIFontHelper.ApplyToChildren(gameObject);
+        UIFontHelper.ApplyToChildren(overlay);
     }
 
     private Image CreateImage(string name, Vector2 anchorMin, Vector2 anchorMax)
