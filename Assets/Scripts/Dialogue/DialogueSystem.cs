@@ -15,6 +15,17 @@ public class DialogueSystem : MonoBehaviour
     public GameObject choiceButtonPrefab;
     public Transform choiceContainer;
 
+    [Header("대화창 꾸미기")]
+    [Tooltip("대화창 전체(DialoguePanel). 비워두면 씬에서 이름으로 찾는다.")]
+    public GameObject dialoguePanel;
+    [Tooltip("화자 이름을 감싸는 상자. 이름이 없는 지문일 때 통째로 숨긴다. 없어도 동작한다.")]
+    public GameObject speakerNameBox;
+    [Tooltip("게임 시작 시 대화창 모양(색/여백/글자 크기)을 코드에서 다듬을지 여부.")]
+    public bool autoStyleDialogueBox = true;
+
+    // 대사가 아직 남아 있음을 알려주는 작은 삼각형(▼). 코드로 만들어 붙인다.
+    private TMP_Text continueIndicator;
+
     [Header("프로토타입 테스트용 대사 데이터")]
     public DialogueData currentDialogue;
     private int lineIndex = 0;
@@ -99,8 +110,117 @@ public class DialogueSystem : MonoBehaviour
         else Destroy(gameObject);
     }
 
+    // =================================================================================
+    // 대화창 모양 다듬기
+    // =================================================================================
+    // 씬에 만들어져 있는 대화창은 프로토타입용이라 글자가 창을 넘치고 여백도 없었다.
+    // 씬 파일을 직접 고치면 팀원끼리 충돌이 잦으므로, 게임이 시작될 때 코드에서 모양을
+    // 잡아준다. 인스펙터에서 autoStyleDialogueBox를 끄면 씬에 만들어둔 모양이 그대로 쓰인다.
+    //
+    // 여기서 하는 일:
+    //   - 대화창 배경을 반투명한 짙은 남색으로 (선화 일러스트 위에서 글자가 잘 읽히게)
+    //   - 글자에 안쪽 여백을 줘서 창 테두리에 붙지 않게
+    //   - 넘치는 글자는 다음 쪽으로 넘기도록 설정 (StartTyping의 쪽 나누기와 짝을 이룬다)
+    //   - 화자 이름을 굵게, 살짝 크게, 강조색으로
+    //   - 오른쪽 아래에 "계속" 표시(▼)를 붙인다
+    private void StyleDialogueBox()
+    {
+        if (!autoStyleDialogueBox) return;
+
+        // 대화창 찾기
+        if (dialoguePanel == null && sentenceText != null)
+        {
+            var t = sentenceText.transform.parent;
+            if (t != null) dialoguePanel = t.gameObject;
+        }
+
+        // ----- 대화창 배경 -----
+        if (dialoguePanel != null)
+        {
+            var bg = dialoguePanel.GetComponent<UnityEngine.UI.Image>();
+            if (bg != null)
+            {
+                // 선화(흰 바탕 + 검은 선) 위에 흰 글자를 올려야 하므로 어두운 판을 깐다.
+                bg.color = new Color(0.06f, 0.07f, 0.11f, 0.88f);
+            }
+        }
+
+        // ----- 대사 글자 -----
+        if (sentenceText != null)
+        {
+            // 넘치면 다음 쪽으로 (창 밖으로 삐져나가지 않게 하는 핵심 설정)
+            sentenceText.overflowMode = TMPro.TextOverflowModes.Page;
+
+            // 안쪽 여백 (왼, 위, 오른, 아래). 오른쪽은 "계속" 표시 자리를 조금 남긴다.
+            sentenceText.margin = new Vector4(28f, 16f, 44f, 16f);
+
+            sentenceText.alignment = TMPro.TextAlignmentOptions.TopLeft;
+            sentenceText.color = new Color(0.96f, 0.96f, 0.94f);
+
+            // 줄 간격을 조금 띄우면 한글이 훨씬 읽기 편하다.
+            sentenceText.lineSpacing = 12f;
+        }
+
+        // ----- 화자 이름 -----
+        if (speakerText != null)
+        {
+            speakerText.fontStyle = TMPro.FontStyles.Bold;
+            speakerText.color = new Color(1f, 0.86f, 0.45f);   // 옅은 금색 - 대사와 구분되게
+            speakerText.margin = new Vector4(12f, 0f, 12f, 0f);
+            speakerText.alignment = TMPro.TextAlignmentOptions.Left;
+
+            // 이름 칸을 감싸는 상자를 못 받았으면 이름 텍스트 자체를 상자로 삼는다.
+            if (speakerNameBox == null) speakerNameBox = speakerText.gameObject;
+        }
+
+        CreateContinueIndicator();
+    }
+
+    // 대사가 더 남아 있음을 알려주는 ▼ 표시를 대화창 오른쪽 아래에 만든다.
+    private void CreateContinueIndicator()
+    {
+        if (dialoguePanel == null || continueIndicator != null) return;
+
+        var go = new GameObject("ContinueIndicator", typeof(RectTransform));
+        go.transform.SetParent(dialoguePanel.transform, false);
+
+        var rt = go.GetComponent<RectTransform>();
+        rt.anchorMin = new Vector2(1f, 0f);
+        rt.anchorMax = new Vector2(1f, 0f);
+        rt.pivot = new Vector2(1f, 0f);
+        rt.anchoredPosition = new Vector2(-18f, 12f);
+        rt.sizeDelta = new Vector2(30f, 30f);
+
+        continueIndicator = go.AddComponent<TextMeshProUGUI>();
+        continueIndicator.text = "▼";
+        continueIndicator.fontSize = 22;
+        continueIndicator.alignment = TMPro.TextAlignmentOptions.Center;
+        continueIndicator.color = new Color(1f, 0.86f, 0.45f, 0.9f);
+        continueIndicator.raycastTarget = false;
+        continueIndicator.gameObject.SetActive(false);
+    }
+
+    // ▼ 표시를 깜빡이게 한다. 대사가 다 찍혔을 때만 보인다.
+    private void Update_ContinueIndicator()
+    {
+        if (continueIndicator == null) return;
+
+        bool show = !isTyping && !IsBlockedByOtherUI();
+        continueIndicator.gameObject.SetActive(show);
+
+        if (show)
+        {
+            // 0.6초 주기로 부드럽게 깜빡인다.
+            float a = 0.35f + 0.55f * Mathf.Abs(Mathf.Sin(Time.time * Mathf.PI / 0.6f));
+            var c = continueIndicator.color;
+            continueIndicator.color = new Color(c.r, c.g, c.b, a);
+        }
+    }
+
     void Start()
     {
+        StyleDialogueBox();
+
         sfxSource = GetComponent<AudioSource>();
         if (sfxSource == null) sfxSource = gameObject.AddComponent<AudioSource>();
         sfxSource.playOnAwake = false;
@@ -271,7 +391,7 @@ public class DialogueSystem : MonoBehaviour
     {
         currentLine = line;
 
-        speakerText.text = line.lineType == LineType.Narration ? "" : line.speaker;
+        SetSpeakerName(line.lineType == LineType.Narration ? "" : line.speaker);
 
         // ===== 1) 배경 / 캐릭터 스탠딩 갱신 =====
         // 값이 비어 있는 칸은 StageController가 "이전 상태 유지"로 처리하므로,
@@ -326,7 +446,15 @@ public class DialogueSystem : MonoBehaviour
     // 텍스트 타이핑 연출
     // ---------------------------------------------------------------------------------
 
-    // 한 줄을 화면에 찍기 시작한다. 설정이 "즉시"면 타이핑 없이 통째로 표시한다.
+    // ===== 긴 대사는 여러 쪽으로 나눠 보여준다 =====
+    // 대사 한 줄이 대화창보다 길면 글자가 창 밖으로 삐져나가 읽을 수 없게 된다.
+    // TextMeshPro의 "Page" 넘침 모드를 쓰면 창에 들어가는 만큼만 보여주고 나머지는
+    // 다음 쪽으로 넘겨준다. 플레이어가 클릭하면 다음 쪽으로 넘어가고, 마지막 쪽까지
+    // 다 읽으면 그때 다음 대사 줄로 넘어간다. (미연시에서 흔히 쓰는 방식)
+    private int currentPage;    // 지금 보여주는 쪽 번호 (TMP는 1부터 센다)
+    private int totalPages;     // 이 대사가 총 몇 쪽인지
+
+    // 한 줄을 화면에 찍기 시작한다.
     private void StartTyping(string sentence)
     {
         // 이전 줄의 타이핑/자동진행이 남아있으면 확실히 정리한다.
@@ -335,42 +463,62 @@ public class DialogueSystem : MonoBehaviour
 
         currentFullSentence = sentence ?? "";
 
+        // 글자를 전부 넣어두고, 창에 들어가는 만큼씩 쪽을 나눈다.
+        sentenceText.text = currentFullSentence;
+        sentenceText.overflowMode = TMPro.TextOverflowModes.Page;
+        sentenceText.maxVisibleCharacters = 0;
+
+        // 쪽 수를 세려면 한 번 갱신해야 한다.
+        sentenceText.ForceMeshUpdate();
+        totalPages = Mathf.Max(1, sentenceText.textInfo.pageCount);
+
+        currentPage = 1;
+        ShowPage(currentPage);
+    }
+
+    // 지정한 쪽을 타이핑해서 보여준다.
+    private void ShowPage(int page)
+    {
+        StopTypingRoutine();
+
+        sentenceText.pageToDisplay = page;
+
         bool instant = SettingsManager.Instance != null && SettingsManager.Instance.IsInstantText;
 
         if (instant || string.IsNullOrEmpty(currentFullSentence))
         {
-            // 즉시 표시: 코루틴을 돌릴 필요가 없다.
-            sentenceText.text = currentFullSentence;
+            // 즉시 표시: 이 쪽의 마지막 글자까지 한 번에 보여준다.
+            sentenceText.maxVisibleCharacters = GetPageLastCharIndex(page) + 1;
             isTyping = false;
-            OnLineFullyShown();
+            OnPageFullyShown();
             return;
         }
 
-        typingRoutine = StartCoroutine(TypeSentence(currentFullSentence));
+        typingRoutine = StartCoroutine(TypePage(page));
     }
 
-    // 글자를 하나씩 늘려가며 찍는 코루틴.
+    // 한 쪽 분량의 글자를 하나씩 찍는 코루틴.
     //
     // ===== maxVisibleCharacters를 쓰는 이유 =====
     // sentenceText.text에 문자열을 조금씩 잘라 넣는 방식(text = s.Substring(0, i))은
     // 글자를 넣을 때마다 TextMeshPro가 줄바꿈을 다시 계산해서, 문장 끝 단어가 다음 줄로
     // 내려가는 순간 이미 찍힌 글자들이 출렁이며 움직인다. 대신 전체 문장을 한 번에 넣어두고
     // "몇 글자까지 보여줄지"(maxVisibleCharacters)만 늘리면 레이아웃이 처음부터 확정되어
-    // 글자가 제자리에서 하나씩 나타난다. 미연시에서 흔히 쓰는 방법이다.
-    private IEnumerator TypeSentence(string sentence)
+    // 글자가 제자리에서 하나씩 나타난다.
+    //
+    // maxVisibleCharacters는 "글 전체"를 기준으로 세므로, 2쪽을 찍을 때는 1쪽의 글자 수부터
+    // 이어서 세어야 한다. 그래서 이 쪽의 첫 글자 번호와 마지막 글자 번호를 구해서 쓴다.
+    private IEnumerator TypePage(int page)
     {
         isTyping = true;
 
-        sentenceText.text = sentence;
-        sentenceText.maxVisibleCharacters = 0;
+        int firstChar = GetPageFirstCharIndex(page);
+        int lastChar = GetPageLastCharIndex(page);
+
+        sentenceText.maxVisibleCharacters = firstChar;
 
         // 말하는 캐릭터의 입을 움직이기 시작한다.
         SetTalkingAnimation(true);
-
-        // TMP가 글자 수를 세려면 한 번 갱신이 필요하다. 이걸 안 하면 첫 프레임에
-        // textInfo.characterCount가 0이라 문장이 통째로 건너뛰어질 수 있다.
-        sentenceText.ForceMeshUpdate();
-        int totalChars = sentenceText.textInfo.characterCount;
 
         float charsPerSecond = SettingsManager.Instance != null
             ? SettingsManager.Instance.TextSpeedCharsPerSecond
@@ -378,15 +526,15 @@ public class DialogueSystem : MonoBehaviour
         float secondsPerChar = 1f / Mathf.Max(1f, charsPerSecond);
 
         float timer = 0f;
-        int visible = 0;
+        int visible = firstChar;
 
-        while (visible < totalChars)
+        while (visible <= lastChar)
         {
             timer += Time.deltaTime;
 
             // 한 프레임에 여러 글자가 찍혀야 할 만큼 빠른 설정일 수도 있으므로 while로 처리한다.
             // (예: 80자/초인데 프레임이 30fps면 한 프레임에 약 2~3글자씩 찍어야 한다.)
-            while (timer >= secondsPerChar && visible < totalChars)
+            while (timer >= secondsPerChar && visible <= lastChar)
             {
                 timer -= secondsPerChar;
                 visible++;
@@ -398,28 +546,57 @@ public class DialogueSystem : MonoBehaviour
 
         isTyping = false;
         typingRoutine = null;
-        OnLineFullyShown();
+        OnPageFullyShown();
     }
 
-    // 타이핑 도중 클릭/스페이스를 눌렀을 때: 다음 줄로 넘어가지 않고 지금 줄을 즉시 완성한다.
+    // 이 쪽의 첫 글자가 글 전체에서 몇 번째인지.
+    private int GetPageFirstCharIndex(int page)
+    {
+        var info = sentenceText.textInfo;
+        if (info == null || info.pageInfo == null || page - 1 < 0 || page - 1 >= info.pageInfo.Length) return 0;
+        return info.pageInfo[page - 1].firstCharacterIndex;
+    }
+
+    // 이 쪽의 마지막 글자가 글 전체에서 몇 번째인지.
+    private int GetPageLastCharIndex(int page)
+    {
+        var info = sentenceText.textInfo;
+        if (info == null || info.pageInfo == null || page - 1 < 0 || page - 1 >= info.pageInfo.Length)
+        {
+            return Mathf.Max(0, (info != null ? info.characterCount : 1) - 1);
+        }
+        return info.pageInfo[page - 1].lastCharacterIndex;
+    }
+
+    // 타이핑 도중 클릭/스페이스를 눌렀을 때: 다음으로 넘어가지 않고 지금 쪽을 즉시 완성한다.
     private void CompleteTypingImmediately()
     {
         StopTypingRoutine();
 
-        sentenceText.text = currentFullSentence;
-        sentenceText.maxVisibleCharacters = int.MaxValue;
+        sentenceText.maxVisibleCharacters = GetPageLastCharIndex(currentPage) + 1;
         isTyping = false;
 
-        OnLineFullyShown();
+        OnPageFullyShown();
     }
 
-    // 한 줄이 화면에 완전히 표시되었을 때 공통으로 할 일.
-    private void OnLineFullyShown()
+    // 아직 보여줄 쪽이 남아 있는지.
+    private bool HasMorePages => currentPage < totalPages;
+
+    // 다음 쪽으로 넘긴다.
+    private void ShowNextPage()
+    {
+        currentPage++;
+        ShowPage(currentPage);
+    }
+
+    // 한 쪽이 화면에 완전히 표시되었을 때 공통으로 할 일.
+    private void OnPageFullyShown()
     {
         // 말이 끝났으므로 입을 다문다.
+        // (여러 쪽짜리 대사는 쪽이 넘어갈 때마다 잠깐 입을 다물었다가 다시 움직인다)
         SetTalkingAnimation(false);
 
-        // 자동 진행이 켜져 있으면 잠시 뒤 다음 줄로 넘어가도록 예약한다.
+        // 자동 진행이 켜져 있으면 잠시 뒤 다음 쪽/다음 줄로 넘어가도록 예약한다.
         if (SettingsManager.Instance != null && SettingsManager.Instance.Current.autoAdvance)
         {
             StopAutoAdvanceRoutine();
@@ -445,7 +622,9 @@ public class DialogueSystem : MonoBehaviour
         // 기다리는 사이에 선택지가 뜨거나 팝업이 열렸을 수 있으므로 다시 확인한다.
         if (IsBlockedByOtherUI()) yield break;
 
-        ShowNextSentence();
+        // 아직 읽을 쪽이 남아 있으면 다음 쪽으로, 다 읽었으면 다음 대사 줄로.
+        if (HasMorePages) ShowNextPage();
+        else ShowNextSentence();
     }
 
     // 말하는 캐릭터의 입 뻐끔 연출을 켜고 끈다.
@@ -493,12 +672,28 @@ public class DialogueSystem : MonoBehaviour
         StopTypingRoutine();
         StopAutoAdvanceRoutine();
 
-        speakerText.text = speaker;
-        sentenceText.text = sentence;
+        SetSpeakerName(speaker);
 
-        // 직전 타이핑에서 maxVisibleCharacters가 작은 값으로 남아 있으면 글자가 잘려 보인다.
-        // 조사 오버레이 대사는 타이핑 없이 통째로 보여주므로 제한을 풀어준다.
-        sentenceText.maxVisibleCharacters = int.MaxValue;
+        // 조사 대사도 일반 대사와 똑같이 쪽 나누기 + 타이핑을 적용한다.
+        // (조사 설명은 긴 문장이 많아서 쪽 나누기가 특히 중요하다)
+        StartTyping(sentence);
+    }
+
+    // 화자 이름을 굵게 표시한다.
+    // TextMeshPro의 <b> 태그를 쓰지 않고 fontStyle을 쓰는 이유: 태그를 문자열에 섞으면
+    // 이름에 '<'가 들어간 경우 등에 깨질 수 있고, 나중에 이름 칸 디자인을 바꿀 때도
+    // 컴포넌트 속성으로 다루는 편이 다루기 쉽다.
+    private void SetSpeakerName(string speaker)
+    {
+        if (speakerText == null) return;
+
+        speakerText.text = speaker ?? "";
+
+        // 이름이 없는 지문/조사 설명일 때는 이름 칸 자체를 숨겨서 빈 자리가 남지 않게 한다.
+        if (speakerText.transform.parent != null && speakerNameBox != null)
+        {
+            speakerNameBox.SetActive(!string.IsNullOrEmpty(speaker));
+        }
     }
 
     private void ApplyLineAudio(AudioSource source, AudioClip desiredClip)
@@ -585,6 +780,9 @@ public class DialogueSystem : MonoBehaviour
 
     void Update()
     {
+        // "계속" 표시(▼) 깜빡임은 입력과 무관하게 항상 갱신한다.
+        Update_ContinueIndicator();
+
         // 암전 연출(ShowLineWithFade) 진행 중엔 스페이스/클릭으로 건너뛰지 못하게 막는다.
         if (isFading) return;
 
@@ -620,10 +818,13 @@ public class DialogueSystem : MonoBehaviour
             return;
         }
 
+        // ===== 다 찍힌 뒤 클릭/스페이스 =====
+        // 아직 읽을 쪽이 남아 있으면 다음 쪽으로 넘기고, 다 읽었으면 다음 대사 줄로 간다.
         if (Input.GetKeyDown(KeyCode.Space))
         {
             StopAutoAdvanceRoutine(); // 손으로 넘겼으면 예약된 자동 진행은 취소
-            ShowNextSentence();
+            if (HasMorePages) ShowNextPage();
+            else ShowNextSentence();
             return;
         }
 
@@ -635,7 +836,8 @@ public class DialogueSystem : MonoBehaviour
         if (Input.GetMouseButtonDown(0) && !IsPointerOverButton())
         {
             StopAutoAdvanceRoutine(); // 손으로 넘겼으면 예약된 자동 진행은 취소
-            ShowNextSentence();
+            if (HasMorePages) ShowNextPage();
+            else ShowNextSentence();
         }
     }
 

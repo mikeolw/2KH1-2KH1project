@@ -109,12 +109,11 @@ public class DialogueLine
     // 띄운다 - 위의 미니게임(isMinigame)과 완전히 동일한 배관 구조이고, 자리만
     // InvestigationController로 바뀐 것뿐이다.
     //
-    // investigationId는 씬에 미리 배치해둔 조사 화면(InvestigationController.screens 목록의
-    // InvestigationScreen.id)과 매칭된다. 지금은 조사 가능한 위치(책상/핸드폰/창문/회사 동료
-    // 등) 자체를 CSV가 아니라 씬에 직접 배치한 Placeholder 오브젝트(InvestigatableObject.cs)로
-    // 관리한다. 나중에 조사 위치 자체를 CSV로 데이터화해야 한다면, 미니게임 확장 방법과
-    // 동일하게 여기에 필드를 추가하고 DialogueSystem.LoadDialogueFromCSV()의 "Investigate"
-    // 파싱부에서 채워주면 된다.
+    // investigationId는 InvestigationData.csv의 InvestigationId 칸과 매칭된다.
+    // 이 id는 배경 그림 파일 이름과 똑같이 쓴다 (예: BG_01_MyDesk). 배경 하나가 곧 조사
+    // 화면 하나이므로, 새 조사 화면을 만들고 싶으면 CSV에 그 배경 이름으로 줄을 추가하면 된다.
+    // 씬에 미리 만들어둘 것은 전혀 없다 - 조사 화면은 CSV를 보고 그때그때 만들어진다
+    // (InvestigationController.cs 상단 주석 참고).
     public bool isInvestigation;
     public string investigationId;
 

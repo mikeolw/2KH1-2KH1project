@@ -353,8 +353,11 @@ public class StageController : MonoBehaviour
         return -1;
     }
 
-    // 조사 화면 등으로 잠깐 넘어갈 때 무대(배경+스탠딩)를 통째로 숨기거나 다시 보여준다.
-    // 조사 화면은 자기 배경을 따로 가지고 있으므로, 그 뒤에 대사 배경이 비쳐 보이면 안 된다.
+    // 무대(배경+스탠딩)를 통째로 숨기거나 다시 보여준다.
+    //
+    // 조사 모드는 이제 이 배경을 그대로 쓰므로(InvestigationController가 ApplyBackground를
+    // 호출한다) 조사 때문에 무대를 숨길 일은 없다. 대신 엔딩 연출이나 전체화면 자료처럼
+    // 화면을 통째로 비워야 할 때 쓸 수 있게 남겨둔다.
     public void SetStageVisible(bool visible)
     {
         if (backgroundImage != null && backgroundImage.sprite != null)

@@ -94,6 +94,7 @@ public class SettingsPanelController : MonoBehaviour
             }
         }
 
+        BringSettingsCanvasToFront();
         EnsureTextTabUI();
 
         if (tabVolumeButton != null) tabVolumeButton.onClick.AddListener(() => ShowTab(volumeContent));
@@ -112,22 +113,96 @@ public class SettingsPanelController : MonoBehaviour
 
         // 뒤로가기: 인게임에서 additive로 열렸으면 이 씬만 언로드해서 진행 상태를 보존하고,
         // 타이틀에서 진입한 경우엔 원래 씬으로 이동한다.
-        if (backButton != null) backButton.onClick.AddListener(() =>
+        if (backButton != null) backButton.onClick.AddListener(OnClickBack);
+    }
+
+    // ===== 뒤로가기 =====
+    // 인게임에서 겹쳐 띄운 경우(additive)에는 이 씬만 내리고, 타이틀에서 진입한 경우에는
+    // 원래 씬으로 이동한다.
+    //
+    // ===== 고친 문제: 옵션 화면이 인게임 화면 "뒤로" 넘어가 보이던 현상 =====
+    // 씬을 내리는 UnloadSceneAsync는 이름 그대로 비동기라서, 요청한 뒤 실제로 사라지기까지
+    // 몇 프레임이 걸린다. 그 사이에도 옵션 화면은 그대로 살아 있는데, 인게임 캔버스가
+    // 화면 비율 고정(AspectRatioKeeper) 때문에 Screen Space - Camera로 바뀌어 있어서
+    // 그리는 순서가 뒤바뀌어 옵션 화면이 인게임 뒤에 깔린 것처럼 보였다.
+    // 그래서 내리기를 요청하는 즉시 이 씬의 화면을 꺼버려서, 사라지는 동안 어중간하게
+    // 보이는 일이 없게 했다.
+    private void OnClickBack()
+    {
+        if (onBack != null)
         {
-            if (onBack != null)
+            onBack.Invoke();
+            return;
+        }
+
+        bool additive = SettingsManager.Instance != null && SettingsManager.Instance.ReturnAdditive;
+
+        if (additive)
+        {
+            SettingsManager.Instance.ReturnAdditive = false;
+
+            // 실제로 씬이 사라지기 전에 먼저 눈에서 치운다.
+            HideImmediately();
+
+            var op = SceneManager.UnloadSceneAsync("Settings");
+            if (op == null)
             {
-                onBack.Invoke();
+                // 어떤 이유로든 내리기에 실패하면(씬 이름이 다르거나 이미 내려간 경우)
+                // 화면만이라도 확실히 꺼둔 상태로 남긴다.
+                Debug.LogWarning("[SettingsPanelController] Settings 씬을 내리지 못했습니다. 화면만 껐습니다.");
             }
-            else if (SettingsManager.Instance != null && SettingsManager.Instance.ReturnAdditive)
+            return;
+        }
+
+        SceneManager.LoadScene(SettingsManager.Instance != null ? SettingsManager.Instance.ReturnSceneName : "Title");
+    }
+
+    // 이 씬에 속한 최상위 오브젝트를 전부 꺼서 즉시 화면에서 사라지게 한다.
+    private void HideImmediately()
+    {
+        IsOpen = false;
+
+        var scene = gameObject.scene;
+        if (!scene.IsValid()) { gameObject.SetActive(false); return; }
+
+        foreach (var root in scene.GetRootGameObjects())
+        {
+            root.SetActive(false);
+        }
+    }
+
+    // ===== 옵션 화면이 항상 인게임 위에 그려지게 한다 =====
+    // 인게임 캔버스는 화면 비율 고정(AspectRatioKeeper) 때문에 Screen Space - Camera로
+    // 바뀌어 있다. 겹쳐 띄운 옵션 화면의 캔버스가 그대로 두면 그리는 순서가 뒤엉켜
+    // 인게임 뒤로 밀려 보일 수 있다. 그래서 옵션 캔버스는 확실히 맨 위에 오도록,
+    // 인게임과 같은 방식(카메라 기준)으로 맞추고 정렬 순서를 크게 올려둔다.
+    private void BringSettingsCanvasToFront()
+    {
+        var scene = gameObject.scene;
+        if (!scene.IsValid()) return;
+
+        Camera mainCam = Camera.main;
+
+        foreach (var root in scene.GetRootGameObjects())
+        {
+            foreach (var canvas in root.GetComponentsInChildren<Canvas>(true))
             {
-                SettingsManager.Instance.ReturnAdditive = false;
-                SceneManager.UnloadSceneAsync("Settings");
+                // 다른 캔버스 안에 들어있는 캔버스는 부모를 따라가므로 건드리지 않는다.
+                if (canvas.transform.parent != null &&
+                    canvas.transform.parent.GetComponentInParent<Canvas>() != null) continue;
+
+                if (mainCam != null)
+                {
+                    // 인게임과 같은 방식으로 맞춰야 검은 여백(레터박스) 안에 함께 들어간다.
+                    canvas.renderMode = RenderMode.ScreenSpaceCamera;
+                    canvas.worldCamera = mainCam;
+                    canvas.planeDistance = 50f;   // 인게임 캔버스(100)보다 카메라에 가깝게 = 앞에 그려짐
+                }
+
+                canvas.overrideSorting = true;
+                canvas.sortingOrder = 500;        // 인게임 UI보다 확실히 위
             }
-            else
-            {
-                SceneManager.LoadScene(SettingsManager.Instance != null ? SettingsManager.Instance.ReturnSceneName : "Title");
-            }
-        });
+        }
     }
 
     // 화면이 켜질 때마다 모든 UI를 현재 설정값으로 맞추고 이벤트를 다시 연결한다.
@@ -241,14 +316,48 @@ public class SettingsPanelController : MonoBehaviour
     private void EnsureTextTabUI()
     {
         if (textContent != null) return;           // 이미 씬에 있으면 그대로 쓴다
-        if (volumeContent == null) return;         // 기준으로 삼을 패널이 없으면 포기
 
-        Transform parent = volumeContent.transform.parent;
+        // ===== 기준이 될 부모 찾기 =====
+        // 보통은 볼륨 탭 패널 옆에 나란히 만든다. 그런데 씬에서 volumeContent를 연결해두지
+        // 않은 경우에도 텍스트 설정(자동 진행 등)은 반드시 보여야 하므로, 그럴 때는
+        // 이 오브젝트 아래에 직접 만든다. (예전에는 volumeContent가 없으면 그냥 포기해서
+        // 자동 진행 항목이 아예 화면에 나타나지 않았다)
+        Transform parent;
+        RectTransform reference = null;
 
-        // 볼륨 탭과 같은 크기/위치의 빈 패널을 만든다.
+        if (volumeContent != null)
+        {
+            parent = volumeContent.transform.parent;
+            reference = volumeContent.GetComponent<RectTransform>();
+        }
+        else
+        {
+            parent = transform;
+            Debug.LogWarning("[SettingsPanelController] 볼륨 탭 패널이 연결되어 있지 않아 " +
+                             "텍스트 설정을 설정 화면 위에 직접 만듭니다.");
+        }
+
         textContent = new GameObject("Content_Text", typeof(RectTransform));
         textContent.transform.SetParent(parent, false);
-        CopyRectTransform(volumeContent.GetComponent<RectTransform>(), textContent.GetComponent<RectTransform>());
+
+        var textRect = textContent.GetComponent<RectTransform>();
+        if (reference != null)
+        {
+            CopyRectTransform(reference, textRect);
+        }
+        else
+        {
+            // 기준이 없으면 화면 가운데에 적당한 크기로 놓는다.
+            textRect.anchorMin = new Vector2(0.2f, 0.15f);
+            textRect.anchorMax = new Vector2(0.8f, 0.85f);
+            textRect.offsetMin = Vector2.zero;
+            textRect.offsetMax = Vector2.zero;
+
+            // 배경이 없으면 글씨가 안 보이므로 어두운 판을 깐다.
+            var bg = textContent.AddComponent<Image>();
+            bg.color = new Color(0.08f, 0.08f, 0.11f, 0.95f);
+        }
+
         textContent.SetActive(false);
 
         // 세로로 차곡차곡 쌓이도록 레이아웃을 붙인다.
@@ -267,8 +376,13 @@ public class SettingsPanelController : MonoBehaviour
         autoAdvanceToggle = CreateLabeledToggle(textContent.transform, "자동 진행");
         autoAdvanceDelaySlider = CreateLabeledSlider(textContent.transform, "자동 진행 대기시간", 0.2f, 5f);
 
-        // 탭 버튼도 없으면 화면 탭 버튼을 복제해서 만든다.
-        if (tabTextButton == null && tabDisplayButton != null)
+        // ===== 탭 버튼 만들기 =====
+        // 화면 탭 버튼을 복제하면 기존 디자인과 자연스럽게 어울린다.
+        // 복제할 원본이 없으면 화면 왼쪽 위에 최소한의 버튼을 직접 만든다
+        // (버튼이 없으면 텍스트 탭을 열 방법이 아예 없어지므로 반드시 하나는 만들어야 한다).
+        if (tabTextButton != null) return;
+
+        if (tabDisplayButton != null)
         {
             var clone = Instantiate(tabDisplayButton.gameObject, tabDisplayButton.transform.parent);
             clone.name = "Tab_Text";
@@ -279,6 +393,44 @@ public class SettingsPanelController : MonoBehaviour
 
             var label = clone.GetComponentInChildren<TMP_Text>();
             if (label != null) label.text = "텍스트";
+
+            // 복제본이 원본과 정확히 겹쳐 버리면 누를 수 없으므로 오른쪽으로 살짝 밀어둔다.
+            var cloneRect = clone.GetComponent<RectTransform>();
+            var srcRect = tabDisplayButton.GetComponent<RectTransform>();
+            if (cloneRect != null && srcRect != null)
+            {
+                cloneRect.anchoredPosition = srcRect.anchoredPosition
+                    + new Vector2(srcRect.rect.width + 10f, 0f);
+            }
+        }
+        else
+        {
+            var go = new GameObject("Tab_Text", typeof(RectTransform), typeof(Image), typeof(Button));
+            go.transform.SetParent(transform, false);
+
+            var rt = go.GetComponent<RectTransform>();
+            rt.anchorMin = new Vector2(0f, 1f);
+            rt.anchorMax = new Vector2(0f, 1f);
+            rt.pivot = new Vector2(0f, 1f);
+            rt.anchoredPosition = new Vector2(24f, -24f);
+            rt.sizeDelta = new Vector2(120f, 44f);
+            go.GetComponent<Image>().color = new Color(1f, 1f, 1f, 0.18f);
+
+            var textGo = new GameObject("Text", typeof(RectTransform));
+            textGo.transform.SetParent(go.transform, false);
+            var trt = textGo.GetComponent<RectTransform>();
+            trt.anchorMin = Vector2.zero;
+            trt.anchorMax = Vector2.one;
+            trt.offsetMin = Vector2.zero;
+            trt.offsetMax = Vector2.zero;
+            var tmp = textGo.AddComponent<TextMeshProUGUI>();
+            tmp.text = "텍스트";
+            tmp.fontSize = 20;
+            tmp.alignment = TextAlignmentOptions.Center;
+            tmp.color = Color.white;
+            tmp.raycastTarget = false;
+
+            tabTextButton = go.GetComponent<Button>();
         }
     }
 

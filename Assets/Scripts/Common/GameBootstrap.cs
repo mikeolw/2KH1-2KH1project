@@ -97,6 +97,41 @@ public static class GameBootstrap
 
         // 카메라에 화면 비율 고정(검은 여백 처리)을 붙인다.
         EnsureAspectRatioKeeper();
+
+        // 퀵바의 가방/수첩 버튼이 여는 패널에 실제 기능을 붙인다.
+        EnsurePanelUI();
+    }
+
+    // ===== 퀵바 패널에 기능 붙이기 =====
+    // 씬의 InventoryPanel / NotePanel은 원래 빈 껍데기(또는 아이템 자리만 미리 놓아둔 것)라서
+    // 열어봐도 아무 기능이 없었다. 여기서 실제 기능 스크립트를 붙여준다.
+    //
+    // 인스펙터에서 직접 붙여도 되지만, 씬 파일을 고치면 팀원끼리 충돌이 잦고 하나 빠뜨리면
+    // 그 탭만 조용히 죽어버리므로 코드에서 확실히 보장한다.
+    private static void EnsurePanelUI()
+    {
+        if (UIManager.Instance == null) return;
+
+        // ----- 가방(Inven) 탭 -----
+        var inventoryPanel = UIManager.Instance.inventoryPanel;
+        if (inventoryPanel != null && inventoryPanel.GetComponent<InventoryPanelUI>() == null)
+        {
+            // 예전 방식으로 미리 놓아둔 아이템 자리(ItemSlots)는 새 목록과 겹치므로 꺼둔다.
+            // 지우지 않고 꺼두기만 하는 이유: 나중에 예전 방식으로 되돌리고 싶을 때를 위해서.
+            var oldSlots = inventoryPanel.transform.Find("ItemSlots");
+            if (oldSlots != null) oldSlots.gameObject.SetActive(false);
+
+            inventoryPanel.AddComponent<InventoryPanelUI>();
+            Debug.Log("[GameBootstrap] 가방 패널에 아이템 목록/설명/조합 기능을 붙였습니다.");
+        }
+
+        // ----- 수첩(Note) 탭 -----
+        var notePanel = UIManager.Instance.notePanel;
+        if (notePanel != null && notePanel.GetComponent<NotePanelUI>() == null)
+        {
+            notePanel.AddComponent<NotePanelUI>();
+            Debug.Log("[GameBootstrap] 수첩 패널에 조사기록 표시 기능을 붙였습니다.");
+        }
     }
 
     // 메인 카메라에 AspectRatioKeeper가 없으면 붙여준다.
