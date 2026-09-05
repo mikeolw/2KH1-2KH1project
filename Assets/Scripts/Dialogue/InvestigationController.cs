@@ -364,10 +364,27 @@ public class InvestigationController : MonoBehaviour
     // InvestigatableObject.OnClickInspect()가 호출한다.
     public void Inspect(InvestigatableObject obj)
     {
-        // 무엇을 살펴봤는지 조사기록(수첩)에 남긴다.
+        // ===== 무엇을 살펴봤는지 조사기록(수첩)에 남긴다 =====
+        // 이 게임의 수첩은 주인공이 조사하면서 실시간으로 적어나가는 것이므로,
+        // 조사한 것은 무엇이든 기록에 남아야 한다.
+        //   1) NoteEntries.csv에 이 오브젝트용으로 따로 써둔 문장이 있으면 그것을 쓴다.
+        //   2) 없으면 방금 조사해서 화면에 나온 내용을 그대로 수첩에 옮겨 적는다.
+        // 예전에는 1번만 있어서, CSV에 안 적어둔 오브젝트를 조사하면 수첩이 그대로였다.
+        // (#01 내 책상만 해도 조사할 것이 일곱 개인데 CSV에는 두 개뿐이었다)
         if (NoteManager.Instance != null && !string.IsNullOrEmpty(activeScreenId))
         {
-            NoteManager.Instance.OnHotspotInspected(activeScreenId, obj.gameObject.name);
+            bool hasWrittenNote = NoteManager.Instance.OnHotspotInspected(activeScreenId, obj.gameObject.name);
+
+            if (!hasWrittenNote)
+            {
+                // Talk 타입은 대사이므로 "누가 이렇게 말했다" 형태로, 나머지는 조사 설명 그대로 적는다.
+                string noteBody = obj.type == HotspotType.Talk ? obj.talkSentence : obj.description;
+                string noteName = obj.type == HotspotType.Talk
+                    ? (string.IsNullOrEmpty(obj.talkSpeaker) ? obj.objectName : obj.talkSpeaker)
+                    : obj.objectName;
+
+                NoteManager.Instance.AddAutoEntry(activeScreenId, obj.gameObject.name, noteName, noteBody);
+            }
         }
 
         if (obj.type == HotspotType.Item && InventoryManager.Instance != null)

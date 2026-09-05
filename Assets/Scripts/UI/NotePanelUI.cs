@@ -42,6 +42,14 @@ public class NotePanelUI : MonoBehaviour
 
     private void OnEnable()
     {
+        // 어떤 이유로든 NoteManager가 없으면 여기서 만들어준다.
+        // (원래는 GameBootstrap이 만들어두지만, 이 패널만 단독으로 테스트하는 경우 등
+        //  빠져 있을 수 있다. 없으면 수첩이 영영 비어 보이므로 확실히 확보한다.)
+        if (NoteManager.Instance == null)
+        {
+            new GameObject("NoteManager").AddComponent<NoteManager>();
+        }
+
         if (NoteManager.Instance != null)
         {
             NoteManager.Instance.OnNoteChanged -= Refresh;

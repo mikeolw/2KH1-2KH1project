@@ -138,22 +138,92 @@ public class NoteManager : MonoBehaviour
     // ---------------------------------------------------------------------------------
 
     // 아이템을 얻었을 때. InventoryManager.AddItem()이 호출한다.
-    public void OnItemAcquired(string itemId)
+    // 반환값: CSV에 정의된 메모가 하나라도 추가되었으면 true.
+    public bool OnItemAcquired(string itemId)
     {
-        AddEntriesMatching("Item", itemId);
+        return AddEntriesMatching("Item", itemId);
     }
 
-    // 조사 화면을 마쳤을 때. InventoryController.Exit()이 호출한다.
-    public void OnInvestigationFinished(string investigationId)
+    // 조사 화면을 마쳤을 때. InvestigationController.Exit()이 호출한다.
+    public bool OnInvestigationFinished(string investigationId)
     {
-        AddEntriesMatching("Investigate", investigationId);
+        return AddEntriesMatching("Investigate", investigationId);
     }
 
     // 조사 오브젝트 하나를 살펴봤을 때. InvestigationController.Inspect()가 호출한다.
-    //   투 개를 조합한 키를 쓴다: "조사화면id|핫스팟키" (예: "office_desk|Hotspot_Drawer")
-    public void OnHotspotInspected(string investigationId, string hotspotKey)
+    //   두 개를 조합한 키를 쓴다: "조사화면id|핫스팟키" (예: "BG_01_MyDesk|Hotspot_Drawer")
+    public bool OnHotspotInspected(string investigationId, string hotspotKey)
     {
-        AddEntriesMatching("Hotspot", investigationId + "|" + hotspotKey);
+        return AddEntriesMatching("Hotspot", investigationId + "|" + hotspotKey);
+    }
+
+    // =================================================================================
+    // 조사한 내용을 그때그때 자동으로 적어두기
+    // =================================================================================
+    // ===== 왜 필요한가 =====
+    // 수첩에 남길 문장을 NoteEntries.csv에 하나하나 적어두는 방식만 쓰면, 미처 적어두지
+    // 않은 오브젝트를 조사했을 때 아무 일도 일어나지 않는다. 실제로 #01 내 책상은 조사할
+    // 것이 일곱 개인데 CSV에 적힌 메모는 두 개뿐이어서, 대부분을 조사해도 수첩이 그대로라
+    // 기능이 아예 없는 것처럼 보였다.
+    //
+    // 이 게임의 수첩은 "주인공이 조사하면서 실시간으로 적어나가는 것"이므로, 조사한 것은
+    // 무엇이든 일단 기록에 남아야 한다. 그래서 CSV에 딱 맞는 문장이 있으면 그것을 쓰고,
+    // 없으면 조사할 때 화면에 나온 내용을 그대로 수첩에 옮겨 적는다.
+    //
+    // 결과적으로 CSV는 "특별히 공들여 쓴 문장만 골라 적는 곳"이 되고, 나머지는 자동으로
+    // 채워진다. 기획자가 CSV를 채울수록 문장이 좋아지지만, 비어 있어도 기능은 동작한다.
+
+    // 자동으로 만든 메모에 붙일 번호. 추가된 순서를 유지하기 위해 쓴다.
+    private int autoEntryOrder = 1000;
+
+    // 조사한 내용을 자동으로 수첩에 적는다.
+    //   investigationId : 어느 조사 화면이었는지 (챕터 이름을 여기서 뽑아낸다)
+    //   hotspotKey      : 어떤 오브젝트였는지 (같은 것을 두 번 적지 않기 위한 구분용)
+    //   objectName      : 화면에 표시된 이름 (예: 메모장)
+    //   text            : 조사했을 때 나온 문장
+    public void AddAutoEntry(string investigationId, string hotspotKey, string objectName, string text)
+    {
+        if (allEntries == null) return;
+        if (string.IsNullOrWhiteSpace(text)) return;
+
+        // 같은 오브젝트를 여러 번 조사해도 한 번만 적히도록 고유한 id를 만든다.
+        string entryId = $"auto_{investigationId}_{hotspotKey}";
+        if (allEntries.ContainsKey(entryId)) return;   // 이미 적어둔 것
+
+        string body = string.IsNullOrWhiteSpace(objectName)
+            ? text.Trim()
+            : $"{objectName.Trim()} : {text.Trim()}";
+
+        allEntries[entryId] = new NoteEntry
+        {
+            entryId = entryId,
+            triggerType = "Auto",
+            triggerKey = "",
+            chapter = ChapterLabelOf(investigationId),
+            text = body,
+            order = autoEntryOrder++
+        };
+
+        AddEntry(entryId);
+    }
+
+    // 조사 화면 id에서 수첩에 표시할 챕터 이름을 만든다.
+    // 조사 화면 id는 배경 파일 이름과 같으므로(예: BG_01_MyDesk, BG_Past02_Bus_01)
+    // 가운데 토막을 떼어 "#01", "#회상02" 같은 이름으로 바꾼다.
+    private string ChapterLabelOf(string investigationId)
+    {
+        if (string.IsNullOrWhiteSpace(investigationId)) return "#기타";
+
+        string[] parts = investigationId.Split('_');
+        if (parts.Length < 2) return "#기타";
+
+        string scene = parts[1];   // "01" 또는 "Past02"
+
+        if (scene.StartsWith("Past", System.StringComparison.OrdinalIgnoreCase))
+        {
+            return "#회상" + scene.Substring(4);
+        }
+        return "#" + scene;
     }
 
     // EntryId를 직접 지정해서 추가한다(Manual 타입, 또는 특수한 경우).
@@ -185,9 +255,15 @@ public class NoteManager : MonoBehaviour
 
     // triggerType과 triggerKey가 모두 일치하는 메모를 전부 추가한다.
     // (하나의 조사로 메모가 두 줄 이상 늘어나는 경우도 있으므로 "전부" 찾는다.)
-    private void AddEntriesMatching(string triggerType, string triggerKey)
+    // 반환값: 하나라도 찾아서 추가했으면 true. 부르는 쪽은 이 값이 false일 때
+    //         조사 내용을 자동으로 적을지(AddAutoEntry) 판단한다.
+    private bool AddEntriesMatching(string triggerType, string triggerKey)
     {
-        if (allEntries == null) return;
+        if (allEntries == null) return false;
+
+        // 반복 도중에 allEntries가 바뀔 수 있으므로(AddAutoEntry가 항목을 새로 넣는다)
+        // 먼저 대상 id만 모아둔 뒤에 추가한다. 그러지 않으면 반복 중 컬렉션 변경 예외가 난다.
+        var matched = new List<string>();
 
         foreach (var pair in allEntries)
         {
@@ -195,8 +271,12 @@ public class NoteManager : MonoBehaviour
             if (!string.Equals(entry.triggerType, triggerType, System.StringComparison.OrdinalIgnoreCase)) continue;
             if (!string.Equals(entry.triggerKey, triggerKey, System.StringComparison.OrdinalIgnoreCase)) continue;
 
-            AddEntry(entry.entryId);
+            matched.Add(entry.entryId);
         }
+
+        foreach (string id in matched) AddEntry(id);
+
+        return matched.Count > 0;
     }
 
     // ---------------------------------------------------------------------------------
@@ -258,12 +338,27 @@ public class NoteManager : MonoBehaviour
     public List<string> GetRecordedEntryList() => new List<string>(recordedEntryIds);
 
     // 로드용: 세이브에서 읽어온 목록으로 되돌린다.
+    // entryIds에 null을 넘기면 "새 게임"이라는 뜻으로, 처음부터 적혀 있어야 할
+    // 회사 메모(TriggerType=Initial)만 남기고 나머지를 비운다.
+    //
+    // (예전에는 무조건 전부 지워서, 새 게임을 시작하면 수첩이 백지가 되어버렸다.
+    //  NoteManager가 시작할 때 넣어둔 초기 메모까지 같이 날아갔기 때문이다.)
     public void RestoreEntries(List<string> entryIds)
     {
         recordedEntryIds.Clear();
         deferredEntryIds.Clear();
-        if (entryIds != null) recordedEntryIds.AddRange(entryIds);
         realtimeUpdateEnabled = true;
+
+        if (entryIds != null && entryIds.Count > 0)
+        {
+            recordedEntryIds.AddRange(entryIds);
+        }
+        else
+        {
+            // 새 게임: 초기 회사 메모를 다시 채워 넣는다.
+            AddInitialEntries();
+        }
+
         OnNoteChanged?.Invoke();
     }
 }
