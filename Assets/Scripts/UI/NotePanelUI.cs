@@ -109,6 +109,11 @@ public class NotePanelUI : MonoBehaviour
 
         noteText.text = sb.ToString();
 
+        // 글꼴이 아직 안 물려졌을 수 있으므로 갱신할 때마다 확인한다.
+        // (수첩을 처음 열 때 대사창보다 먼저 만들어지는 경우 등)
+        UIFontHelper.Apply(noteText);
+        UIFontHelper.Apply(titleText);
+
         // 새 메모가 추가되면 맨 아래(최신)로 스크롤을 내려준다.
         if (scrollRect != null)
         {
@@ -218,9 +223,13 @@ public class NotePanelUI : MonoBehaviour
         contentRt.anchorMin = new Vector2(0f, 1f);
         contentRt.anchorMax = new Vector2(1f, 1f);
         contentRt.pivot = new Vector2(0.5f, 1f);
-        contentRt.offsetMin = new Vector2(0f, 0f);
-        contentRt.offsetMax = new Vector2(0f, 0f);
         contentRt.anchoredPosition = Vector2.zero;
+
+        // 높이를 미리 넉넉히 잡아둔다.
+        // offsetMin/offsetMax를 둘 다 0으로 두면 높이가 0이 되어버려서, 글이 들어가도
+        // 잘려서 아무것도 안 보인다. 실제 높이는 아래 ContentSizeFitter가 글 길이에
+        // 맞춰 다시 계산하지만, 계산되기 전 첫 프레임에도 보이도록 초기값을 준다.
+        contentRt.sizeDelta = new Vector2(0f, 400f);
 
         var fitter = content.GetComponent<ContentSizeFitter>();
         fitter.verticalFit = ContentSizeFitter.FitMode.PreferredSize;
@@ -244,6 +253,13 @@ public class NotePanelUI : MonoBehaviour
         scrollRect.vertical = true;
         scrollRect.movementType = ScrollRect.MovementType.Clamped;
         scrollRect.scrollSensitivity = 40f;
+
+        // ===== 글꼴 물려주기 (중요) =====
+        // 코드로 만든 글자는 TextMeshPro 기본 글꼴을 쓰는데, 그 글꼴에는 한글 글자 모양이
+        // 다 들어있지 않아서 한글이 시커먼 네모로 나오거나 아예 안 보였다.
+        // 화면에서 한글이 잘 나오고 있는 글꼴을 찾아 여기 만든 글자들에도 똑같이 물려준다.
+        // (UIFontHelper.cs 참고)
+        UIFontHelper.ApplyToChildren(gameObject);
     }
 
     // 이미 만들어져 있던 UI에서 참조를 다시 찾아온다.

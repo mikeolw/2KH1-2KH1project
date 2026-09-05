@@ -242,6 +242,10 @@ public class DocumentViewerController : MonoBehaviour
             new Vector2(0.10f, 0.02f), new Vector2(0.22f, 0.09f), PrevPage);
         nextButton = CreateNavButton("NextButton", panel.transform, "▶",
             new Vector2(0.78f, 0.02f), new Vector2(0.90f, 0.09f), NextPage);
+
+        // 코드로 만든 글자는 기본 글꼴에 한글 글자 모양이 없어 깨져 보인다.
+        // 화면에서 한글이 잘 나오는 글꼴을 찾아 물려준다 (UIFontHelper.cs 참고).
+        UIFontHelper.ApplyToChildren(panel);
     }
 
     private void StretchFull(RectTransform rt)

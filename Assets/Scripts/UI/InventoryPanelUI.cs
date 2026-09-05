@@ -222,6 +222,9 @@ public class InventoryPanelUI : MonoBehaviour
             button.onClick.AddListener(() => OnItemClicked(capturedId));
         }
 
+        // 아이템 버튼은 가방을 열 때마다 새로 만들어지므로 여기서도 글꼴을 물려준다.
+        UIFontHelper.ApplyToChildren(go);
+
         spawnedButtons.Add(go);
     }
 
@@ -484,6 +487,11 @@ public class InventoryPanelUI : MonoBehaviour
 
         SetButtonVisible(viewDetailButton, false);
         SetButtonVisible(combineButton, false);
+
+        // ===== 글꼴 물려주기 =====
+        // 코드로 만든 글자는 기본 글꼴에 한글 글자 모양이 없어 깨져 보인다.
+        // 화면에서 한글이 잘 나오는 글꼴을 찾아 물려준다 (UIFontHelper.cs 참고).
+        UIFontHelper.ApplyToChildren(gameObject);
     }
 
     private Image CreateImage(string name, Vector2 anchorMin, Vector2 anchorMax)

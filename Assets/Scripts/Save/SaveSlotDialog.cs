@@ -206,6 +206,10 @@ public class SaveSlotDialog : MonoBehaviour
         var skipLabel = CreateText(skip.transform, "Label",
             Vector2.zero, Vector2.one, Vector2.zero, Vector2.zero, 22, TextAlignmentOptions.Center);
         skipLabel.text = "저장하지 않고 계속";
+
+        // 코드로 만든 글자는 기본 글꼴에 한글이 없어 깨지므로, 화면에서 한글이 잘 나오는
+        // 글꼴을 찾아 물려준다 (UIFontHelper.cs 참고).
+        UIFontHelper.ApplyToChildren(panel);
     }
 
     private TMP_Text CreateText(Transform parent, string name,

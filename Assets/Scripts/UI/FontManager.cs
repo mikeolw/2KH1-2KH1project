@@ -63,9 +63,15 @@ public class FontManager : MonoBehaviour
             return;
         }
 
-        // 프로젝트에 원래 설정되어 있던 글꼴을 기억해둔다.
-        // TMP_Settings.defaultFontAsset은 TextMeshPro가 새 텍스트를 만들 때 쓰는 기본 글꼴이다.
-        defaultFont = TMP_Settings.defaultFontAsset;
+        // ===== "기본" 글꼴로 되돌릴 때 쓸 글꼴 =====
+        // TMP_Settings.defaultFontAsset을 그대로 쓰면 안 된다. 이 프로젝트의 TextMeshPro
+        // 기본 글꼴에는 한글 글자 모양이 다 들어있지 않아서, 그걸 화면 전체에 적용하면
+        // 멀쩡하던 한글 대사까지 시커먼 네모로 깨져버린다.
+        //
+        // 그래서 "지금 화면에서 한글이 잘 나오고 있는 글꼴"을 찾아 그것을 기본값으로 삼는다.
+        // (UIFontHelper.cs 참고 - 대사창 글꼴을 우선으로 찾는다)
+        defaultFont = UIFontHelper.GameFont;
+        if (defaultFont == null) defaultFont = TMP_Settings.defaultFontAsset;
     }
 
     private void Start()

@@ -346,6 +346,10 @@ public class InvestigationController : MonoBehaviour
         tmp.raycastTarget = false;
 
         go.GetComponent<Button>().onClick.AddListener(Exit);
+
+        // 코드로 만든 글자는 기본 글꼴에 한글 글자 모양이 없어 깨져 보인다.
+        // 화면에서 한글이 잘 나오는 글꼴을 찾아 물려준다 (UIFontHelper.cs 참고).
+        UIFontHelper.ApplyToChildren(go);
     }
 
     private void ClearHotspots()

@@ -203,6 +203,12 @@ public class SettingsPanelUI : MonoBehaviour
         CreateButton(box.transform, "Btn_Close", "닫기",
             new Vector2(1f, 0f), new Vector2(1f, 0f), new Vector2(1f, 1f),
             new Vector2(-32f, 18f), new Vector2(180f, 52f), Close);
+
+        // ===== 글꼴 물려주기 =====
+        // 코드로 만든 글자는 TextMeshPro 기본 글꼴을 쓰는데, 그 글꼴에 한글 글자 모양이
+        // 다 들어있지 않아 한글이 시커먼 네모로 나오거나 아예 안 보였다.
+        // 화면에서 한글이 잘 나오고 있는 글꼴을 찾아 물려준다 (UIFontHelper.cs 참고).
+        UIFontHelper.ApplyToChildren(panel);
     }
 
     // 왼쪽 분류 버튼 하나.
