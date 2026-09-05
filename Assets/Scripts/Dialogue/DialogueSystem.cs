@@ -295,6 +295,22 @@ public class DialogueSystem : MonoBehaviour
             InventoryManager.Instance.AddItem(line.acquireItemName.Trim());
         }
 
+        // ===== 3-1) 조사기록 실시간 갱신 전환 (#07 구간) =====
+        // off면 이후 조사 내용이 수첩에 즉시 올라가지 않고 보류함에 쌓이고,
+        // on이면 보류해둔 것을 한꺼번에 수첩에 반영한다.
+        if (!string.IsNullOrWhiteSpace(line.noteRealtime) && NoteManager.Instance != null)
+        {
+            string mode = line.noteRealtime.Trim().ToLowerInvariant();
+            if (mode == "off")
+            {
+                NoteManager.Instance.SetRealtimeUpdate(false);
+            }
+            else if (mode == "on")
+            {
+                NoteManager.Instance.FlushDeferredEntries();
+            }
+        }
+
         // ===== 4) 세이브포인트 =====
         // 시나리오 문서의 {세이브포인트}에 해당하는 줄. 여기서만 저장이 허용된다.
         if (line.isSavePoint && SavePointManager.Instance != null)
@@ -790,6 +806,9 @@ public class DialogueSystem : MonoBehaviour
             // (SavePointManager.cs 참고).
             line.isSavePoint = GetField(data[i], "IsSavePoint").ToLower() == "true";
             line.savePointId = GetField(data[i], "SavePointId");
+
+            // 조사기록 실시간 갱신 켜기/끄기 (#07 타임어택 구간에서 끈다)
+            line.noteRealtime = GetField(data[i], "NoteRealtime");
 
             // 선택지 없이 바로 다음 CSV로 넘어가야 하는 장면을 위한 칸 (DialogueData.autoNextScenarioCsv
             // 참고). 보통 CSV 맨 마지막 대사 행에만 채워두면 된다.

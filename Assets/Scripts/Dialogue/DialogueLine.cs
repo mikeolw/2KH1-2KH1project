@@ -29,6 +29,16 @@ public class DialogueLine
     // 세이브 슬롯 목록에 "#01 사무실"처럼 표시된다. 비워두면 CSV 파일 이름이 대신 쓰인다.
     public string savePointId;
 
+    // 조사기록(수첩)을 실시간으로 갱신할지 여부. CSV의 NoteRealtime 칸.
+    //   off  : 이 줄부터 조사 내용이 수첩에 즉시 올라가지 않고 보류함에 쌓인다.
+    //   on   : 보류해둔 것을 한꺼번에 수첩에 올리고 다시 실시간 갱신으로 돌아간다.
+    //   (빈칸) : 아무것도 하지 않음 = 지금 상태 유지
+    //
+    // #07(회사 잠입 조사) 구간은 타임어택이 걸려 있어서, 조사할 때마다 수첩이 갱신되면
+    // 플레이어가 수첩만 들여다보게 되어 긴장감이 떨어진다. 그래서 그 구간 시작 줄에 off,
+    // 구간이 끝나는 줄에 on을 적어둔다 (NoteManager.cs 상단 주석 참고).
+    public string noteRealtime;
+
     [Header("배경 / 캐릭터 스탠딩 (StageController.cs가 처리)")]
     // ===== 왜 Sprite가 아니라 "파일 이름 문자열"인가? =====
     // 그림은 Assets/Resources/Illusts/ 아래에 있는데 이 폴더는 git으로 공유되지 않는다
