@@ -23,6 +23,7 @@
 *.csproj
 *.unityproj
 *.sln
+*.slnx
 *.suo
 *.tmp
 *.user
@@ -46,6 +47,21 @@ Thumbs.db
 # ===========
 scenario_sample.csv
 .git/
+
+# =============== 문서 / 개인 파일 (GitHub에는 순수 코드만) ===============
+# 인수인계·설계·개인 메모 등 모든 문서는 저장소에 올리지 않는다.
+# 팀 공유가 필요하면 GitHub Issue나 별도 채널(드라이브 등)로 공유한다.
+# CLAUDE.md 같은 Claude 전용 규칙 파일도 개인이 쓰는 것이므로 여기서 제외한다.
+/*.md
 DEV_ENVIRONMENT.md
 SYSTEM_DESIGN.md
+
+# 유니티가 만든 프로젝트가 아니라, Visual Studio가 .sln/.csproj를 마이그레이션하면서
+# 남기는 보고서. .sln/.csproj가 이미 무시 대상이므로 이 파일도 올리지 않는다.
+UpgradeLog*.htm
+
+# =============== 드라이브로 따로 공유하는 리소스 ===============
+# 그림·소리·CSV는 gitignore하고 구글 드라이브로 주고받는다 (CLAUDE.md 참고).
+# 폴더 자체의 .meta도 함께 제외해야 팀원 PC에서 orphan meta 경고가 안 뜬다.
 Assets/Resources/
+Assets/Resources.meta

@@ -15,9 +15,29 @@ public class DialogueSystem : MonoBehaviour
     public GameObject choiceButtonPrefab;
     public Transform choiceContainer;
 
+    [Header("대화창 꾸미기")]
+    [Tooltip("대화창 전체(DialoguePanel). 비워두면 씬에서 이름으로 찾는다.")]
+    public GameObject dialoguePanel;
+    [Tooltip("화자 이름을 감싸는 상자. 이름이 없는 지문일 때 통째로 숨긴다. 없어도 동작한다.")]
+    public GameObject speakerNameBox;
+    [Tooltip("게임 시작 시 대화창 모양(색/여백/글자 크기)을 코드에서 다듬을지 여부.")]
+    public bool autoStyleDialogueBox = true;
+
+    // 대사가 아직 남아 있음을 알려주는 작은 삼각형(▼). 코드로 만들어 붙인다.
+    private TMP_Text continueIndicator;
+
     [Header("프로토타입 테스트용 대사 데이터")]
     public DialogueData currentDialogue;
     private int lineIndex = 0;
+
+    // 지금 진행 중인 CSV 파일 이름(확장자 제외). 세이브/로드에서 "어디까지 봤는지"를
+    // 기록하고 복원하는 데 쓴다 (SavePointManager.cs 참고).
+    private string currentScenarioCsv = "";
+    public string CurrentScenarioCsv => currentScenarioCsv;
+
+    // 지금 몇 번째 줄까지 진행했는지. lineIndex는 "다음에 보여줄 줄"을 가리키므로,
+    // 이어하기를 할 때 이 값을 그대로 lineIndex에 넣으면 저장 시점의 다음 줄부터 이어진다.
+    public int CurrentLineIndex => lineIndex;
 
     // UIManager.cs/MinigameController.cs와 동일한 싱글톤 패턴. InvestigationController가
     // "Talk" 타입 조사 오브젝트를 처리할 때 기존 대사창(speakerText/sentenceText)을
@@ -55,14 +75,242 @@ public class DialogueSystem : MonoBehaviour
     // 암전 코루틴이 도는 동안 스페이스/클릭으로 대사를 건너뛰지 못하게 막는 플래그.
     private bool isFading;
 
+    // =================================================================================
+    // 텍스트 타이핑 연출 / 자동 진행 (환경설정의 "텍스트 속도", "자동 진행"과 연결)
+    // =================================================================================
+    // ===== 동작 흐름 =====
+    //   1) 대사 한 줄이 표시되면 TypeSentence 코루틴이 글자를 하나씩 늘려가며 찍는다.
+    //      찍는 동안 말하는 캐릭터의 스탠딩은 입을 뻐끔거린다(StageController.SetTalking).
+    //   2) 타이핑 도중에 플레이어가 클릭/스페이스를 누르면 "다음 줄로 넘어가는" 게 아니라
+    //      "지금 줄을 즉시 전부 표시"한다. (미연시의 표준 동작)
+    //   3) 다 찍힌 뒤 다시 누르면 그때 다음 줄로 넘어간다.
+    //   4) 환경설정에서 자동 진행이 켜져 있으면, 다 찍힌 뒤 잠시 기다렸다가 알아서 넘어간다.
+    //
+    // 속도와 자동 진행 여부는 SettingsManager.Current에서 매번 읽어오므로, 설정 화면에서
+    // 값을 바꾸면 다음 대사부터 바로 반영된다.
+
+    // 지금 글자를 찍고 있는 중인지. Update()가 "즉시 완성"과 "다음 줄" 중 뭘 할지 판단하는 기준.
+    private bool isTyping;
+
+    // 돌아가고 있는 타이핑 코루틴. 새 줄을 표시할 때 이전 것을 확실히 멈추기 위해 들고 있는다.
+    private Coroutine typingRoutine;
+
+    // 돌아가고 있는 자동 진행 대기 코루틴. 플레이어가 수동으로 넘기면 취소해야 한다.
+    private Coroutine autoAdvanceRoutine;
+
+    // 지금 화면에 찍고 있는 대사의 "완성된 전체 문장". 타이핑을 건너뛸 때 이걸 통째로 넣는다.
+    private string currentFullSentence = "";
+
+    // 지금 표시 중인 줄. 자동 진행/립싱크 처리에 화자 정보가 필요해서 들고 있는다.
+    private DialogueLine currentLine;
+
     private void Awake()
     {
         if (Instance == null) Instance = this;
         else Destroy(gameObject);
     }
 
+    // =================================================================================
+    // 대화창 모양 다듬기
+    // =================================================================================
+    // 씬에 만들어져 있는 대화창은 프로토타입용이라 글자가 창을 넘치고 여백도 없었다.
+    // 씬 파일을 직접 고치면 팀원끼리 충돌이 잦으므로, 게임이 시작될 때 코드에서 모양을
+    // 잡아준다. 인스펙터에서 autoStyleDialogueBox를 끄면 씬에 만들어둔 모양이 그대로 쓰인다.
+    //
+    // 여기서 하는 일:
+    //   - 대화창 배경을 반투명한 짙은 남색으로 (선화 일러스트 위에서 글자가 잘 읽히게)
+    //   - 글자에 안쪽 여백을 줘서 창 테두리에 붙지 않게
+    //   - 넘치는 글자는 다음 쪽으로 넘기도록 설정 (StartTyping의 쪽 나누기와 짝을 이룬다)
+    //   - 화자 이름을 굵게, 살짝 크게, 강조색으로
+    //   - 오른쪽 아래에 "계속" 표시(▼)를 붙인다
+    // 대화창 크기 기준값. 캔버스가 1440x1080이라는 전제로 잡은 값이다.
+    private const float DialogueBoxHeight = 300f;   // 대화창 전체 높이
+    private const float DialogueSideMargin = 60f;   // 좌우 여백
+    private const float DialogueBottomMargin = 40f; // 아래 여백
+    private const float SpeakerBoxHeight = 56f;     // 이름 칸 높이
+    private const float SentenceFontSize = 34f;     // 대사 글자 크기
+    private const float SpeakerFontSize = 30f;      // 이름 글자 크기
+
+    private void StyleDialogueBox()
+    {
+        if (!autoStyleDialogueBox) return;
+
+        // 대화창 찾기
+        if (dialoguePanel == null && sentenceText != null)
+        {
+            var t = sentenceText.transform.parent;
+            if (t != null) dialoguePanel = t.gameObject;
+        }
+        if (dialoguePanel == null) return;
+
+        // ----- 대화창 전체 크기/위치 -----
+        // 씬에 만들어져 있던 크기가 제각각이라 글자가 넘치거나 잘렸다. 화면 아래쪽에
+        // 일정한 크기로 고정한다.
+        var panelRect = dialoguePanel.GetComponent<RectTransform>();
+        if (panelRect != null)
+        {
+            panelRect.anchorMin = new Vector2(0f, 0f);
+            panelRect.anchorMax = new Vector2(1f, 0f);
+            panelRect.pivot = new Vector2(0.5f, 0f);
+            panelRect.offsetMin = new Vector2(DialogueSideMargin, DialogueBottomMargin);
+            panelRect.offsetMax = new Vector2(-DialogueSideMargin, DialogueBottomMargin + DialogueBoxHeight);
+        }
+
+        // ----- 대화창 배경 (검은색) -----
+        var bg = dialoguePanel.GetComponent<UnityEngine.UI.Image>();
+        if (bg != null)
+        {
+            // 선화(흰 바탕 + 검은 선) 위에 흰 글자를 올려야 하므로 검은 판을 깐다.
+            bg.color = new Color(0f, 0f, 0f, 0.86f);
+        }
+
+        // ----- 화자 이름 칸 -----
+        // 대화창 왼쪽 위에 얹는다. 이름이 없는 지문일 때는 통째로 숨긴다.
+        if (speakerText != null)
+        {
+            var nameRect = speakerText.GetComponent<RectTransform>();
+            if (nameRect != null && speakerText.transform.parent == dialoguePanel.transform)
+            {
+                nameRect.anchorMin = new Vector2(0f, 1f);
+                nameRect.anchorMax = new Vector2(0f, 1f);
+                nameRect.pivot = new Vector2(0f, 1f);
+                nameRect.anchoredPosition = new Vector2(30f, -14f);
+                nameRect.sizeDelta = new Vector2(400f, SpeakerBoxHeight);
+            }
+
+            speakerText.fontStyle = TMPro.FontStyles.Bold;
+            speakerText.fontSize = SpeakerFontSize;
+            speakerText.color = new Color(1f, 0.86f, 0.45f);   // 옅은 금색 - 대사와 구분되게
+            speakerText.alignment = TMPro.TextAlignmentOptions.Left;
+            speakerText.margin = Vector4.zero;
+            speakerText.raycastTarget = false;
+
+            // 이름 칸을 감싸는 상자를 못 받았으면 이름 텍스트 자체를 상자로 삼는다.
+            if (speakerNameBox == null) speakerNameBox = speakerText.gameObject;
+        }
+
+        // ----- 대사 글자 -----
+        // 이름 칸 아래부터 대화창 바닥까지를 전부 쓴다.
+        if (sentenceText != null)
+        {
+            var textRect = sentenceText.GetComponent<RectTransform>();
+            if (textRect != null && sentenceText.transform.parent == dialoguePanel.transform)
+            {
+                textRect.anchorMin = Vector2.zero;
+                textRect.anchorMax = Vector2.one;
+                textRect.pivot = new Vector2(0.5f, 0.5f);
+                // 위쪽은 이름 칸만큼 비우고, 오른쪽은 "계속" 표시(▼) 자리를 남긴다.
+                textRect.offsetMin = new Vector2(30f, 24f);
+                textRect.offsetMax = new Vector2(-52f, -(SpeakerBoxHeight + 10f));
+            }
+
+            // 넘치면 다음 쪽으로 (창 밖으로 삐져나가지 않게 하는 핵심 설정)
+            sentenceText.overflowMode = TMPro.TextOverflowModes.Page;
+
+            sentenceText.fontSize = SentenceFontSize;
+            sentenceText.alignment = TMPro.TextAlignmentOptions.TopLeft;
+            sentenceText.color = new Color(0.96f, 0.96f, 0.94f);
+            sentenceText.margin = Vector4.zero;   // 여백은 위 offset으로 이미 줬다
+            sentenceText.lineSpacing = 14f;       // 한글은 줄을 조금 띄워야 읽기 편하다
+            sentenceText.raycastTarget = false;
+
+            // 글자 크기를 자동으로 줄이는 기능은 꺼둔다.
+            // 켜져 있으면 긴 대사일 때 글씨가 제멋대로 작아져서 줄마다 크기가 달라 보인다.
+            // (길이 문제는 쪽 나누기로 해결한다)
+            sentenceText.enableAutoSizing = false;
+        }
+
+        CreateContinueIndicator();
+        FixFadeOverlayOrder();
+    }
+
+    // ===== 페이드(암전) 연출이 UI까지 가리던 문제 =====
+    // 암전용 검은 판(FadeOverlay)이 대화창이나 퀵바보다 앞에 그려져 있으면, 장면이 어두워질 때
+    // 대화창과 버튼까지 같이 사라져 버린다. 암전은 "배경과 캐릭터"에만 걸려야 하므로,
+    // 검은 판을 대화창 바로 뒤로 옮겨서 배경/스탠딩만 덮게 한다.
+    private void FixFadeOverlayOrder()
+    {
+        if (fadeCanvasGroup == null) return;
+
+        Transform overlay = fadeCanvasGroup.transform;
+
+        // 무대(배경 + 캐릭터 스탠딩)의 맨 마지막 자식 바로 다음 자리에 놓는다.
+        // 그러면 배경과 캐릭터는 덮지만, 그 뒤에 있는 대화창·퀵바·팝업은 덮지 않는다.
+        var stage = StageController.Instance;
+        bool sameParentAsStage = stage != null
+                                 && stage.backgroundImage != null
+                                 && overlay.parent == stage.backgroundImage.transform.parent;
+
+        if (sameParentAsStage)
+        {
+            int stageTop = stage.GetTopStageSiblingIndex();
+            if (stageTop >= 0)
+            {
+                overlay.SetSiblingIndex(stageTop + 1);
+                return;
+            }
+        }
+
+        // 무대를 못 찾으면 차선책: 대화창 바로 앞자리(= 대화창보다 뒤)에 둔다.
+        if (dialoguePanel != null && overlay.parent == dialoguePanel.transform.parent)
+        {
+            overlay.SetSiblingIndex(dialoguePanel.transform.GetSiblingIndex());
+        }
+    }
+
+    // 대사가 더 남아 있음을 알려주는 ▼ 표시를 대화창 오른쪽 아래에 만든다.
+    private void CreateContinueIndicator()
+    {
+        if (dialoguePanel == null || continueIndicator != null) return;
+
+        var go = new GameObject("ContinueIndicator", typeof(RectTransform));
+        go.transform.SetParent(dialoguePanel.transform, false);
+
+        var rt = go.GetComponent<RectTransform>();
+        rt.anchorMin = new Vector2(1f, 0f);
+        rt.anchorMax = new Vector2(1f, 0f);
+        rt.pivot = new Vector2(1f, 0f);
+        rt.anchoredPosition = new Vector2(-18f, 12f);
+        rt.sizeDelta = new Vector2(30f, 30f);
+
+        continueIndicator = go.AddComponent<TextMeshProUGUI>();
+        continueIndicator.text = "▼";
+        continueIndicator.fontSize = 22;
+        continueIndicator.alignment = TMPro.TextAlignmentOptions.Center;
+        continueIndicator.color = new Color(1f, 0.86f, 0.45f, 0.9f);
+        continueIndicator.raycastTarget = false;
+        continueIndicator.gameObject.SetActive(false);
+    }
+
+    // ▼ 표시를 깜빡이게 한다. 대사가 다 찍혔을 때만 보인다.
+    // ▼ 표시가 지금 켜져 있는지. 매 프레임 SetActive를 부르지 않기 위해 기억해둔다.
+    // (SetActive는 값이 같아도 내부적으로 계층을 훑는 비용이 있어서, 상태가 바뀔 때만 부른다)
+    private bool continueIndicatorShown;
+
+    private void Update_ContinueIndicator()
+    {
+        if (continueIndicator == null) return;
+
+        bool show = !isTyping && !IsBlockedByOtherUI();
+
+        if (show != continueIndicatorShown)
+        {
+            continueIndicatorShown = show;
+            continueIndicator.gameObject.SetActive(show);
+        }
+
+        if (!show) return;
+
+        // 0.6초 주기로 부드럽게 깜빡인다.
+        float a = 0.35f + 0.55f * Mathf.Abs(Mathf.Sin(Time.time * Mathf.PI / 0.6f));
+        var c = continueIndicator.color;
+        continueIndicator.color = new Color(c.r, c.g, c.b, a);
+    }
+
     void Start()
     {
+        StyleDialogueBox();
+
         sfxSource = GetComponent<AudioSource>();
         if (sfxSource == null) sfxSource = gameObject.AddComponent<AudioSource>();
         sfxSource.playOnAwake = false;
@@ -71,8 +319,34 @@ public class DialogueSystem : MonoBehaviour
         bgmSource.playOnAwake = false;
         bgmSource.loop = true;
 
-        // 게임 시작 시 scenario_01.csv(프롤로그)부터 자동 로드
-        LoadDialogueFromCSV("scenario_01");
+        // 환경설정의 효과음/배경음악 볼륨 슬라이더가 실제로 이 소리에 반영되도록 등록한다.
+        // (예전에는 등록하는 곳이 없어서 슬라이더를 움직여도 아무 변화가 없었다 - AudioManager.cs 참고)
+        AudioManager.RegisterSafe(sfxSource, AudioManager.Channel.Sfx);
+        AudioManager.RegisterSafe(bgmSource, AudioManager.Channel.Bgm);
+
+        // ===== 이어하기 vs 새 게임 =====
+        // 세이브 슬롯을 골라 들어온 경우(SaveManager.ActiveSave가 있는 경우)에는 저장된
+        // 지점부터 이어서 재생하고, 그렇지 않으면(타이틀의 "시작하기") 프롤로그부터 시작한다.
+        // 예전에는 무조건 scenario_01부터 시작해서 세이브를 불러와도 처음으로 돌아가버렸다.
+        var activeSave = SaveManager.Instance != null ? SaveManager.Instance.ActiveSave : null;
+
+        if (activeSave != null && !string.IsNullOrEmpty(activeSave.scenarioCsv))
+        {
+            // 가방/조사기록/플레이 시간 등도 함께 되돌린다.
+            if (SavePointManager.Instance != null) SavePointManager.Instance.RestoreFrom(activeSave);
+
+            LoadDialogueFromCSV(activeSave.scenarioCsv, activeSave.lineIndex);
+        }
+        else
+        {
+            // 새 게임: 이전 플레이의 흔적(가방, 조사기록, 엔딩 상태)을 깨끗이 비운다.
+            if (InventoryManager.Instance != null) InventoryManager.Instance.ClearAll();
+            if (NoteManager.Instance != null) NoteManager.Instance.RestoreEntries(null);
+            if (SavePointManager.Instance != null) SavePointManager.Instance.ResetForNewGame();
+            if (GameFlowManager.Instance != null) GameFlowManager.Instance.ResetForNewGame();
+
+            LoadDialogueFromCSV("scenario_01");
+        }
     }
 
     //void Start()
@@ -85,12 +359,22 @@ public class DialogueSystem : MonoBehaviour
 
     public void StartDialogue(DialogueData data)
     {
+        StartDialogue(data, 0);
+    }
+
+    // startLineIndex부터 대사를 재생한다. 세이브를 불러올 때 저장된 줄부터 이어가기 위해 쓴다.
+    public void StartDialogue(DialogueData data, int startLineIndex)
+    {
         // BGM 재생/정지는 줄 단위로 ShowNextSentence()에서 처리한다 (필드 선언부의
         // "CSV의 BGM 칸 사용법" 주석 참고). 여기서 따로 끊지 않아도 새 CSV의 첫 줄이
         // 비어있으면 알아서 끊기고, 같은 곡 이름이면 알아서 이어진다.
         currentDialogue = data;
-        lineIndex = 0;
-        choicePanel.SetActive(false);
+
+        // 저장된 줄 번호가 CSV 길이를 넘는 경우(대사를 고쳐서 줄 수가 줄어든 경우 등)에
+        // 대비해 범위를 잘라준다. 안 그러면 바로 "대사 세트 종료"로 튕긴다.
+        lineIndex = Mathf.Clamp(startLineIndex, 0, data.lines != null ? data.lines.Count : 0);
+
+        if (choicePanel != null) choicePanel.SetActive(false);
         ShowNextSentence();
     }
 
@@ -112,6 +396,15 @@ public class DialogueSystem : MonoBehaviour
         // 실제로 호출되진 않지만, 나중에 진짜 실패 조건이 생겨도 이 호출부는 그대로 두면 된다.
         if (line.isMinigame)
         {
+            // 미니게임 담당이 씬에 없으면(팀원이 아직 만들지 않은 구간 등) 게임이 멈추는
+            // 대신 그냥 다음 대사로 넘어간다. 조사/추리 쪽과 같은 방침이다.
+            if (MinigameController.Instance == null)
+            {
+                Debug.LogWarning("[DialogueSystem] MinigameController가 없어 미니게임을 건너뜁니다.");
+                ShowNextSentence();
+                return;
+            }
+
             MinigameController.Instance.StartMinigame(
                 line.minigameLabel,
                 onSuccessCallback: () => ShowNextSentence(),
@@ -125,9 +418,35 @@ public class DialogueSystem : MonoBehaviour
         // ShowNextSentence()가 다시 호출되어 CSV의 다음 줄부터 이어간다.
         if (line.isInvestigation)
         {
+            if (InvestigationController.Instance == null)
+            {
+                Debug.LogWarning("[DialogueSystem] InvestigationController가 없어 조사를 건너뜁니다.");
+                ShowNextSentence();
+                return;
+            }
+
             InvestigationController.Instance.Enter(
                 line.investigationId,
                 onExit: () => ShowNextSentence()
+            );
+            return;
+        }
+
+        // LineType이 "Deduction"인 줄은 대사 대신 추리 문제를 띄운다 (DeductionController.cs
+        // 상단 주석 참고). 미니게임/조사와 완전히 같은 콜백 구조이고, 문제를 전부 맞히면
+        // ShowNextSentence()로 이어진다. 틀리면 DeductionController가 직접 엔딩으로 넘긴다.
+        if (line.isDeduction)
+        {
+            if (DeductionController.Instance == null)
+            {
+                Debug.LogWarning("[DialogueSystem] DeductionController가 없어 추리를 건너뜁니다.");
+                ShowNextSentence();
+                return;
+            }
+
+            DeductionController.Instance.Enter(
+                line.deductionId,
+                onSuccess: () => ShowNextSentence()
             );
             return;
         }
@@ -183,11 +502,273 @@ public class DialogueSystem : MonoBehaviour
     // 통일해서 다음 줄로 넘어가면 SFX도 확실히 끊기도록 고쳤다.)
     private void DisplayLine(DialogueLine line)
     {
-        speakerText.text = line.lineType == LineType.Narration ? "" : line.speaker;
-        sentenceText.text = line.sentence;
+        currentLine = line;
 
+        SetSpeakerName(line.lineType == LineType.Narration ? "" : line.speaker);
+
+        // ===== 1) 배경 / 캐릭터 스탠딩 갱신 =====
+        // 값이 비어 있는 칸은 StageController가 "이전 상태 유지"로 처리하므로,
+        // 여기서 굳이 빈 값인지 검사할 필요가 없다.
+        if (StageController.Instance != null)
+        {
+            StageController.Instance.ApplyBackground(line.backgroundName);
+            StageController.Instance.ApplyStandings(line.standingNames, line.standingPositions);
+        }
+
+        // ===== 2) 사운드 =====
         ApplyLineAudio(sfxSource, line.sfxToPlay);
         ApplyLineAudio(bgmSource, line.bgmToPlay);
+
+        // ===== 3) 아이템 획득 =====
+        // CSV의 Item 칸에 아이템 id가 적혀 있으면 이 줄이 표시되는 순간 가방에 들어간다.
+        // (조사 화면에서 오브젝트를 클릭해 얻는 것과 별개로, 대사 흐름 중에 자동으로
+        //  얻어야 하는 아이템을 위한 통로다. 예: 이야기상 그냥 건네받는 물건)
+        if (!string.IsNullOrWhiteSpace(line.acquireItemName) && InventoryManager.Instance != null)
+        {
+            InventoryManager.Instance.AddItem(line.acquireItemName.Trim());
+        }
+
+        // ===== 3-1) 조사기록 실시간 갱신 전환 (#07 구간) =====
+        // off면 이후 조사 내용이 수첩에 즉시 올라가지 않고 보류함에 쌓이고,
+        // on이면 보류해둔 것을 한꺼번에 수첩에 반영한다.
+        if (!string.IsNullOrWhiteSpace(line.noteRealtime) && NoteManager.Instance != null)
+        {
+            string mode = line.noteRealtime.Trim().ToLowerInvariant();
+            if (mode == "off")
+            {
+                NoteManager.Instance.SetRealtimeUpdate(false);
+            }
+            else if (mode == "on")
+            {
+                NoteManager.Instance.FlushDeferredEntries();
+            }
+        }
+
+        // ===== 4) 세이브포인트 =====
+        // 시나리오 문서의 {세이브포인트}에 해당하는 줄. 여기서만 저장이 허용된다.
+        if (line.isSavePoint && SavePointManager.Instance != null)
+        {
+            SavePointManager.Instance.ReachSavePoint(line.savePointId, currentScenarioCsv, lineIndex);
+        }
+
+        // ===== 5) 대사 텍스트 타이핑 시작 =====
+        StartTyping(line.sentence);
+    }
+
+    // ---------------------------------------------------------------------------------
+    // 텍스트 타이핑 연출
+    // ---------------------------------------------------------------------------------
+
+    // ===== 긴 대사는 여러 쪽으로 나눠 보여준다 =====
+    // 대사 한 줄이 대화창보다 길면 글자가 창 밖으로 삐져나가 읽을 수 없게 된다.
+    // TextMeshPro의 "Page" 넘침 모드를 쓰면 창에 들어가는 만큼만 보여주고 나머지는
+    // 다음 쪽으로 넘겨준다. 플레이어가 클릭하면 다음 쪽으로 넘어가고, 마지막 쪽까지
+    // 다 읽으면 그때 다음 대사 줄로 넘어간다. (미연시에서 흔히 쓰는 방식)
+    private int currentPage;    // 지금 보여주는 쪽 번호 (TMP는 1부터 센다)
+    private int totalPages;     // 이 대사가 총 몇 쪽인지
+
+    // 한 줄을 화면에 찍기 시작한다.
+    private void StartTyping(string sentence)
+    {
+        // 이전 줄의 타이핑/자동진행이 남아있으면 확실히 정리한다.
+        StopTypingRoutine();
+        StopAutoAdvanceRoutine();
+
+        currentFullSentence = sentence ?? "";
+
+        // 글자를 전부 넣어두고, 창에 들어가는 만큼씩 쪽을 나눈다.
+        sentenceText.text = currentFullSentence;
+        sentenceText.overflowMode = TMPro.TextOverflowModes.Page;
+        sentenceText.maxVisibleCharacters = 0;
+
+        // 쪽 수를 세려면 한 번 갱신해야 한다.
+        sentenceText.ForceMeshUpdate();
+        totalPages = Mathf.Max(1, sentenceText.textInfo.pageCount);
+
+        currentPage = 1;
+        ShowPage(currentPage);
+    }
+
+    // 지정한 쪽을 타이핑해서 보여준다.
+    private void ShowPage(int page)
+    {
+        StopTypingRoutine();
+
+        sentenceText.pageToDisplay = page;
+
+        bool instant = SettingsManager.Instance != null && SettingsManager.Instance.IsInstantText;
+
+        if (instant || string.IsNullOrEmpty(currentFullSentence))
+        {
+            // 즉시 표시: 이 쪽의 마지막 글자까지 한 번에 보여준다.
+            sentenceText.maxVisibleCharacters = GetPageLastCharIndex(page) + 1;
+            isTyping = false;
+            OnPageFullyShown();
+            return;
+        }
+
+        typingRoutine = StartCoroutine(TypePage(page));
+    }
+
+    // 한 쪽 분량의 글자를 하나씩 찍는 코루틴.
+    //
+    // ===== maxVisibleCharacters를 쓰는 이유 =====
+    // sentenceText.text에 문자열을 조금씩 잘라 넣는 방식(text = s.Substring(0, i))은
+    // 글자를 넣을 때마다 TextMeshPro가 줄바꿈을 다시 계산해서, 문장 끝 단어가 다음 줄로
+    // 내려가는 순간 이미 찍힌 글자들이 출렁이며 움직인다. 대신 전체 문장을 한 번에 넣어두고
+    // "몇 글자까지 보여줄지"(maxVisibleCharacters)만 늘리면 레이아웃이 처음부터 확정되어
+    // 글자가 제자리에서 하나씩 나타난다.
+    //
+    // maxVisibleCharacters는 "글 전체"를 기준으로 세므로, 2쪽을 찍을 때는 1쪽의 글자 수부터
+    // 이어서 세어야 한다. 그래서 이 쪽의 첫 글자 번호와 마지막 글자 번호를 구해서 쓴다.
+    private IEnumerator TypePage(int page)
+    {
+        isTyping = true;
+
+        int firstChar = GetPageFirstCharIndex(page);
+        int lastChar = GetPageLastCharIndex(page);
+
+        sentenceText.maxVisibleCharacters = firstChar;
+
+        // 말하는 캐릭터의 입을 움직이기 시작한다.
+        SetTalkingAnimation(true);
+
+        float charsPerSecond = SettingsManager.Instance != null
+            ? SettingsManager.Instance.TextSpeedCharsPerSecond
+            : 40f;
+        float secondsPerChar = 1f / Mathf.Max(1f, charsPerSecond);
+
+        float timer = 0f;
+        int visible = firstChar;
+
+        while (visible <= lastChar)
+        {
+            timer += Time.deltaTime;
+
+            // 한 프레임에 여러 글자가 찍혀야 할 만큼 빠른 설정일 수도 있으므로 while로 처리한다.
+            // (예: 80자/초인데 프레임이 30fps면 한 프레임에 약 2~3글자씩 찍어야 한다.)
+            while (timer >= secondsPerChar && visible <= lastChar)
+            {
+                timer -= secondsPerChar;
+                visible++;
+            }
+
+            sentenceText.maxVisibleCharacters = visible;
+            yield return null;
+        }
+
+        isTyping = false;
+        typingRoutine = null;
+        OnPageFullyShown();
+    }
+
+    // 이 쪽의 첫 글자가 글 전체에서 몇 번째인지.
+    private int GetPageFirstCharIndex(int page)
+    {
+        var info = sentenceText.textInfo;
+        if (info == null || info.pageInfo == null || page - 1 < 0 || page - 1 >= info.pageInfo.Length) return 0;
+        return info.pageInfo[page - 1].firstCharacterIndex;
+    }
+
+    // 이 쪽의 마지막 글자가 글 전체에서 몇 번째인지.
+    private int GetPageLastCharIndex(int page)
+    {
+        var info = sentenceText.textInfo;
+        if (info == null || info.pageInfo == null || page - 1 < 0 || page - 1 >= info.pageInfo.Length)
+        {
+            return Mathf.Max(0, (info != null ? info.characterCount : 1) - 1);
+        }
+        return info.pageInfo[page - 1].lastCharacterIndex;
+    }
+
+    // 타이핑 도중 클릭/스페이스를 눌렀을 때: 다음으로 넘어가지 않고 지금 쪽을 즉시 완성한다.
+    private void CompleteTypingImmediately()
+    {
+        StopTypingRoutine();
+
+        sentenceText.maxVisibleCharacters = GetPageLastCharIndex(currentPage) + 1;
+        isTyping = false;
+
+        OnPageFullyShown();
+    }
+
+    // 아직 보여줄 쪽이 남아 있는지.
+    private bool HasMorePages => currentPage < totalPages;
+
+    // 다음 쪽으로 넘긴다.
+    private void ShowNextPage()
+    {
+        currentPage++;
+        ShowPage(currentPage);
+    }
+
+    // 한 쪽이 화면에 완전히 표시되었을 때 공통으로 할 일.
+    private void OnPageFullyShown()
+    {
+        // 말이 끝났으므로 입을 다문다.
+        // (여러 쪽짜리 대사는 쪽이 넘어갈 때마다 잠깐 입을 다물었다가 다시 움직인다)
+        SetTalkingAnimation(false);
+
+        // 자동 진행이 켜져 있으면 잠시 뒤 다음 쪽/다음 줄로 넘어가도록 예약한다.
+        if (SettingsManager.Instance != null && SettingsManager.Instance.Current.autoAdvance)
+        {
+            StopAutoAdvanceRoutine();
+            autoAdvanceRoutine = StartCoroutine(AutoAdvanceAfterLine());
+        }
+    }
+
+    // 자동 진행: 대사를 다 읽을 만한 시간을 기다렸다가 스스로 다음 줄로 넘어간다.
+    private IEnumerator AutoAdvanceAfterLine()
+    {
+        // 기본 대기시간 + 글자 수에 비례한 읽기 시간.
+        // 짧은 대사("응!")와 긴 대사가 똑같은 시간만 머무르면 짧은 건 답답하고 긴 건 놓치게 되므로,
+        // 글자 수에 비례한 시간을 더해준다. (한글 기준 초당 약 12자를 읽는다고 가정)
+        float baseDelay = SettingsManager.Instance != null
+            ? SettingsManager.Instance.Current.autoAdvanceDelay
+            : 1.2f;
+        float readingTime = currentFullSentence.Length / 12f;
+
+        yield return new WaitForSeconds(baseDelay + readingTime);
+
+        autoAdvanceRoutine = null;
+
+        // 기다리는 사이에 선택지가 뜨거나 팝업이 열렸을 수 있으므로 다시 확인한다.
+        if (IsBlockedByOtherUI()) yield break;
+
+        // 아직 읽을 쪽이 남아 있으면 다음 쪽으로, 다 읽었으면 다음 대사 줄로.
+        if (HasMorePages) ShowNextPage();
+        else ShowNextSentence();
+    }
+
+    // 말하는 캐릭터의 입 뻐끔 연출을 켜고 끈다.
+    // 나레이션(화자 없음)일 때는 아무도 입을 움직이지 않는다.
+    private void SetTalkingAnimation(bool talking)
+    {
+        if (StageController.Instance == null || currentLine == null) return;
+
+        bool isNarration = currentLine.lineType == LineType.Narration;
+        string speaker = isNarration ? "" : currentLine.speaker;
+
+        StageController.Instance.SetTalking(speaker, currentLine.talkerSlot, talking && !isNarration);
+    }
+
+    private void StopTypingRoutine()
+    {
+        if (typingRoutine != null)
+        {
+            StopCoroutine(typingRoutine);
+            typingRoutine = null;
+        }
+        isTyping = false;
+    }
+
+    private void StopAutoAdvanceRoutine()
+    {
+        if (autoAdvanceRoutine != null)
+        {
+            StopCoroutine(autoAdvanceRoutine);
+            autoAdvanceRoutine = null;
+        }
     }
 
     // Talk 타입 조사 오브젝트(InvestigatableObject.cs 참고, 예: 회사 동료)가
@@ -199,8 +780,33 @@ public class DialogueSystem : MonoBehaviour
     // 아래 Update()가 IsShowingTalkLine을 보고 분기한다.
     public void ShowInvestigationLine(string speaker, string sentence)
     {
-        speakerText.text = speaker;
-        sentenceText.text = sentence;
+        // 진행 중인 타이핑/자동진행은 확실히 멈춘다. 안 그러면 조사 대사를 보여주는 도중에
+        // 원래 대사의 타이핑 코루틴이 글자 수를 계속 덮어써서 글자가 뒤섞인다.
+        StopTypingRoutine();
+        StopAutoAdvanceRoutine();
+
+        SetSpeakerName(speaker);
+
+        // 조사 대사도 일반 대사와 똑같이 쪽 나누기 + 타이핑을 적용한다.
+        // (조사 설명은 긴 문장이 많아서 쪽 나누기가 특히 중요하다)
+        StartTyping(sentence);
+    }
+
+    // 화자 이름을 굵게 표시한다.
+    // TextMeshPro의 <b> 태그를 쓰지 않고 fontStyle을 쓰는 이유: 태그를 문자열에 섞으면
+    // 이름에 '<'가 들어간 경우 등에 깨질 수 있고, 나중에 이름 칸 디자인을 바꿀 때도
+    // 컴포넌트 속성으로 다루는 편이 다루기 쉽다.
+    private void SetSpeakerName(string speaker)
+    {
+        if (speakerText == null) return;
+
+        speakerText.text = speaker ?? "";
+
+        // 이름이 없는 지문/조사 설명일 때는 이름 칸 자체를 숨겨서 빈 자리가 남지 않게 한다.
+        if (speakerText.transform.parent != null && speakerNameBox != null)
+        {
+            speakerNameBox.SetActive(!string.IsNullOrEmpty(speaker));
+        }
     }
 
     private void ApplyLineAudio(AudioSource source, AudioClip desiredClip)
@@ -257,7 +863,14 @@ public class DialogueSystem : MonoBehaviour
                 if (isEnding)
                 {
                     // 엔딩 분기 처리
-                    GameFlowManager.Instance.TriggerEnding(ending);
+                    if (GameFlowManager.Instance != null)
+                    {
+                        GameFlowManager.Instance.TriggerEnding(ending);
+                    }
+                    else
+                    {
+                        Debug.LogError("[DialogueSystem] GameFlowManager가 없어 엔딩으로 넘어갈 수 없습니다.");
+                    }
                 }
                 else if (next != null)
                 {
@@ -273,16 +886,30 @@ public class DialogueSystem : MonoBehaviour
         }
     }
 
+    // 지금 대사 진행을 막아야 하는 UI(선택지/팝업/미니게임/자료 뷰어)가 떠 있는지 확인한다.
+    // Update()와 자동 진행 코루틴이 똑같은 조건을 봐야 해서 함수로 빼두었다.
+    private bool IsBlockedByOtherUI()
+    {
+        if (choicePanel != null && choicePanel.activeSelf) return true;
+        if (UIManager.Instance != null && UIManager.Instance.IsAnyPanelOpen) return true;
+        if (MinigameController.Instance != null && MinigameController.Instance.IsActive) return true;
+        if (DocumentViewerController.Instance != null && DocumentViewerController.Instance.IsOpen) return true;
+        if (DeductionController.Instance != null && DeductionController.Instance.IsActive) return true;
+        if (SaveSlotDialog.Instance != null && SaveSlotDialog.Instance.IsOpen) return true;
+        return false;
+    }
+
     void Update()
     {
+        // "계속" 표시(▼) 깜빡임은 입력과 무관하게 항상 갱신한다.
+        Update_ContinueIndicator();
+
         // 암전 연출(ShowLineWithFade) 진행 중엔 스페이스/클릭으로 건너뛰지 못하게 막는다.
         if (isFading) return;
 
-        // 선택지 패널이나 UIManager 팝업(조사기록/인벤토리/사진첩/핸드폰/설정)이 열려있을 땐
-        // 스페이스바로도 대사가 넘어가면 안 된다.
-        if (choicePanel.activeSelf) return;
-        if (UIManager.Instance != null && UIManager.Instance.IsAnyPanelOpen) return;
-        if (MinigameController.Instance != null && MinigameController.Instance.IsActive) return;
+        // 선택지 패널이나 UIManager 팝업(조사기록/인벤토리/사진첩/핸드폰/설정), 자료 뷰어가
+        // 열려있을 땐 스페이스바로도 대사가 넘어가면 안 된다.
+        if (IsBlockedByOtherUI()) return;
 
         // 조사 모드 처리: 평소엔 조사 화면의 버튼들(InvestigatableObject)이 클릭을 직접
         // 받으므로 여기서 따로 막을 필요가 없다. 다만 "Talk" 타입 오브젝트(예: 회사 동료)를
@@ -300,9 +927,25 @@ public class DialogueSystem : MonoBehaviour
             return;
         }
 
+        // ===== 타이핑 중이면 "다음 줄"이 아니라 "지금 줄 즉시 완성" =====
+        // 미연시의 표준 동작이다. 글자가 찍히는 도중에 누르면 문장이 통째로 나타나고,
+        // 다 나타난 뒤에 한 번 더 눌러야 다음 줄로 넘어간다.
+        if (isTyping)
+        {
+            if (Input.GetKeyDown(KeyCode.Space) || (Input.GetMouseButtonDown(0) && !IsPointerOverButton()))
+            {
+                CompleteTypingImmediately();
+            }
+            return;
+        }
+
+        // ===== 다 찍힌 뒤 클릭/스페이스 =====
+        // 아직 읽을 쪽이 남아 있으면 다음 쪽으로 넘기고, 다 읽었으면 다음 대사 줄로 간다.
         if (Input.GetKeyDown(KeyCode.Space))
         {
-            ShowNextSentence();
+            StopAutoAdvanceRoutine(); // 손으로 넘겼으면 예약된 자동 진행은 취소
+            if (HasMorePages) ShowNextPage();
+            else ShowNextSentence();
             return;
         }
 
@@ -313,19 +956,31 @@ public class DialogueSystem : MonoBehaviour
         // 클릭"으로도 처리되는 것만 막으면 되므로, Button 컴포넌트가 있는지로 좁혀서 검사한다.
         if (Input.GetMouseButtonDown(0) && !IsPointerOverButton())
         {
-            ShowNextSentence();
+            StopAutoAdvanceRoutine(); // 손으로 넘겼으면 예약된 자동 진행은 취소
+            if (HasMorePages) ShowNextPage();
+            else ShowNextSentence();
         }
     }
+
+    // 클릭 판정에 쓰는 임시 그릇들. 클릭할 때마다 새로 만들면 쓰레기가 계속 쌓이므로
+    // 하나를 만들어두고 재사용한다. (클릭은 자주 일어나므로 티끌이라도 모으지 않는 편이 좋다)
+    private readonly List<RaycastResult> raycastResults = new List<RaycastResult>();
+    private PointerEventData reusablePointerData;
 
     private bool IsPointerOverButton()
     {
         if (EventSystem.current == null) return false;
 
-        var pointerData = new PointerEventData(EventSystem.current) { position = Input.mousePosition };
-        var results = new List<RaycastResult>();
-        EventSystem.current.RaycastAll(pointerData, results);
+        if (reusablePointerData == null)
+        {
+            reusablePointerData = new PointerEventData(EventSystem.current);
+        }
+        reusablePointerData.position = Input.mousePosition;
 
-        foreach (var result in results)
+        raycastResults.Clear();
+        EventSystem.current.RaycastAll(reusablePointerData, raycastResults);
+
+        foreach (var result in raycastResults)
         {
             if (result.gameObject.GetComponentInParent<Button>() != null)
             {
@@ -360,6 +1015,17 @@ public class DialogueSystem : MonoBehaviour
     // 이 칸은 무시되고 선택지 UI가 대신 뜬다.
     public void LoadDialogueFromCSV(string csvFileName)
     {
+        LoadDialogueFromCSV(csvFileName, 0);
+    }
+
+    // startLineIndex부터 재생을 시작하는 버전. 세이브 불러오기에서 쓴다.
+    public void LoadDialogueFromCSV(string csvFileName, int startLineIndex)
+    {
+        // 지금 어떤 CSV를 진행 중인지 기억해둔다. 세이브할 때 "어느 파일 몇 번째 줄에서
+        // 저장했는지"를 남겨야 나중에 정확히 그 지점부터 이어할 수 있기 때문이다
+        // (SavePointManager.cs 참고).
+        currentScenarioCsv = csvFileName;
+
         // Resources/Dialogues/ 폴더 내의 CSV 파일 읽기
         List<Dictionary<string, object>> data = CSVReader.Read("Dialogues/" + csvFileName);
 
@@ -423,6 +1089,18 @@ public class DialogueSystem : MonoBehaviour
                 continue;
             }
 
+            if (string.Equals(lineTypeStr, "Deduction", StringComparison.OrdinalIgnoreCase))
+            {
+                // 추리 문제 자체는 DeductionData.csv에 따로 적혀 있으므로, 여기서는
+                // 어떤 추리 묶음을 띄울지 가리키는 식별자만 읽어오면 된다.
+                var deductionLine = new DialogueLine();
+                deductionLine.isDeduction = true;
+                deductionLine.deductionId = GetField(data[i], "DeductionId");
+
+                currentDialogue.lines.Add(deductionLine);
+                continue;
+            }
+
             if (string.Equals(lineTypeStr, "Investigate", StringComparison.OrdinalIgnoreCase))
             {
                 // 조사 화면은 CSV가 아니라 씬에 직접 배치해두므로, 여기서는 어떤 조사 화면을
@@ -445,6 +1123,25 @@ public class DialogueSystem : MonoBehaviour
             line.sentence = GetField(data[i], "Sentence");
             line.isFadeOut = GetField(data[i], "IsFadeOut").ToLower() == "true";
             line.acquireItemName = GetField(data[i], "Item");
+
+            // ===== 배경 / 캐릭터 스탠딩 (StageController.cs가 처리) =====
+            // 네 칸 모두 비워두면 "이전 줄 상태 그대로 유지"라는 뜻이라, 장면이나 표정이
+            // 바뀌는 줄에만 적으면 된다. 컬럼 자체가 없는 예전 CSV도 GetField가 ""를 돌려주므로
+            // 아무 문제 없이 동작한다.
+            line.backgroundName = GetField(data[i], "Background");
+            line.standingNames = GetField(data[i], "Standing");
+            line.standingPositions = GetField(data[i], "StandingPos");
+            line.talkerSlot = GetField(data[i], "Talker");
+
+            // ===== 세이브포인트 =====
+            // 시나리오 문서의 {세이브포인트}에 해당하는 줄에 IsSavePoint=TRUE를 적어둔다.
+            // 플레이어는 이 줄을 지나간 뒤부터 다음 세이브포인트까지 "저장하기"를 쓸 수 있다
+            // (SavePointManager.cs 참고).
+            line.isSavePoint = GetField(data[i], "IsSavePoint").ToLower() == "true";
+            line.savePointId = GetField(data[i], "SavePointId");
+
+            // 조사기록 실시간 갱신 켜기/끄기 (#07 타임어택 구간에서 끈다)
+            line.noteRealtime = GetField(data[i], "NoteRealtime");
 
             // 선택지 없이 바로 다음 CSV로 넘어가야 하는 장면을 위한 칸 (DialogueData.autoNextScenarioCsv
             // 참고). 보통 CSV 맨 마지막 대사 행에만 채워두면 된다.
@@ -472,8 +1169,8 @@ public class DialogueSystem : MonoBehaviour
             currentDialogue.lines.Add(line);
         }
 
-        // 대사 시작
-        StartDialogue(currentDialogue);
+        // 대사 시작 (이어하기면 저장된 줄부터)
+        StartDialogue(currentDialogue, startLineIndex);
     }
 
     // CSVReader가 만든 행(Dictionary)에서 값을 안전하게 꺼낸다. 컬럼 자체가 없거나(예전 CSV처럼

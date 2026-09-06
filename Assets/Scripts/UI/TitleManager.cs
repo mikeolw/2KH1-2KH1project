@@ -27,21 +27,30 @@ public class TitleManager : MonoBehaviour
 
     private void Awake()
     {
-        // "시작하기"는 슬롯 선택 없이 곧바로 게임 씬으로 이동한다.
-        // TODO: 이 경우 SaveManager.Instance.ActiveSave가 null인 채로 게임이 시작된다.
-        // 즉 어느 슬롯에도 묶여있지 않은 상태로 진행되므로, 이후 세이브포인트에서
-        // 어느 슬롯에 저장할지 정하는 로직이 필요하다 (SaveManager.cs의 ActiveSave 주석 참고).
-        startButton.onClick.AddListener(() => SceneManager.LoadScene(gameplaySceneName));
+        // "시작하기"는 슬롯 선택 없이 곧바로 게임 씬으로 이동해 새 게임을 시작한다.
+        // 이전에 이어하던 세이브가 남아 있으면 그 지점부터 시작해 버리므로 여기서 비워준다
+        // (DialogueSystem.Start()가 SaveManager.ActiveSave를 보고 이어할지 판단한다).
+        startButton.onClick.AddListener(() =>
+        {
+            if (SaveManager.Instance != null) SaveManager.Instance.SetActiveSave(null);
+            SceneManager.LoadScene(gameplaySceneName);
+        });
 
         // "세이브데이터"는 저장된 세이브를 골라 이어하는 화면(SaveData.unity)으로 이동.
-        saveDataButton.onClick.AddListener(() => SceneManager.LoadScene(saveDataSceneName));
+        saveDataButton.onClick.AddListener(() =>
+        {
+            SaveDataSceneController.OpenMode = SaveDataSceneController.Mode.Load;
+            SceneManager.LoadScene(saveDataSceneName);
+        });
 
-        // "환경설정"은 별도의 설정 화면(Settings.unity)으로 이동.
-        // 인게임(SampleScene)에서 겹쳐 띄웠던 세션의 흔적(ReturnAdditive)이 남아있으면
-        // Settings의 뒤로가기가 씬을 언로드하려다 실패하므로, Title에서 열 때는 항상 초기화한다.
+        // "환경설정"은 별도의 설정 화면(Settings.unity)으로 이동한다.
+        // 그 씬은 SettingsPanelController가 통합 설정 화면(SettingsPanelUI)을 띄워준다.
         settingsButton.onClick.AddListener(() =>
         {
-            if (SettingsManager.Instance != null) SettingsManager.Instance.ReturnAdditive = false;
+            if (SettingsManager.Instance != null)
+            {
+                SettingsManager.Instance.ReturnSceneName = SceneManager.GetActiveScene().name;
+            }
             SceneManager.LoadScene(settingsSceneName);
         });
     }

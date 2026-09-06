@@ -3,135 +3,50 @@ using UnityEngine.UI;
 using UnityEngine.SceneManagement;
 using UnityEngine.EventSystems;
 
-// 환경설정 화면(탭 2개 + 슬라이더)의 UI 동작을 담당.
+// =====================================================================================
+// Settings.unity(독립 설정 씬) 전용 어댑터
+// =====================================================================================
+// 타이틀 화면에서 "환경설정"을 누르면 이 씬으로 넘어온다. 이 스크립트가 하는 일은
+// 딱 하나 — 씬에 원래 있던 설정 UI를 감추고, 코드로 만드는 통합 설정 화면
+// (SettingsPanelUI)을 대신 띄우는 것이다.
 //
-// 두 가지 방식으로 재사용할 수 있게 설계되어 있다:
-//   1) 독립된 씬으로 쓰는 경우 (지금의 Settings.unity) - onBack을 아무도 설정하지 않으면
-//      뒤로가기 버튼이 자동으로 SceneManager.LoadScene("Title")을 호출한다.
-//   2) 인게임 팝업 패널로 쓰는 경우 (예: 나중에 SampleScene의 UIManager.settingsPanel에
-//      이 컴포넌트가 붙는 경우) - 이때는 패널을 만든 쪽에서 onBack에 "패널 닫기" 같은
-//      콜백을 대입해주면 그 콜백이 대신 호출된다. TitleManager가 예전에 이 방식으로 썼었고,
-//      지금은 씬 분리로 안 쓰이지만 구조는 남겨뒀다.
+// ===== 왜 씬의 UI를 안 쓰고 새로 만드나 =====
+// 씬에 짜여 있던 설정 화면은 항목이 늘어나면서 버튼이 잘리고 서로 겹쳐 보였다.
+// 코드에서 그 위에 항목을 끼워 넣으려 해봤지만, 씬이 어떤 좌표계로 배치돼 있는지
+// 알 수 없어 손댈 때마다 더 어긋났다.
+// 그래서 설정 화면을 한 벌만 코드로 제대로 만들고(SettingsPanelUI), 인게임에서도
+// 타이틀에서도 똑같은 그 화면을 쓰기로 했다. 항목을 추가해도 배치가 깨지지 않고,
+// 두 곳의 모양이 항상 같다.
 //
-// 실제 슬라이더 값 저장/적용은 이 스크립트가 하지 않고 SettingsManager에 위임한다.
-// 이 스크립트는 "화면에 뭘 보여줄지"(탭 전환)와 "슬라이더 이벤트를 SettingsManager로
-// 연결하는 것"만 담당한다.
+// 씬에 있던 원래 UI는 지우지 않고 꺼두기만 하므로, 나중에 되돌리고 싶으면
+// 이 스크립트만 떼면 된다.
+//
+// ===== 인게임 설정은 어디에 있나 =====
+// 게임 도중 옵션은 이제 이 씬을 거치지 않는다. UIManager.OpenSettingsScene()이
+// 게임 씬 안에서 SettingsPanelUI를 바로 띄운다. 씬을 오가지 않으므로
+// "돌아가기를 눌렀는데 옵션 창이 게임 화면 뒤에 다시 보이는" 문제가 생기지 않는다.
 public class SettingsPanelController : MonoBehaviour
 {
-    [Header("탭 버튼 (상단 2개 아이콘)")]
-    public Button tabVolumeButton;
-    public Button tabDisplayButton;   // "화면" 탭 - 창 모드 토글 추가됨 (밝기 등 나머지는 아직 미정)
+    [Header("돌아갈 씬 이름 (비워두면 SettingsManager의 값을 쓴다)")]
+    public string fallbackReturnScene = "Title";
 
-    [Header("탭별 콘텐츠 패널 (한 번에 하나만 활성화됨)")]
-    public GameObject volumeContent;
-    public GameObject displayContent;
-
-    [Header("볼륨 탭 슬라이더 (min 0 ~ max 1)")]
-    public Slider masterVolumeSlider;
-    public Slider bgmVolumeSlider;   // TODO: 실제 BGM 소스가 없어 값 저장만 되고 소리엔 영향 없음
-    public Slider sfxVolumeSlider;   // TODO: 실제 SFX 소스가 없어 값 저장만 되고 소리엔 영향 없음
-
-    [Header("화면 탭 (Content_Display)")]
-    public Toggle windowedToggle;
-
-    [Header("공용 버튼")]
-    public Button quitButton;
-    public Button backButton;
-
-    // 패널로 쓰일 때만 채워지는 콜백. 독립 씬으로 쓰일 땐 null로 두면 됨 (Awake의 backButton 참고).
+    // 인게임 팝업으로 쓸 때 닫기 동작을 바깥에서 지정하고 싶을 때 사용.
+    // (지금은 인게임에서 이 씬을 쓰지 않지만, 구조는 남겨둔다)
     public System.Action onBack;
 
-    // 인게임(SampleScene)에서 UIManager.OpenSettingsScene()으로 이 씬이 additive로 겹쳐
-    // 떠 있는 동안 true. UIManager.IsAnyPanelOpen이 이 플래그를 확인해서, 설정 화면이 열려
-    // 있는 동안 뒤에 깔린 대사(스페이스바 등)가 몰래 진행되지 않도록 막는다.
+    // 다른 스크립트가 "설정 화면이 열려 있나?"를 확인할 때 쓴다.
     public static bool IsOpen { get; private set; }
 
     private void Awake()
     {
-        // additive로 겹쳐 뜬 경우 이 씬에 딸려온 EventSystem이 기존 씬의 EventSystem과
-        // 중복돼서 "There are 2 event systems" 경고와 입력 충돌이 생긴다. 이 씬(Settings)
-        // 쪽 EventSystem만 제거하고 원래 씬 것 하나만 남긴다. 독립 씬으로 쓰일 땐(Single 로드)
-        // EventSystem이 원래 하나뿐이라 아무 효과 없다.
-        var eventSystems = FindObjectsOfType<EventSystem>();
-        if (eventSystems.Length > 1)
-        {
-            foreach (var es in eventSystems)
-            {
-                if (es.gameObject.scene == gameObject.scene) Destroy(es.gameObject);
-            }
-        }
-
-        tabVolumeButton.onClick.AddListener(() => ShowTab(volumeContent));
-        tabDisplayButton.onClick.AddListener(() => ShowTab(displayContent));
-
-        // 에디터에서는 플레이 모드를 끄고, 실제 빌드에서는 애플리케이션을 종료한다.
-        // (Application.Quit()은 에디터 플레이 모드에서는 아무 효과가 없기 때문에 분기 처리)
-        quitButton.onClick.AddListener(() =>
-        {
-#if UNITY_EDITOR
-            UnityEditor.EditorApplication.isPlaying = false;
-#else
-            Application.Quit();
-#endif
-        });
-
-        // 패널로 쓰일 땐 onBack이 지정되고, Settings.unity처럼 독립된 씬으로 쓰일 땐
-        // onBack이 비어있다. 이 경우 UIManager.OpenSettingsScene()이 additive로 겹쳐 띄운
-        // 것이면(ReturnAdditive) 원래 씬은 손대지 않고 이 씬만 언로드해서 대사/시나리오
-        // 진행 상태를 그대로 유지하고, 그게 아니면(Title에서 진입한 경우) 원래 하던 대로
-        // ReturnSceneName(기본 타이틀)으로 이동한다.
-        if (backButton != null) backButton.onClick.AddListener(() =>
-        {
-            if (onBack != null)
-            {
-                onBack.Invoke();
-            }
-            else if (SettingsManager.Instance != null && SettingsManager.Instance.ReturnAdditive)
-            {
-                SettingsManager.Instance.ReturnAdditive = false;
-                SceneManager.UnloadSceneAsync("Settings");
-            }
-            else
-            {
-                SceneManager.LoadScene(SettingsManager.Instance != null ? SettingsManager.Instance.ReturnSceneName : "Title");
-            }
-        });
+        RemoveDuplicateEventSystem();
+        HideSceneUI();
     }
 
-    // 이 오브젝트(또는 이 컴포넌트가 붙은 패널)가 활성화될 때마다 슬라이더 초기값을
-    // SettingsManager의 현재 값으로 맞추고, 슬라이더 이벤트를 다시 연결한다.
-    // 독립 씬으로 쓰일 땐 씬이 로드될 때 자동으로 한 번 호출된다.
-    private void OnEnable()
+    private void Start()
     {
-        IsOpen = true;
-
-        // SettingsManager는 Title.unity에서 생성되어 DontDestroyOnLoad로 유지된다.
-        // 혹시라도 Title을 거치지 않고 이 씬에 바로 진입한 경우(테스트 등) Instance가
-        // 없을 수 있으니 방어적으로 체크한다.
-        if (SettingsManager.Instance == null) return;
-
-        var s = SettingsManager.Instance.Current;
-        // SetValueWithoutNotify: 초기값을 세팅할 때 onValueChanged가 같이 발동해서
-        // "읽어온 값을 다시 저장"하는 불필요한 호출이 일어나지 않도록 함.
-        masterVolumeSlider.SetValueWithoutNotify(s.masterVolume);
-        bgmVolumeSlider.SetValueWithoutNotify(s.bgmVolume);
-        sfxVolumeSlider.SetValueWithoutNotify(s.sfxVolume);
-        windowedToggle.SetIsOnWithoutNotify(s.windowed);
-
-        // OnEnable이 여러 번 호출될 수 있으므로(예: 탭을 왔다갔다 하는 경우는 아니지만
-        // 씬을 다시 로드하는 경우 등) 리스너가 중복 등록되지 않도록 먼저 전부 제거한다.
-        masterVolumeSlider.onValueChanged.RemoveAllListeners();
-        bgmVolumeSlider.onValueChanged.RemoveAllListeners();
-        sfxVolumeSlider.onValueChanged.RemoveAllListeners();
-        windowedToggle.onValueChanged.RemoveAllListeners();
-
-        masterVolumeSlider.onValueChanged.AddListener(SettingsManager.Instance.SetMasterVolume);
-        bgmVolumeSlider.onValueChanged.AddListener(SettingsManager.Instance.SetBgmVolume);
-        sfxVolumeSlider.onValueChanged.AddListener(SettingsManager.Instance.SetSfxVolume);
-        windowedToggle.onValueChanged.AddListener(SettingsManager.Instance.SetWindowed);
-
-        // 화면을 열 때마다 항상 볼륨 탭부터 보여준다.
-        ShowTab(volumeContent);
+        // SettingsPanelUI는 Canvas가 준비된 뒤에 만들어야 하므로 Start에서 처리한다.
+        ShowUnifiedSettings();
     }
 
     private void OnDisable()
@@ -139,10 +54,89 @@ public class SettingsPanelController : MonoBehaviour
         IsOpen = false;
     }
 
-    // 2개 탭 콘텐츠 중 target 하나만 켜고 나머지는 끈다 (라디오 버튼 방식).
-    private void ShowTab(GameObject target)
+    // ---------------------------------------------------------------------------------
+    // 통합 설정 화면 띄우기
+    // ---------------------------------------------------------------------------------
+    private void ShowUnifiedSettings()
     {
-        volumeContent.SetActive(target == volumeContent);
-        displayContent.SetActive(target == displayContent);
+        if (SettingsPanelUI.Instance == null)
+        {
+            new GameObject("SettingsPanel").AddComponent<SettingsPanelUI>();
+        }
+
+        var ui = SettingsPanelUI.Instance;
+        if (ui == null) return;
+
+        // 이 씬은 타이틀에서 들어온 독립 설정 화면이므로,
+        // 닫으면 패널만 감추는 게 아니라 원래 화면으로 돌아가야 한다.
+        ui.onClose = ReturnToPreviousScene;
+
+        // 이미 타이틀 계열 화면이므로 "메인 화면으로" 버튼은 필요 없다.
+        ui.SetMainMenuButtonVisible(false);
+
+        ui.Open();
+        IsOpen = true;
+    }
+
+    // 설정 화면을 닫고 원래 있던 화면으로 돌아간다.
+    private void ReturnToPreviousScene()
+    {
+        IsOpen = false;
+
+        // 다음에 인게임에서 이 패널을 쓸 때를 위해 닫기 동작을 원상복구한다.
+        // (안 지우면 인게임에서 닫기를 눌렀을 때도 씬을 갈아치워 버린다)
+        if (SettingsPanelUI.Instance != null)
+        {
+            SettingsPanelUI.Instance.onClose = null;
+            SettingsPanelUI.Instance.SetMainMenuButtonVisible(true);
+            SettingsPanelUI.Instance.HidePanel();
+        }
+
+        if (onBack != null)
+        {
+            onBack.Invoke();
+            return;
+        }
+
+        string target = SettingsManager.Instance != null && !string.IsNullOrEmpty(SettingsManager.Instance.ReturnSceneName)
+            ? SettingsManager.Instance.ReturnSceneName
+            : fallbackReturnScene;
+
+        SceneManager.LoadScene(target);
+    }
+
+    // ---------------------------------------------------------------------------------
+    // 씬에 원래 있던 UI 감추기
+    // ---------------------------------------------------------------------------------
+    // 새 설정 화면과 겹쳐 보이지 않도록, 이 씬의 캔버스 아래 있는 것들을 꺼둔다.
+    // 지우지 않고 비활성화만 하므로 되돌릴 수 있다.
+    private void HideSceneUI()
+    {
+        var scene = gameObject.scene;
+        if (!scene.IsValid()) return;
+
+        foreach (var root in scene.GetRootGameObjects())
+        {
+            foreach (var canvas in root.GetComponentsInChildren<Canvas>(true))
+            {
+                // 캔버스 자체는 켜두고(새 설정 화면이 이 캔버스에 붙는다) 그 자식만 끈다.
+                for (int i = canvas.transform.childCount - 1; i >= 0; i--)
+                {
+                    canvas.transform.GetChild(i).gameObject.SetActive(false);
+                }
+            }
+        }
+    }
+
+    // additive로 겹쳐 뜬 경우 EventSystem이 중복돼 입력이 충돌한다. 이 씬 쪽만 제거한다.
+    private void RemoveDuplicateEventSystem()
+    {
+        var eventSystems = FindObjectsByType<EventSystem>();
+        if (eventSystems.Length <= 1) return;
+
+        foreach (var es in eventSystems)
+        {
+            if (es.gameObject.scene == gameObject.scene) Destroy(es.gameObject);
+        }
     }
 }

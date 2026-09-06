@@ -5,25 +5,37 @@ using TMPro;
 
 // 세이브데이터 화면(SaveData.unity) 전용 컨트롤러.
 //
-// 타이틀의 "세이브데이터" 버튼을 누르면 이 씬으로 이동해온다. 슬롯 3개를 보여주고,
-// 저장된 슬롯을 고르면 그 세이브를 SaveManager에 활성화(SetActiveSave)한 뒤 게임 씬으로
-// 이동한다. 빈 슬롯은 이 화면에서 고를 수 없다 (조회/이어하기 전용 화면이라서 - 새 게임은
-// 타이틀의 "시작하기" 버튼으로 시작하고 이 화면을 거치지 않는다).
+// 이 화면은 두 가지 용도로 쓸 수 있다:
+//   1) 불러오기 모드 (기본) - 타이틀에서 들어왔을 때. 저장된 슬롯을 고르면 그 지점부터 이어한다.
+//   2) 저장하기 모드        - 게임 중 저장할 때. 슬롯을 고르면 그 슬롯에 덮어쓴다.
+// 어느 모드로 열지는 SaveDataSceneController.OpenMode 정적 필드로 정한다
+// (씬을 넘어가며 값을 전달해야 해서 static을 썼다. 씬이 바뀌어도 값이 유지된다).
 //
-// TODO(미비점):
-//  - 슬롯 삭제 기능이 없다. SaveManager.DeleteSlot()은 이미 구현되어 있으니, 슬롯 버튼에
-//    길게 누르기/우클릭 등으로 삭제 확인 UI를 붙이면 된다.
-//  - 슬롯을 눌러도 되돌릴 수 없다(확인 창 없이 바로 로드). 오조작 방지용 확인 팝업을
-//    추가하면 좋을 것 같다.
-//  - SaveManager.Instance가 없는 상태(=Title 씬을 거치지 않고 이 씬에 바로 진입한 경우)에
-//    대한 방어 코드가 없다. 테스트 목적으로 이 씬에서 바로 플레이를 시작하면 NullReferenceException이
-//    난다 — 반드시 Title 씬부터 플레이할 것.
+// ===== 저장은 세이브포인트에서만 =====
+// 시나리오 문서에 {세이브포인트}라고 표시된 지점을 지나야만 저장할 수 있다.
+// 아직 하나도 지나지 않았다면 저장하기 모드로 들어와도 슬롯이 전부 잠긴다
+// (SavePointManager.CanSave 참고). 저장되는 것은 "지금 이 순간"이 아니라
+// "마지막으로 지나온 세이브포인트"이므로, 불러오면 항상 안전한 지점에서 다시 시작한다.
 public class SaveDataSceneController : MonoBehaviour
 {
+    // 이 화면이 어떤 용도로 열렸는지.
+    public enum Mode
+    {
+        Load,  // 불러오기 (타이틀에서 진입)
+        Save   // 저장하기 (게임 중 진입)
+    }
+
+    // 다음에 이 씬을 열 때 쓸 모드. 씬을 이동하며 값을 넘겨야 해서 static으로 둔다.
+    // 기본값은 불러오기 - 타이틀에서 그냥 들어오면 지금까지와 똑같이 동작한다.
+    public static Mode OpenMode = Mode.Load;
+
     [Header("세이브 슬롯 (3개, SaveManager.SlotCount와 맞출 것)")]
     public Button[] slotButtons = new Button[3];
     public TMP_Text[] slotLabels = new TMP_Text[3];
     public Button backButton;
+
+    [Header("화면 상단 안내 문구 (없어도 동작함)")]
+    public TMP_Text headerText;
 
     [Header("이동할 씬 이름")]
     public string gameplaySceneName = "SampleScene";
@@ -31,12 +43,14 @@ public class SaveDataSceneController : MonoBehaviour
 
     private void Awake()
     {
-        backButton.onClick.AddListener(() => SceneManager.LoadScene(titleSceneName));
+        if (backButton != null) backButton.onClick.AddListener(OnClickBack);
 
         for (int i = 0; i < slotButtons.Length; i++)
         {
+            if (slotButtons[i] == null) continue;
+
             int slotIndex = i; // 람다가 반복 변수를 그대로 캡처하면 전부 마지막 i값을 참조하게
-                                // 되는 클로저 함정이 있어서, 로컬 변수로 복사해 캡처한다.
+                               // 되는 클로저 함정이 있어서, 로컬 변수로 복사해 캡처한다.
             slotButtons[i].onClick.AddListener(() => OnClickSlot(slotIndex));
         }
     }
@@ -46,28 +60,135 @@ public class SaveDataSceneController : MonoBehaviour
         RefreshSlots();
     }
 
-    // 슬롯 3개를 각각 SaveManager에서 읽어와 라벨을 갱신하고, 세이브가 없는 슬롯은
-    // 버튼을 비활성화(interactable = false)해서 고를 수 없게 만든다.
+    // 슬롯 3개의 표시 내용과 누를 수 있는지 여부를 갱신한다.
     private void RefreshSlots()
     {
+        // Title 씬을 거치지 않고 이 씬을 바로 실행한 경우에 대한 방어.
+        // (예전에는 여기서 NullReferenceException이 났다)
+        if (SaveManager.Instance == null)
+        {
+            Debug.LogWarning("[SaveDataSceneController] SaveManager가 없습니다. Title 씬부터 실행해 주세요.");
+            foreach (var b in slotButtons) { if (b != null) b.interactable = false; }
+            if (headerText != null) headerText.text = "세이브 시스템을 불러올 수 없습니다. 타이틀부터 실행해 주세요.";
+            return;
+        }
+
+        bool saveMode = OpenMode == Mode.Save;
+
+        // 저장하기 모드인데 아직 세이브포인트를 지나지 않았다면 저장할 수 없다.
+        bool canSave = SavePointManager.Instance != null && SavePointManager.Instance.CanSave;
+
+        if (headerText != null)
+        {
+            if (!saveMode)
+                headerText.text = "불러올 슬롯을 고르세요.";
+            else if (canSave)
+                headerText.text = $"저장할 슬롯을 고르세요.  (저장 지점: {SavePointManager.Instance.LastSavePointId})";
+            else
+                headerText.text = "아직 저장할 수 있는 지점을 지나지 않았습니다.";
+        }
+
         for (int i = 0; i < slotButtons.Length; i++)
         {
+            if (slotButtons[i] == null) continue;
+
             SaveData data = SaveManager.Instance.Load(i);
             bool hasSave = data != null;
-            slotLabels[i].text = hasSave ? $"{data.chapterId}\n{data.timestamp}" : "빈 슬롯";
-            slotButtons[i].interactable = hasSave;
+
+            if (slotLabels[i] != null)
+            {
+                if (hasSave)
+                {
+                    // 진행 지점 / 저장 시각 / 플레이 시간
+                    string playTime = SavePointManager.FormatPlayTime(data.playTimeSeconds);
+                    slotLabels[i].text = $"{data.chapterId}\n{data.timestamp}\n플레이 시간 {playTime}";
+                }
+                else
+                {
+                    // 저장하기 모드에서는 빈 슬롯도 골라야 하므로 "새로 저장"이라고 안내한다.
+                    slotLabels[i].text = saveMode ? "빈 슬롯\n(여기에 저장)" : "빈 슬롯";
+                }
+            }
+
+            // 불러오기 모드: 세이브가 있는 슬롯만 고를 수 있다.
+            // 저장하기 모드: 세이브포인트를 지났다면 빈 슬롯도 포함해 전부 고를 수 있다(덮어쓰기).
+            slotButtons[i].interactable = saveMode ? canSave : hasSave;
         }
     }
 
-    // 슬롯을 클릭했을 때: 해당 세이브를 불러와 "지금 이어하는 세이브"로 지정하고 게임 씬으로 이동.
-    // interactable=false인 빈 슬롯은 애초에 클릭 이벤트가 발생하지 않지만, 혹시 모를 상황을
-    // 대비해 data == null이면 아무 것도 하지 않고 리턴하는 방어 코드를 넣어뒀다.
+    // 슬롯을 클릭했을 때.
     private void OnClickSlot(int slotIndex)
+    {
+        if (SaveManager.Instance == null) return;
+
+        if (OpenMode == Mode.Save)
+        {
+            SaveToSlot(slotIndex);
+            return;
+        }
+
+        LoadFromSlot(slotIndex);
+    }
+
+    // ---------------------------------------------------------------------------------
+    // 저장하기
+    // ---------------------------------------------------------------------------------
+    private void SaveToSlot(int slotIndex)
+    {
+        if (SavePointManager.Instance == null)
+        {
+            Debug.LogWarning("[SaveDataSceneController] SavePointManager가 없어 저장할 수 없습니다.");
+            return;
+        }
+
+        bool ok = SavePointManager.Instance.SaveToSlot(slotIndex);
+        if (!ok)
+        {
+            if (headerText != null) headerText.text = "아직 저장할 수 있는 지점을 지나지 않았습니다.";
+            return;
+        }
+
+        // 저장 후 목록을 갱신해 방금 저장된 내용이 바로 보이게 한다.
+        RefreshSlots();
+        if (headerText != null) headerText.text = $"슬롯 {slotIndex + 1}에 저장했습니다.";
+    }
+
+    // ---------------------------------------------------------------------------------
+    // 불러오기
+    // ---------------------------------------------------------------------------------
+    private void LoadFromSlot(int slotIndex)
     {
         var data = SaveManager.Instance.Load(slotIndex);
         if (data == null) return;
 
+        // "지금 이어하는 세이브"로 지정한다. 게임 씬이 시작될 때 GameBootstrap이 이 값을
+        // 보고 저장된 지점부터 대사를 이어서 재생한다 (GameBootstrap.cs 참고).
         SaveManager.Instance.SetActiveSave(data);
-        SceneManager.LoadScene(gameplaySceneName);
+
+        SceneManager.LoadScene(string.IsNullOrEmpty(data.sceneId) ? gameplaySceneName : data.sceneId);
+    }
+
+    // ---------------------------------------------------------------------------------
+    // 뒤로가기
+    // ---------------------------------------------------------------------------------
+    private void OnClickBack()
+    {
+        // 저장하기 모드로 게임 중에 들어온 경우엔 타이틀이 아니라 게임 씬으로 돌아가야 한다.
+        if (OpenMode == Mode.Save)
+        {
+            OpenMode = Mode.Load; // 다음 진입을 위해 기본값으로 되돌린다
+            SceneManager.LoadScene(gameplaySceneName);
+            return;
+        }
+
+        SceneManager.LoadScene(titleSceneName);
+    }
+
+    // 게임 중 "저장하기"를 누를 때 다른 스크립트에서 호출한다.
+    // 예: 퀵바에 저장 버튼을 만들고 이 함수를 연결.
+    public static void OpenForSaving(string saveSceneName = "SaveData")
+    {
+        OpenMode = Mode.Save;
+        SceneManager.LoadScene(saveSceneName);
     }
 }
