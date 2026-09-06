@@ -148,7 +148,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 0c8149b5cc3400041bca51def395eeb7, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::UIManager
-  timeStampText: {fileID: 2009330595}
+  timeStampText: {fileID: 0}
   inventoryPanel: {fileID: 962881297}
   photoPanel: {fileID: 244980425}
   phonePanel: {fileID: 362867763}
@@ -227,6 +227,9 @@ MonoBehaviour:
   objectName: "\uB3D9\uB124 \uD559\uC0DD"
   description: 
   modalImage: {fileID: 0}
+  spriteName: 
+  usePixelPerfectClick: 1
+  alphaClickThreshold: 0.1
   itemId: 
   talkSpeaker: "\uB3D9\uB124 \uD559\uC0DD"
   talkSentence: "\uACBD\uCC30\uC774\uC2E0\uAC00\uC694? \uC800, \uC0AC\uC2E4 \uB9D0\uD574\uC57C
@@ -1166,6 +1169,9 @@ MonoBehaviour:
   objectName: "\uB3D9\uB124 \uC8FC\uBBFC"
   description: 
   modalImage: {fileID: 0}
+  spriteName: 
+  usePixelPerfectClick: 1
+  alphaClickThreshold: 0.1
   itemId: 
   talkSpeaker: "\uB3D9\uB124 \uC8FC\uBBFC"
   talkSentence: "\uC790\uB124 \uACE0\uAE30\uC7A1\uC774\uB77C\uB3C4 \uD558\uB7EC \uC628
@@ -1338,6 +1344,9 @@ MonoBehaviour:
     \uC808\uBCBD \uC544\uB798\uC5D0\uC11C \uBC14\uC704 \uCABD\uC73C\uB85C \uB5A8\uC5B4\uC9C8
     \uD655\uB960\uC740 \uB0AE\uC544 \uBCF4\uC778\uB2E4."
   modalImage: {fileID: 0}
+  spriteName: 
+  usePixelPerfectClick: 1
+  alphaClickThreshold: 0.1
   itemId: 
   talkSpeaker: 
   talkSentence: 
@@ -1808,6 +1817,9 @@ MonoBehaviour:
     \uADF8\uB9AC\uACE0... \uCE5C\uAD6C\uC640 \uC740\uC0AC\uC758 \uC0AC\uC9C4\uC774
     \uCC0D\uD600\uC788\uB2E4."
   modalImage: {fileID: 0}
+  spriteName: 
+  usePixelPerfectClick: 1
+  alphaClickThreshold: 0.1
   itemId: camera
   talkSpeaker: 
   talkSentence: 
@@ -2190,6 +2202,9 @@ MonoBehaviour:
     \uC218 \uC788\uB2E4. \uB77C\uB514\uC624\uB3C4 \uCCAD\uCDE8\uD560 \uC218 \uC788\uB2E4.
     \uCE5C\uAD6C\uC758 \uBD80\uACE0 \uBB38\uC790\uB97C \uD655\uC778\uD588\uB2E4."
   modalImage: {fileID: 0}
+  spriteName: 
+  usePixelPerfectClick: 1
+  alphaClickThreshold: 0.1
   itemId: 
   talkSpeaker: 
   talkSentence: 
@@ -2602,6 +2617,8 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 26ac040b2f01dbb4fbe9b4329092d6b7, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::GameFlowManager
+  endingFadeDelay: 0.5
+  titleSceneName: Title
 --- !u!4 &413768071
 Transform:
   m_ObjectHideFlags: 0
@@ -3104,6 +3121,9 @@ MonoBehaviour:
     \uC5F4\uC1E0\uAC00 \uAF42\uD78C \uCC44 \uC7A0\uACA8\uC788\uC5C8\uC9C0\uB9CC,
     \uC5F4\uC5B4\uBCF4\uB2C8 \uBE44\uC5B4 \uC788\uC5C8\uB2E4."
   modalImage: {fileID: 0}
+  spriteName: 
+  usePixelPerfectClick: 1
+  alphaClickThreshold: 0.1
   itemId: resignation_letter
   talkSpeaker: 
   talkSentence: 
@@ -3235,6 +3255,9 @@ MonoBehaviour:
   choicePanel: {fileID: 367281598}
   choiceButtonPrefab: {fileID: 3285386790672715950, guid: 5b22c4f2c76f80b4ea9dcfd89ead3ce9, type: 3}
   choiceContainer: {fileID: 367281599}
+  dialoguePanel: {fileID: 0}
+  speakerNameBox: {fileID: 0}
+  autoStyleDialogueBox: 1
   currentDialogue: {fileID: 11400000, guid: 05546b0dcabd4834487db93cec295f40, type: 2}
   fadeCanvasGroup: {fileID: 1391702333}
   fadeDuration: 0.5
@@ -4059,6 +4082,9 @@ MonoBehaviour:
   description: "\uAC2F\uBC14\uC704\uC5D0 \uAC70\uCE5C \uD30C\uB3C4\uAC00 \uC4F8\uB824\uC640
     \uBD80\uB52A\uD788\uB294 \uAC83\uC744 \uD655\uC778\uD560 \uC218 \uC788\uB2E4."
   modalImage: {fileID: 0}
+  spriteName: 
+  usePixelPerfectClick: 1
+  alphaClickThreshold: 0.1
   itemId: 
   talkSpeaker: 
   talkSentence: 
@@ -7712,7 +7738,6 @@ RectTransform:
   m_Children:
   - {fileID: 1278535888}
   - {fileID: 200001615}
-  - {fileID: 2009330594}
   - {fileID: 1259706418}
   - {fileID: 1515533201}
   - {fileID: 367281599}
@@ -7866,6 +7891,9 @@ MonoBehaviour:
   objectName: "\uCC3D\uBB38"
   description: "\uBCC4\uB2E4\uB978 \uAC83\uC740 \uBCF4\uC774\uC9C0 \uC54A\uB294\uB2E4."
   modalImage: {fileID: 0}
+  spriteName: 
+  usePixelPerfectClick: 1
+  alphaClickThreshold: 0.1
   itemId: 
   talkSpeaker: 
   talkSentence: 
@@ -8787,6 +8815,9 @@ MonoBehaviour:
     \uD648 \uC0AC\uC774\uC5D0 \uB07C\uC5B4 \uC788\uB294 \uC791\uC740 \uB3CC\uBA69\uC774\uC5D0
     \uD54F\uB369\uC774\uAC00 \uC788\uB294 \uAC83\uC744 \uD655\uC778\uD558\uAC8C \uB41C\uB2E4."
   modalImage: {fileID: 0}
+  spriteName: 
+  usePixelPerfectClick: 1
+  alphaClickThreshold: 0.1
   itemId: 
   talkSpeaker: 
   talkSentence: 
@@ -8943,6 +8974,9 @@ MonoBehaviour:
     \uC801\uD600 \uC788\uC5B4 \uC783\uC5B4\uBC84\uB9AC\uBA74 \uC548\uB418\uB294 \uBB3C\uAC74.
     (\uBCFC\uD39C\uB3C4 \uD568\uAED8 \uBC1C\uACAC\uD588\uB2E4)"
   modalImage: {fileID: 0}
+  spriteName: 
+  usePixelPerfectClick: 1
+  alphaClickThreshold: 0.1
   itemId: notepad_pen
   talkSpeaker: 
   talkSentence: 
@@ -10476,12 +10510,9 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 3ae35250e586f384b8d080276d3b038c, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::InvestigationController
-  screens:
-  - id: office_desk
-    panel: {fileID: 1278535887}
-  - id: beach_scene
-    panel: {fileID: 200001614}
   dialoguePanel: {fileID: 1515533200}
+  targetCanvas: {fileID: 0}
+  exitButtonLabel: "\uC870\uC0AC \uADF8\uB9CC\uD558\uAE30"
 --- !u!4 &1603965945
 Transform:
   m_ObjectHideFlags: 0
@@ -11177,6 +11208,9 @@ MonoBehaviour:
   objectName: "\uD68C\uC0AC \uB3D9\uB8CC"
   description: 
   modalImage: {fileID: 0}
+  spriteName: 
+  usePixelPerfectClick: 1
+  alphaClickThreshold: 0.1
   itemId: 
   talkSpeaker: "\uB3D9\uB8CC"
   talkSentence: "\uC694\uBA70\uCE60 \uC0C1\uD0DC\uAC00 \uC548\uC88B\uC544 \uBCF4\uC778\uB2E4\uB4E0\uAC00,
@@ -11545,143 +11579,6 @@ CanvasRenderer:
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 1911168358}
-  m_CullTransparentMesh: 1
---- !u!1 &2009330593
-GameObject:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  serializedVersion: 6
-  m_Component:
-  - component: {fileID: 2009330594}
-  - component: {fileID: 2009330596}
-  - component: {fileID: 2009330595}
-  m_Layer: 5
-  m_Name: DateText
-  m_TagString: Untagged
-  m_Icon: {fileID: 0}
-  m_NavMeshLayer: 0
-  m_StaticEditorFlags: 0
-  m_IsActive: 1
---- !u!224 &2009330594
-RectTransform:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 2009330593}
-  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
-  m_LocalPosition: {x: 0, y: 0, z: 0}
-  m_LocalScale: {x: 1, y: 1, z: 1}
-  m_ConstrainProportionsScale: 0
-  m_Children: []
-  m_Father: {fileID: 880807254}
-  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
-  m_AnchorMin: {x: 0.5, y: 0.5}
-  m_AnchorMax: {x: 0.5, y: 0.5}
-  m_AnchoredPosition: {x: -628.23145, y: -420}
-  m_SizeDelta: {x: 357.8926, y: 50}
-  m_Pivot: {x: 0.5, y: 0.5}
---- !u!114 &2009330595
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 2009330593}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: f4688fdb7df04437aeb418b961361dc5, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: Unity.TextMeshPro::TMPro.TextMeshProUGUI
-  m_Material: {fileID: 0}
-  m_Color: {r: 1, g: 1, b: 1, a: 1}
-  m_RaycastTarget: 1
-  m_RaycastPadding: {x: 0, y: 0, z: 0, w: 0}
-  m_Maskable: 1
-  m_OnCullStateChanged:
-    m_PersistentCalls:
-      m_Calls: []
-  m_text: 2002/08/08 13:00
-  m_isRightToLeft: 0
-  m_fontAsset: {fileID: 11400000, guid: 8f586378b4e144a9851e7b34d9b748ee, type: 2}
-  m_sharedMaterial: {fileID: 2180264, guid: 8f586378b4e144a9851e7b34d9b748ee, type: 2}
-  m_fontSharedMaterials: []
-  m_fontMaterial: {fileID: 0}
-  m_fontMaterials: []
-  m_fontColor32:
-    serializedVersion: 2
-    rgba: 4294967295
-  m_fontColor: {r: 1, g: 1, b: 1, a: 1}
-  m_enableVertexGradient: 0
-  m_colorMode: 3
-  m_fontColorGradient:
-    topLeft: {r: 1, g: 1, b: 1, a: 1}
-    topRight: {r: 1, g: 1, b: 1, a: 1}
-    bottomLeft: {r: 1, g: 1, b: 1, a: 1}
-    bottomRight: {r: 1, g: 1, b: 1, a: 1}
-  m_fontColorGradientPreset: {fileID: 0}
-  m_spriteAsset: {fileID: 0}
-  m_tintAllSprites: 0
-  m_StyleSheet: {fileID: 0}
-  m_TextStyleHashCode: -1183493901
-  m_overrideHtmlColors: 0
-  m_faceColor:
-    serializedVersion: 2
-    rgba: 4294967295
-  m_fontSize: 36
-  m_fontSizeBase: 36
-  m_fontWeight: 400
-  m_enableAutoSizing: 0
-  m_fontSizeMin: 18
-  m_fontSizeMax: 72
-  m_fontStyle: 0
-  m_HorizontalAlignment: 1
-  m_VerticalAlignment: 256
-  m_textAlignment: 65535
-  m_characterSpacing: 0
-  m_characterHorizontalScale: 1
-  m_wordSpacing: 0
-  m_lineSpacing: 0
-  m_lineSpacingMax: 0
-  m_paragraphSpacing: 0
-  m_charWidthMaxAdj: 0
-  m_TextWrappingMode: 1
-  m_wordWrappingRatios: 0.4
-  m_overflowMode: 0
-  m_linkedTextComponent: {fileID: 0}
-  parentLinkedComponent: {fileID: 0}
-  m_enableKerning: 0
-  m_ActiveFontFeatures: 6e72656b
-  m_enableExtraPadding: 0
-  checkPaddingRequired: 0
-  m_isRichText: 1
-  m_EmojiFallbackSupport: 1
-  m_parseCtrlCharacters: 1
-  m_isOrthographic: 1
-  m_isCullingEnabled: 0
-  m_horizontalMapping: 0
-  m_verticalMapping: 0
-  m_uvLineOffset: 0
-  m_geometrySortingOrder: 0
-  m_IsTextObjectScaleStatic: 0
-  m_VertexBufferAutoSizeReduction: 0
-  m_useMaxVisibleDescender: 1
-  m_pageToDisplay: 1
-  m_margin: {x: 0, y: 0, z: 0, w: 0}
-  m_isUsingLegacyAnimationComponent: 0
-  m_isVolumetricText: 0
-  m_hasFontAssetChanged: 0
-  m_baseMaterial: {fileID: 0}
-  m_maskOffset: {x: 0, y: 0, z: 0, w: 0}
---- !u!222 &2009330596
-CanvasRenderer:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 2009330593}
   m_CullTransparentMesh: 1
 --- !u!1 &2040627345
 GameObject:

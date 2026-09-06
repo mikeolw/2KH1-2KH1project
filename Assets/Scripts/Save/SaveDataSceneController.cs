@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.UI;
 using UnityEngine.SceneManagement;
@@ -29,7 +30,9 @@ public class SaveDataSceneController : MonoBehaviour
     // 기본값은 불러오기 - 타이틀에서 그냥 들어오면 지금까지와 똑같이 동작한다.
     public static Mode OpenMode = Mode.Load;
 
-    [Header("세이브 슬롯 (3개, SaveManager.SlotCount와 맞출 것)")]
+    // 씬에 SaveManager.SlotCount보다 적게 배치해둬도 된다 - 부족한 만큼 Awake에서
+    // 마지막 슬롯을 복제해 자동으로 채운다(ExpandSlotsIfNeeded 참고).
+    [Header("세이브 슬롯 (부족하면 런타임에 자동 복제됨)")]
     public Button[] slotButtons = new Button[3];
     public TMP_Text[] slotLabels = new TMP_Text[3];
     public Button backButton;
@@ -43,6 +46,8 @@ public class SaveDataSceneController : MonoBehaviour
 
     private void Awake()
     {
+        ExpandSlotsIfNeeded();
+
         if (backButton != null) backButton.onClick.AddListener(OnClickBack);
 
         for (int i = 0; i < slotButtons.Length; i++)
@@ -53,6 +58,39 @@ public class SaveDataSceneController : MonoBehaviour
                                // 되는 클로저 함정이 있어서, 로컬 변수로 복사해 캡처한다.
             slotButtons[i].onClick.AddListener(() => OnClickSlot(slotIndex));
         }
+    }
+
+    // 씬에 배치된 슬롯 수가 SaveManager.SlotCount보다 적으면, 마지막 슬롯을 템플릿 삼아
+    // 복제해서 부족한 만큼 채운다. 간격은 기존 슬롯 두 개의 위치 차이로 계산해서 그대로 이어 붙인다.
+    private void ExpandSlotsIfNeeded()
+    {
+        int target = SaveManager.SlotCount;
+        if (slotButtons.Length == 0 || target <= slotButtons.Length) return;
+
+        Button template = slotButtons[slotButtons.Length - 1];
+        RectTransform templateRt = template.GetComponent<RectTransform>();
+
+        Vector2 spacing = slotButtons.Length >= 2
+            ? templateRt.anchoredPosition - slotButtons[slotButtons.Length - 2].GetComponent<RectTransform>().anchoredPosition
+            : new Vector2(0f, -(templateRt.sizeDelta.y + 12f));
+
+        var newButtons = new List<Button>(slotButtons);
+        var newLabels = new List<TMP_Text>(slotLabels);
+
+        for (int i = slotButtons.Length; i < target; i++)
+        {
+            GameObject clone = Instantiate(template.gameObject, template.transform.parent);
+            clone.name = $"Slot{i}";
+
+            RectTransform rt = clone.GetComponent<RectTransform>();
+            rt.anchoredPosition = templateRt.anchoredPosition + spacing * (i - (slotButtons.Length - 1));
+
+            newButtons.Add(clone.GetComponent<Button>());
+            newLabels.Add(clone.GetComponentInChildren<TMP_Text>());
+        }
+
+        slotButtons = newButtons.ToArray();
+        slotLabels = newLabels.ToArray();
     }
 
     private void Start()

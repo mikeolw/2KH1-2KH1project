@@ -6,9 +6,6 @@ public class UIManager : MonoBehaviour
 {
     public static UIManager Instance;
 
-    [Header("글로벌 상단 UI")]
-    public TMP_Text timeStampText; // 예: "2002/08/08 13:00"
-
     // 이 필드들은 QuickBarPanel의 버튼(Btn_Inventory 등)이 아니라, 그 버튼을 눌렀을 때
     // 열리는 실제 팝업 콘텐츠(아이템 리스트, 사진첩 등)를 가리켜야 한다.
     // 버튼은 항상 화면에 떠있는 QuickBarPanel 쪽에 있고, 여기 연결된 패널은 평소엔 꺼져
@@ -43,12 +40,6 @@ public class UIManager : MonoBehaviour
     {
         // 시작할 때 모든 팝업 닫기
         CloseAllPanels();
-        SetTimeStamp("2002/08/08 13:00");
-    }
-
-    public void SetTimeStamp(string timeStr)
-    {
-        if (timeStampText != null) timeStampText.text = timeStr;
     }
 
     // 하단 퀵바 버튼에서 호출할 함수들
