@@ -119,6 +119,19 @@ public class SaveSlotDialog : MonoBehaviour
         int slotCount = SaveManager.SlotCount;
         slotLabels = new TMP_Text[slotCount];
 
+        // ----- 상자 안에 들어갈 내용 크기를 슬롯 개수에 맞춰 미리 계산 -----
+        // (슬롯이 몇 개든 상자가 딱 그만큼의 높이만 차지하게 하기 위함 - 예전엔 720으로
+        // 고정해뒀는데, 슬롯 개수가 줄어들면 아래쪽에 빈 검은 공간이 크게 남는 문제가 있었다)
+        const float headerHeight = 86f;     // 제목 영역 (listTop과 동일)
+        const float slotHeight = 60f;
+        const float slotGap = 8f;
+        const float footerGap = 24f;        // 마지막 슬롯과 버튼 사이 여백
+        const float skipButtonHeight = 48f;
+        const float bottomMargin = 18f;     // 버튼과 상자 맨 아래 사이 여백
+
+        float slotsHeight = slotCount * slotHeight + Mathf.Max(0, slotCount - 1) * slotGap;
+        float boxHeight = headerHeight + slotsHeight + footerGap + skipButtonHeight + bottomMargin;
+
         // ----- 창 전체 (화면을 덮는 어두운 배경) -----
         panel = new GameObject("SaveSlotDialog", typeof(RectTransform), typeof(Image));
         panel.transform.SetParent(targetCanvas.transform, false);
@@ -134,7 +147,7 @@ public class SaveSlotDialog : MonoBehaviour
         boxRt.anchorMin = new Vector2(0.5f, 0.5f);
         boxRt.anchorMax = new Vector2(0.5f, 0.5f);
         boxRt.pivot = new Vector2(0.5f, 0.5f);
-        boxRt.sizeDelta = new Vector2(760f, 720f);
+        boxRt.sizeDelta = new Vector2(760f, boxHeight);
         box.GetComponent<Image>().color = new Color(0f, 0f, 0f, 0.97f);
 
         // ----- 제목 -----
@@ -146,9 +159,7 @@ public class SaveSlotDialog : MonoBehaviour
 
         // ----- 슬롯 목록 -----
         // 세이브포인트 개수만큼 세로로 쌓는다.
-        const float slotHeight = 60f;
-        const float slotGap = 8f;
-        float listTop = -86f;
+        float listTop = -headerHeight;
 
         for (int i = 0; i < slotCount; i++)
         {
@@ -192,8 +203,8 @@ public class SaveSlotDialog : MonoBehaviour
         skipRt.anchorMin = new Vector2(0.5f, 0f);
         skipRt.anchorMax = new Vector2(0.5f, 0f);
         skipRt.pivot = new Vector2(0.5f, 0f);
-        skipRt.anchoredPosition = new Vector2(0f, 18f);
-        skipRt.sizeDelta = new Vector2(220f, 48f);
+        skipRt.anchoredPosition = new Vector2(0f, bottomMargin);
+        skipRt.sizeDelta = new Vector2(220f, skipButtonHeight);
 
         var skipBg = skip.GetComponent<Image>();
         skipBg.color = new Color(1f, 1f, 1f, 0.16f);

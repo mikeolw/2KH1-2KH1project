@@ -23,12 +23,11 @@ public class SaveManager : MonoBehaviour
 
     // 세이브 슬롯 개수.
     //
-    // 시나리오 문서의 {세이브포인트}가 총 9곳이라, 지나온 지점을 각각 따로 남겨둘 수 있도록
-    // 슬롯도 9개로 맞췄다. (예전에는 3개뿐이라 앞 지점으로 되돌아가려면 덮어써야 했다)
-    //   #01 사무실 / #02 해안도로 / #03 경찰서 / #04 한성의 방 / #회상05 단서 조합 /
-    //   #05 공사장 / #07 회사 조사 / #07 자료실 / #07 사장실
-    // 세이브포인트가 늘거나 줄면 이 숫자만 바꾸면 UI도 따라간다(슬롯 UI가 이 값을 보고 만들어진다).
-    public const int SlotCount = 9;
+    // 타이틀 화면(SaveDataSceneController)과 인게임 저장창(SaveSlotDialog) 둘 다
+    // 이 값을 보고 슬롯 UI를 만든다. 타이틀 쪽은 씬에 미리 배치된 슬롯 수가 이 값보다
+    // 적으면 부족한 만큼 런타임에 자동으로 복제해서 채운다(SaveDataSceneController 참고).
+    // 이 숫자만 바꾸면 양쪽 UI가 함께 따라간다.
+    public const int SlotCount = 4;
 
     // 타이틀에서 슬롯을 골라 게임 씬으로 넘어갈 때, "지금 어떤 세이브로 플레이 중인지"를
     // 담아두는 값. 게임 씬(DialogueSystem/GameFlowManager 등)이 시작할 때 이 값을 확인해서

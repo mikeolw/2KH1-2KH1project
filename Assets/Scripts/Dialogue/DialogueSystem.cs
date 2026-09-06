@@ -582,6 +582,11 @@ public class DialogueSystem : MonoBehaviour
         sentenceText.maxVisibleCharacters = 0;
 
         // 쪽 수를 세려면 한 번 갱신해야 한다.
+        // 게임 시작 직후 첫 줄은 StyleDialogueBox()가 대화창 크기(anchor/offset)를 바꾼
+        // 바로 다음 프레임이라, 캔버스 레이아웃이 아직 반영되기 전에 ForceMeshUpdate가
+        // 불려서 페이지 수가 잘못 계산되어(0쪽 등) 첫 대사가 빈칸으로 보일 수 있다.
+        // 레이아웃을 먼저 강제로 완료시켜서 이 문제를 막는다.
+        Canvas.ForceUpdateCanvases();
         sentenceText.ForceMeshUpdate();
         totalPages = Mathf.Max(1, sentenceText.textInfo.pageCount);
 
