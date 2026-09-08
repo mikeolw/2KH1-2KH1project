@@ -925,7 +925,8 @@ public class DialogueSystem : MonoBehaviour
         if (InvestigationController.Instance != null && InvestigationController.Instance.IsActive)
         {
             if (InvestigationController.Instance.IsShowingTalkLine &&
-                (Input.GetKeyDown(KeyCode.Space) || (Input.GetMouseButtonDown(0) && !IsPointerOverButton())))
+                (Input.GetKeyDown(KeyCode.Space) || Input.GetKeyDown(KeyCode.Return) || Input.GetKeyDown(KeyCode.KeypadEnter) ||
+                 (Input.GetMouseButtonDown(0) && !IsPointerOverButton())))
             {
                 InvestigationController.Instance.DismissTalkLine();
             }
@@ -937,7 +938,8 @@ public class DialogueSystem : MonoBehaviour
         // 다 나타난 뒤에 한 번 더 눌러야 다음 줄로 넘어간다.
         if (isTyping)
         {
-            if (Input.GetKeyDown(KeyCode.Space) || (Input.GetMouseButtonDown(0) && !IsPointerOverButton()))
+            if (Input.GetKeyDown(KeyCode.Space) || Input.GetKeyDown(KeyCode.Return) || Input.GetKeyDown(KeyCode.KeypadEnter) ||
+                (Input.GetMouseButtonDown(0) && !IsPointerOverButton()))
             {
                 CompleteTypingImmediately();
             }
@@ -946,7 +948,7 @@ public class DialogueSystem : MonoBehaviour
 
         // ===== 다 찍힌 뒤 클릭/스페이스 =====
         // 아직 읽을 쪽이 남아 있으면 다음 쪽으로 넘기고, 다 읽었으면 다음 대사 줄로 간다.
-        if (Input.GetKeyDown(KeyCode.Space))
+        if (Input.GetKeyDown(KeyCode.Space) || Input.GetKeyDown(KeyCode.Return) || Input.GetKeyDown(KeyCode.KeypadEnter))
         {
             StopAutoAdvanceRoutine(); // 손으로 넘겼으면 예약된 자동 진행은 취소
             if (HasMorePages) ShowNextPage();
