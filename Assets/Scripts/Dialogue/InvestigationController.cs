@@ -247,6 +247,26 @@ public class InvestigationController : MonoBehaviour
         callback?.Invoke();
     }
 
+    // ===== 엔딩이 조사 도중에 갑자기 끼어들 때 (예: 미니게임 2 타임어택 시간 초과) =====
+    // 일반 Exit()과 거의 같지만 onExitCallback을 부르지 않는다는 점이 다르다. Exit()의
+    // 콜백은 "조사를 마쳤으니 CSV의 다음 줄로 이어가라"는 뜻인데, 지금은 대사 흐름 자체를
+    // 통째로 버리고 엔딩 CSV로 갈아타는 상황이라 그 콜백을 부르면 안 된다(엔딩 진행 중에
+    // 원래 대사가 몰래 한 줄 더 나가버리는 사고가 생긴다). GameFlowManager.TriggerEnding()이
+    // 부른다.
+    public void ForceExit()
+    {
+        if (!inSession) return;
+
+        ClearHotspots();
+
+        inSession = false;
+        IsShowingTalkLine = false;
+        activeScreenId = null;
+        onExitCallback = null;
+
+        SetDialogueVisible(true);
+    }
+
     // ---------------------------------------------------------------------------------
     // 조사 오브젝트 만들기 (핵심)
     // ---------------------------------------------------------------------------------

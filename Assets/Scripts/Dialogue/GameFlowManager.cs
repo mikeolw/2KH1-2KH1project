@@ -112,6 +112,23 @@ public class GameFlowManager : MonoBehaviour
         // (가방이 열린 채로 엔딩이 시작되면 어색하다)
         if (UIManager.Instance != null) UIManager.Instance.CloseAllPanels();
 
+        // ===== 조사 화면 / 미니게임 패널이 열려 있는 채로 엔딩이 끼어드는 경우 =====
+        // 원래는 선택지를 골랐을 때만 엔딩이 발동해서 이런 상황이 없었다. 그런데 미니게임 2
+        // (TimeAttackController, 진행형 타임어택)가 생기면서, 플레이어가 조사 화면이나 다른
+        // 미니게임 한가운데 있을 때 시간이 다 되어 엔딩이 발동할 수 있게 됐다. 그대로 두면
+        // 엔딩 대사 위에 조사 화면 오브젝트들이나 미니게임 패널이 그대로 남아있는 채로 겹쳐
+        // 보이므로, 다음 CSV를 불러오기 전에 강제로 정리해준다 (Exit()과 달리 ForceExit()은
+        // "다음 줄로 이어가라"는 콜백을 부르지 않는다 - InvestigationController.ForceExit()/
+        // MinigameController.ForceExit() 주석 참고).
+        if (InvestigationController.Instance != null && InvestigationController.Instance.IsActive)
+        {
+            InvestigationController.Instance.ForceExit();
+        }
+        if (MinigameController.Instance != null && MinigameController.Instance.IsActive)
+        {
+            MinigameController.Instance.ForceExit();
+        }
+
         if (DialogueSystem.Instance == null)
         {
             Debug.LogError("[GameFlowManager] DialogueSystem이 없어 엔딩 CSV를 재생할 수 없습니다.");
