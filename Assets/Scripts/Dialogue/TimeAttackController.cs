@@ -55,6 +55,17 @@ public class TimeAttackController : MonoBehaviour
     // 지금 타이머가 돌아가는 중인지. DialogueSystem 등 다른 곳에서 참고할 수 있게 열어둔다.
     public bool IsRunning { get; private set; }
 
+    // ===== 세이브에 담아야 하는 값들 (SavePointManager.cs가 읽어간다) =====
+    // 타이머가 CSV의 특정 줄(MinigameTimeLimit이 적힌 Minigame 행)을 지나갈 때만 켜지는데,
+    // 그 줄보다 뒤에 있는 세이브포인트(예: "#07 자료실")에서 저장했다가 불러오면 CSV 재생이
+    // 그 저장된 줄부터 곧바로 이어지므로 타이머를 켜는 줄 자체를 다시 지나가지 않는다.
+    // 그러면 실제로는 아직 시간 제한 구간 안인데도 타이머가 꺼진 채로 남아있게 된다(버그).
+    // 그래서 지금 타이머가 얼마나 남았는지를 세이브에 함께 저장해뒀다가, 불러올 때
+    // RestoreTimer()로 그 상태를 그대로 복원한다.
+    public float RemainingSeconds => remainingSeconds;
+    public string StopSavePointId => stopAtSavePointId;
+    public EndingType FailEnding => failEnding;
+
     private float remainingSeconds;
     private EndingType failEnding;
     private string stopAtSavePointId;
@@ -116,6 +127,25 @@ public class TimeAttackController : MonoBehaviour
             return;
         }
 
+        BeginRunning(seconds, stopSavePointId, onFailEnding);
+        Debug.Log($"[TimeAttackController] 타임어택 시작: {seconds}초, 목표 세이브포인트='{stopAtSavePointId}'");
+    }
+
+    // ===== 세이브 불러오기 전용 =====
+    // SavePointManager.RestoreFrom()이 세이브에 남아있던 타이머 상태를 보고 부른다.
+    // StartTimer()와 하는 일은 거의 같지만(BeginRunning 재사용), "새로 시작"이 아니라
+    // "이어서 재생"이라는 걸 로그 문구로 구분해둔다.
+    public void RestoreTimer(float remainingSecondsToRestore, string stopSavePointId, EndingType onFailEnding)
+    {
+        if (remainingSecondsToRestore <= 0f) return;
+
+        BeginRunning(remainingSecondsToRestore, stopSavePointId, onFailEnding);
+        Debug.Log($"[TimeAttackController] 세이브에서 타임어택을 이어서 재생합니다: {remainingSecondsToRestore:0.0}초 남음, 목표 세이브포인트='{stopAtSavePointId}'");
+    }
+
+    // StartTimer()/RestoreTimer()가 공유하는 실제 시작 처리.
+    private void BeginRunning(float seconds, string stopSavePointId, EndingType onFailEnding)
+    {
         remainingSeconds = seconds;
         failEnding = onFailEnding;
         stopAtSavePointId = string.IsNullOrWhiteSpace(stopSavePointId) ? null : stopSavePointId.Trim();
@@ -138,8 +168,6 @@ public class TimeAttackController : MonoBehaviour
             timerRoot.SetActive(true);
             UpdateTimerText();
         }
-
-        Debug.Log($"[TimeAttackController] 타임어택 시작: {seconds}초, 목표 세이브포인트='{stopAtSavePointId}'");
     }
 
     // 시간 초과가 아닌 이유로(목표 지점 도달, 강제 종료 등) 타이머를 멈춘다.

@@ -129,6 +129,17 @@ public class SavePointManager : MonoBehaviour
                 : new System.Collections.Generic.List<string>()
         };
 
+        // 미니게임 2(진행형 타임어택)가 지금 돌아가는 중이면 남은 시간도 같이 저장해둔다.
+        // 안 그러면 이 세이브를 불러올 때 타이머를 켜는 CSV 줄을 다시 지나가지 않아서
+        // 타이머가 영영 안 켜지는 버그가 생긴다 (TimeAttackController.cs 상단 주석 참고).
+        if (TimeAttackController.Instance != null && TimeAttackController.Instance.IsRunning)
+        {
+            data.timeAttackRunning = true;
+            data.timeAttackRemainingSeconds = TimeAttackController.Instance.RemainingSeconds;
+            data.timeAttackStopSavePointId = TimeAttackController.Instance.StopSavePointId;
+            data.timeAttackFailEnding = TimeAttackController.Instance.FailEnding;
+        }
+
         SaveManager.Instance.Save(slotIndex, data);
         Debug.Log($"[SavePointManager] 슬롯 {slotIndex}에 저장했습니다. ({LastSavePointId})");
         return true;
@@ -157,6 +168,16 @@ public class SavePointManager : MonoBehaviour
         if (NoteManager.Instance != null && data.noteEntryIds != null)
         {
             NoteManager.Instance.RestoreEntries(data.noteEntryIds);
+        }
+
+        // 저장 시점에 타임어택이 돌고 있었다면 남은 시간 그대로 이어서 재생한다.
+        // (TimeAttackController.cs의 RestoreTimer()/SaveToSlot() 주석 참고)
+        if (data.timeAttackRunning && TimeAttackController.Instance != null)
+        {
+            TimeAttackController.Instance.RestoreTimer(
+                data.timeAttackRemainingSeconds,
+                data.timeAttackStopSavePointId,
+                data.timeAttackFailEnding);
         }
 
         Debug.Log($"[SavePointManager] 세이브를 복원했습니다: {data.chapterId} ({data.scenarioCsv} {data.lineIndex}번째 줄)");
