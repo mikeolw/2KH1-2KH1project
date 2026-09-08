@@ -82,6 +82,10 @@ public class SavePointManager : MonoBehaviour
         Debug.Log($"[SavePointManager] 세이브포인트 도달: {LastSavePointId} ({scenarioCsv} {lineIndex}번째 줄)");
         OnSavePointReached?.Invoke(LastSavePointId);
 
+        // 세이브포인트는 "안전하게 저장해도 되는 지점"이므로, 스킵(already)이 참고하는
+        // "읽은 줄" 기록도 이 시점에 같이 디스크로 흘려보낸다 (ReadProgressManager.cs 참고).
+        ReadProgressManager.Instance?.Flush();
+
         // 세이브포인트를 지날 때마다 "어느 슬롯에 저장할까요?" 창을 띄운다.
         // 플레이어는 슬롯을 고르거나 "저장하지 않고 계속"을 눌러 넘어갈 수 있다.
         // (자동으로 한 곳에 덮어쓰면 앞 지점으로 되돌아갈 수 없어서 슬롯을 고르게 한다)
