@@ -508,6 +508,21 @@ public class DialogueSystem : MonoBehaviour
         lineIndex = Mathf.Clamp(startLineIndex, 0, data.lines != null ? data.lines.Count : 0);
 
         if (choicePanel != null) choicePanel.SetActive(false);
+
+        // ===== 세이브를 불러왔을 때 엉뚱한 대사가 잠깐 보이는 문제 =====
+        // 세이브포인트는 대부분 Minigame/Investigate/Deduction 같은 "특수 줄" 바로 앞의
+        // 대사 줄에서 걸린다. 그래서 이어하기로 재생을 재개하는 첫 줄이 곧바로 그런 특수
+        // 줄인 경우가 흔하다(예: 이번 미니게임 2 세이브포인트도 그렇다). 그런데 특수 줄은
+        // ShowNextSentence()가 DisplayLine()을 아예 부르지 않고 곧바로 미니게임/조사/추리
+        // 화면으로 넘어가 버린다 - 즉 대사창(speakerText/sentenceText)을 새로 채워줄 기회가
+        // 없다는 뜻이다. 그러면 씬이 막 시작된 시점에 대사창에 남아있던 값(에디터에서
+        // 미리 넣어둔 안내용 placeholder 문구 등, 예: "안녕하세요!")이 그대로 화면에 남아
+        // 특수 화면 뒤에 비쳐 보이는 버그가 생긴다. 그래서 대사 재생을 시작하기 전에
+        // 대사창을 항상 먼저 비워둔다 - 어차피 곧바로 특수 줄로 넘어가면 아무것도 안 보일
+        // 뿐이고, 일반 대사 줄로 시작하면 어차피 DisplayLine()이 바로 덮어써서 상관없다.
+        SetSpeakerName("");
+        if (sentenceText != null) sentenceText.text = "";
+
         ShowNextSentence();
     }
 
@@ -534,6 +549,27 @@ public class DialogueSystem : MonoBehaviour
         // 실제로 호출되진 않지만, 나중에 진짜 실패 조건이 생겨도 이 호출부는 그대로 두면 된다.
         if (line.isMinigame)
         {
+            // ===== 미니게임 2: 진행형 타임어택 시작 =====
+            // 이 행에 MinigameTimeLimit(초)이 적혀 있으면, 실제 미니게임 패널을 띄우기 전에
+            // 배경 타이머부터 켠다. 이 타이머는 지금 이 미니게임 하나의 성공/실패와는 무관하게
+            // "MinigameTimerStopId 세이브포인트에 도달할 때까지" 대사/조사/다른 미니게임을
+            // 넘나들며 계속 흐른다 (TimeAttackController.cs 참고). 0(또는 빈 칸)이면 그냥
+            // 넘어간다 - 아래의 일반 미니게임 스텁 흐름만 그대로 탄다.
+            if (line.minigameTimeLimitSeconds > 0f)
+            {
+                if (TimeAttackController.Instance == null)
+                {
+                    Debug.LogWarning("[DialogueSystem] TimeAttackController가 없어 타임어택 제한시간을 걸지 못했습니다.");
+                }
+                else
+                {
+                    TimeAttackController.Instance.StartTimer(
+                        line.minigameTimeLimitSeconds,
+                        line.minigameTimerStopSavePointId,
+                        line.minigameFailEnding);
+                }
+            }
+
             // 미니게임 담당이 씬에 없으면(팀원이 아직 만들지 않은 구간 등) 게임이 멈추는
             // 대신 그냥 다음 대사로 넘어간다. 조사/추리 쪽과 같은 방침이다.
             if (MinigameController.Instance == null)
@@ -1372,6 +1408,22 @@ public class DialogueSystem : MonoBehaviour
                 {
                     Debug.LogWarning($"[DialogueSystem] Minigame 행의 TargetEnding '{failEndingStr}'이 EndingType에 없습니다. (CSV: {csvFileName}, 행: {i + 2})");
                 }
+
+                // 미니게임 2(진행형 타임어택) 전용 칸. 비어 있으면 0으로 남고, 그러면
+                // ShowNextSentence()가 타이머를 켜지 않는다 (DialogueLine.cs 주석 참고).
+                string timeLimitStr = GetField(data[i], "MinigameTimeLimit");
+                if (!string.IsNullOrWhiteSpace(timeLimitStr))
+                {
+                    if (float.TryParse(timeLimitStr, out float parsedTimeLimit))
+                    {
+                        minigameLine.minigameTimeLimitSeconds = parsedTimeLimit;
+                    }
+                    else
+                    {
+                        Debug.LogWarning($"[DialogueSystem] Minigame 행의 MinigameTimeLimit '{timeLimitStr}'이 숫자가 아닙니다. (CSV: {csvFileName}, 행: {i + 2})");
+                    }
+                }
+                minigameLine.minigameTimerStopSavePointId = GetField(data[i], "MinigameTimerStopId");
 
                 currentDialogue.lines.Add(minigameLine);
                 continue;
