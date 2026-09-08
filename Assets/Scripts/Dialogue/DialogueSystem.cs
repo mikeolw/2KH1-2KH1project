@@ -15,6 +15,18 @@ public class DialogueSystem : MonoBehaviour
     public GameObject choiceButtonPrefab;
     public Transform choiceContainer;
 
+    [Header("빠른 진행 버튼 (대화창 옆)")]
+    [Tooltip("자동 진행 토글 버튼. SettingsManager.Current.autoAdvance와 그대로 연동된다.")]
+    public Button autoButton;
+    [Tooltip("스킵(이미 읽은 대사만) 토글 버튼.")]
+    public Button skipAlreadyReadButton;
+    [Tooltip("스킵(강제, 안 읽은 대사도 전부) 토글 버튼.")]
+    public Button skipForceButton;
+    [Tooltip("위 세 버튼이 켜짐 상태일 때 입힐 색.")]
+    public Color toggleActiveColor = new Color(1f, 0.86f, 0.45f);
+    [Tooltip("위 세 버튼이 꺼짐 상태일 때 입힐 색.")]
+    public Color toggleInactiveColor = Color.white;
+
     [Header("대화창 꾸미기")]
     [Tooltip("대화창 전체(DialoguePanel). 비워두면 씬에서 이름으로 찾는다.")]
     public GameObject dialoguePanel;
@@ -104,10 +116,65 @@ public class DialogueSystem : MonoBehaviour
     // 지금 표시 중인 줄. 자동 진행/립싱크 처리에 화자 정보가 필요해서 들고 있는다.
     private DialogueLine currentLine;
 
+    // =================================================================================
+    // 스킵 (환경설정과 무관하게 대사창 버튼으로만 켜고 끄는 "빠른 진행" 기능)
+    // =================================================================================
+    // AlreadyRead : 예전에 본 적 있는 줄만 빠르게 넘기고, 처음 보는 줄에서 자동으로 멈춘다.
+    // Force       : 읽었든 안 읽었든 전부 넘기고, 선택지/미니게임/조사/추리 등 다른 UI가
+    //               뜨기 직전까지만 진행한다.
+    // Auto(자동 진행)와 스킵은 결국 둘 다 ShowNextSentence()/ShowNextPage()를 부르는
+    // 같은 진행 로직이라, 동시에 두 개가 돌면 이중 진행이 생긴다. 그래서 서로 배타적으로
+    // 동작하도록 만든다 (SetSkipMode/OnPageFullyShown/HandleSettingsChanged 참고).
+    public enum SkipMode { None, AlreadyRead, Force }
+    private SkipMode skipMode = SkipMode.None;
+    private Coroutine skipRoutine;
+
     private void Awake()
     {
         if (Instance == null) Instance = this;
         else Destroy(gameObject);
+    }
+
+    private void OnEnable()
+    {
+        if (SettingsManager.Instance != null) SettingsManager.Instance.OnSettingsChanged += HandleSettingsChanged;
+    }
+
+    private void OnDisable()
+    {
+        if (SettingsManager.Instance != null) SettingsManager.Instance.OnSettingsChanged -= HandleSettingsChanged;
+    }
+
+    // 설정값이 바뀔 때마다 불린다(설정창의 슬라이더/토글을 움직일 때마다). 자동 진행 토글이
+    // 설정창 쪽에서 켜졌을 수도 있으므로, 대사창 AUTO 버튼 색을 맞추고, 스킵 중이었다면
+    // 자동 진행과 스킵이 동시에 돌지 않도록 스킵을 꺼준다.
+    private void HandleSettingsChanged()
+    {
+        UpdateAutoButtonVisual();
+
+        if (SettingsManager.Instance == null || !SettingsManager.Instance.Current.autoAdvance)
+        {
+            // 자동 진행을 껐는데 이미 예약돼 있던 대기 코루틴을 그냥 두면, 꺼진 뒤에도
+            // 대기 시간이 다 되는 순간 한 줄이 저절로 넘어가버린다 - 그걸 막기 위해
+            // 꺼지는 즉시 취소한다.
+            StopAutoAdvanceRoutine();
+            return;
+        }
+
+        if (skipMode != SkipMode.None)
+        {
+            SetSkipMode(SkipMode.None);
+            return;
+        }
+
+        // 자동 진행은 원래 "타이핑이 끝나는 순간"(OnPageFullyShown)에만 예약된다. 그런데
+        // 이미 다 찍혀 있는 줄을 보고 있는 도중에 AUTO를 켜면 그 타이밍이 지나가버려서,
+        // 다음 줄이 나올 때까지 아무 반응이 없는 것처럼 보인다. 그래서 지금 막 켠 순간에도
+        // "이미 다 찍혔고 아무것도 안 막혀있는" 상태면 바로 한 번 더 예약해준다.
+        if (currentLine != null && !isTyping && autoAdvanceRoutine == null && !IsBlockedByOtherUI())
+        {
+            OnPageFullyShown();
+        }
     }
 
     // =================================================================================
@@ -199,8 +266,9 @@ public class DialogueSystem : MonoBehaviour
                 textRect.anchorMin = Vector2.zero;
                 textRect.anchorMax = Vector2.one;
                 textRect.pivot = new Vector2(0.5f, 0.5f);
-                // 위쪽은 이름 칸만큼 비우고, 오른쪽은 "계속" 표시(▼) 자리를 남긴다.
-                textRect.offsetMin = new Vector2(30f, 24f);
+                // 위쪽은 이름 칸만큼 비우고, 오른쪽은 "계속" 표시(▼) 자리를, 왼쪽 아래는
+                // AUTO/SKIP 버튼(높이 40 + 여백) 자리를 남긴다.
+                textRect.offsetMin = new Vector2(30f, 60f);
                 textRect.offsetMax = new Vector2(-52f, -(SpeakerBoxHeight + 10f));
             }
 
@@ -221,6 +289,7 @@ public class DialogueSystem : MonoBehaviour
         }
 
         CreateContinueIndicator();
+        CreateSkipButtons();
         FixFadeOverlayOrder();
     }
 
@@ -280,6 +349,67 @@ public class DialogueSystem : MonoBehaviour
         continueIndicator.color = new Color(1f, 0.86f, 0.45f, 0.9f);
         continueIndicator.raycastTarget = false;
         continueIndicator.gameObject.SetActive(false);
+    }
+
+    // 대화창 왼쪽 아래에 AUTO/SKIP 버튼 3개를 만든다. ContinueIndicator(▼)와 마찬가지로
+    // 씬 파일을 직접 건드리지 않고 코드로 만든다 - 팀원끼리 씬 충돌을 피하기 위해서다.
+    // 인스펙터에서 이미 autoButton 등을 직접 연결해뒀다면(팀원이 직접 예쁘게 디자인한 버튼을
+    // 쓰고 싶을 때) 그 값을 그대로 쓰고 여기서 새로 만들지 않는다.
+    private void CreateSkipButtons()
+    {
+        if (dialoguePanel == null) return;
+
+        // Unity 기본 UI 버튼과 같은 배경(둥근 모서리 sprite). 프로젝트 에셋이 아니라
+        // 엔진에 내장된 리소스라서 빌드에도 그대로 포함된다.
+        Sprite buttonSprite = Resources.GetBuiltinResource<Sprite>("UI/Skin/UISprite.psd");
+
+        if (autoButton == null) autoButton = CreateQuickActionButton("AutoButton", "AUTO", buttonSprite, 30f, 90f);
+        if (skipAlreadyReadButton == null) skipAlreadyReadButton = CreateQuickActionButton("SkipAlreadyReadButton", "SKIP", buttonSprite, 130f, 90f);
+        if (skipForceButton == null) skipForceButton = CreateQuickActionButton("SkipForceButton", "SKIP ALL", buttonSprite, 230f, 120f);
+
+        autoButton.onClick.AddListener(ToggleAuto);
+        skipAlreadyReadButton.onClick.AddListener(ToggleSkipAlreadyRead);
+        skipForceButton.onClick.AddListener(ToggleSkipForce);
+    }
+
+    // 위 CreateSkipButtons()가 쓰는 버튼 하나 생성 도우미. 대화창 왼쪽 아래를 기준으로
+    // x만큼 오른쪽에, 밑에서 12px 띄운 자리에 놓는다(ContinueIndicator의 반대편 짝).
+    private Button CreateQuickActionButton(string objectName, string label, Sprite background, float x, float width)
+    {
+        var go = new GameObject(objectName, typeof(RectTransform));
+        go.transform.SetParent(dialoguePanel.transform, false);
+
+        var rt = go.GetComponent<RectTransform>();
+        rt.anchorMin = new Vector2(0f, 0f);
+        rt.anchorMax = new Vector2(0f, 0f);
+        rt.pivot = new Vector2(0f, 0f);
+        rt.anchoredPosition = new Vector2(x, 12f);
+        rt.sizeDelta = new Vector2(width, 40f);
+
+        var image = go.AddComponent<Image>();
+        image.sprite = background;
+        image.type = background != null ? Image.Type.Sliced : Image.Type.Simple;
+        image.color = toggleInactiveColor;
+
+        var button = go.AddComponent<Button>();
+        button.targetGraphic = image;
+
+        var labelGo = new GameObject("Label", typeof(RectTransform));
+        labelGo.transform.SetParent(go.transform, false);
+        var labelRect = labelGo.GetComponent<RectTransform>();
+        labelRect.anchorMin = Vector2.zero;
+        labelRect.anchorMax = Vector2.one;
+        labelRect.offsetMin = Vector2.zero;
+        labelRect.offsetMax = Vector2.zero;
+
+        var text = labelGo.AddComponent<TextMeshProUGUI>();
+        text.text = label;
+        text.fontSize = 20;
+        text.alignment = TMPro.TextAlignmentOptions.Center;
+        text.color = new Color(0.2f, 0.2f, 0.2f);
+        text.raycastTarget = false;
+
+        return button;
     }
 
     // ▼ 표시를 깜빡이게 한다. 대사가 다 찍혔을 때만 보인다.
@@ -347,6 +477,9 @@ public class DialogueSystem : MonoBehaviour
 
             LoadDialogueFromCSV("scenario_01");
         }
+
+        // 씬이 새로 시작될 때마다 AUTO 버튼 색을 지금 설정값에 맞춰둔다.
+        UpdateAutoButtonVisual();
     }
 
     //void Start()
@@ -388,7 +521,12 @@ public class DialogueSystem : MonoBehaviour
         }
 
         var line = currentDialogue.lines[lineIndex];
+        int shownIndex = lineIndex; // 증가 전 값 = 지금 보여줄 줄의 인덱스 (ReadProgressManager 키로 씀)
         lineIndex++;
+
+        // 미니게임/조사/추리로 빠지는 줄도 "플레이어가 여기까지 도달했다"는 사실은 같으므로,
+        // 분기하기 전에 먼저 읽음 처리한다 (스킵(already)이 참고하는 기록).
+        ReadProgressManager.Instance?.MarkRead(currentScenarioCsv, shownIndex);
 
         // LineType이 "Minigame"인 줄은 대사 대신 미니게임 패널을 띄운다 (MinigameController.cs
         // 상단 주석 참고). 성공하면 다음 줄로 계속 진행하고, 실패하면 바로 엔딩으로 분기한다.
@@ -715,7 +853,10 @@ public class DialogueSystem : MonoBehaviour
         SetTalkingAnimation(false);
 
         // 자동 진행이 켜져 있으면 잠시 뒤 다음 쪽/다음 줄로 넘어가도록 예약한다.
-        if (SettingsManager.Instance != null && SettingsManager.Instance.Current.autoAdvance)
+        // 스킵이 도는 중에는 예약하지 않는다 - 스킵 루프도 CompleteTypingImmediately()를 거쳐
+        // 이 함수를 부르므로, 여기서 막지 않으면 자동 진행 코루틴과 스킵 루프가 동시에
+        // ShowNextSentence()를 부르게 된다.
+        if (skipMode == SkipMode.None && SettingsManager.Instance != null && SettingsManager.Instance.Current.autoAdvance)
         {
             StopAutoAdvanceRoutine();
             autoAdvanceRoutine = StartCoroutine(AutoAdvanceAfterLine());
@@ -774,6 +915,131 @@ public class DialogueSystem : MonoBehaviour
             StopCoroutine(autoAdvanceRoutine);
             autoAdvanceRoutine = null;
         }
+    }
+
+    // ---------------------------------------------------------------------------------
+    // 스킵 (already / force)
+    // ---------------------------------------------------------------------------------
+
+    private void StopSkipRoutine()
+    {
+        if (skipRoutine != null)
+        {
+            StopCoroutine(skipRoutine);
+            skipRoutine = null;
+        }
+    }
+
+    // 대사창의 스킵 버튼이 부르는 진입점. 이미 켜져 있는 모드를 다시 누르면 꺼진다.
+    private void SetSkipMode(SkipMode mode)
+    {
+        if (skipMode == mode) mode = SkipMode.None;
+
+        StopSkipRoutine();
+        skipMode = mode;
+
+        if (skipMode != SkipMode.None)
+        {
+            // Auto와 스킵은 동시에 돌지 않는다 (OnPageFullyShown 주석 참고).
+            StopAutoAdvanceRoutine();
+            skipRoutine = StartCoroutine(SkipRoutine());
+        }
+
+        UpdateSkipButtonVisuals();
+    }
+
+    // 스킵 본체: 프레임마다 한 스텝씩 진행하다가, 막히는 UI를 만나거나(both) 처음 보는
+    // 줄을 만나면(already만) 스스로 멈춘다.
+    private IEnumerator SkipRoutine()
+    {
+        while (true)
+        {
+            yield return null;
+
+            // 암전 연출 중엔 대기만 한다(해제하지 않음) - 연출이 끝나면 이어서 스킵된다.
+            if (isFading) continue;
+
+            // 선택지/설정 등 다른 패널이 열려있는지는 IsBlockedByOtherUI()가 다 봐주지만,
+            // 조사 화면(InvestigationController)은 포함돼 있지 않다(Update()의 Talk 오버레이
+            // 분기가 깨지지 않도록 일부러 그렇게 둔 것 - IsBlockedByOtherUI() 선언부 참고).
+            // 그래서 스킵 전용으로 여기서 따로 확인한다.
+            bool blockedByInvestigation = InvestigationController.Instance != null && InvestigationController.Instance.IsActive;
+            if (IsBlockedByOtherUI() || blockedByInvestigation) break;
+
+            if (isTyping)
+            {
+                CompleteTypingImmediately();
+                continue;
+            }
+
+            if (HasMorePages)
+            {
+                ShowNextPage();
+                continue;
+            }
+
+            if (skipMode == SkipMode.AlreadyRead)
+            {
+                int nextIndex = lineIndex; // ShowNextSentence()가 다음에 보여줄 줄의 인덱스
+                bool nextExists = currentDialogue != null && nextIndex < currentDialogue.lines.Count;
+                bool nextAlreadyRead = nextExists && ReadProgressManager.Instance != null &&
+                    ReadProgressManager.Instance.IsRead(currentScenarioCsv, nextIndex);
+
+                // 다음 줄이 CSV 끝(선택지로 이어짐)이면 일단 진행시킨다 - 선택지 패널이 뜨는
+                // 순간은 다음 반복의 IsBlockedByOtherUI()가 잡아준다.
+                if (nextExists && !nextAlreadyRead) break;
+            }
+
+            ShowNextSentence();
+        }
+
+        skipMode = SkipMode.None;
+        skipRoutine = null;
+        UpdateSkipButtonVisuals();
+    }
+
+    // ---------------------------------------------------------------------------------
+    // 빠른 진행 버튼 (AUTO / 스킵) - OnClick()에서 직접 연결하는 진입점
+    // ---------------------------------------------------------------------------------
+
+    // AUTO 버튼: 새 상태를 따로 안 만들고 SettingsManager의 자동 진행 값을 그대로 뒤집는다.
+    // 설정창 체크박스와 항상 같은 값을 보게 되는 이유가 이것 - 둘 다 결국 이 한 메서드(그리고
+    // SetAutoAdvance)를 거친다. 버튼 색 갱신과 스킵 해제는 OnSettingsChanged 이벤트를 통해
+    // HandleSettingsChanged()가 알아서 처리한다.
+    public void ToggleAuto()
+    {
+        if (SettingsManager.Instance == null) return;
+        SettingsManager.Instance.SetAutoAdvance(!SettingsManager.Instance.Current.autoAdvance);
+    }
+
+    public void ToggleSkipAlreadyRead()
+    {
+        SetSkipMode(skipMode == SkipMode.AlreadyRead ? SkipMode.None : SkipMode.AlreadyRead);
+    }
+
+    public void ToggleSkipForce()
+    {
+        SetSkipMode(skipMode == SkipMode.Force ? SkipMode.None : SkipMode.Force);
+    }
+
+    private void SetButtonActiveVisual(Button button, bool active)
+    {
+        if (button == null) return;
+        if (button.targetGraphic is Image image)
+        {
+            image.color = active ? toggleActiveColor : toggleInactiveColor;
+        }
+    }
+
+    private void UpdateAutoButtonVisual()
+    {
+        SetButtonActiveVisual(autoButton, SettingsManager.Instance != null && SettingsManager.Instance.Current.autoAdvance);
+    }
+
+    private void UpdateSkipButtonVisuals()
+    {
+        SetButtonActiveVisual(skipAlreadyReadButton, skipMode == SkipMode.AlreadyRead);
+        SetButtonActiveVisual(skipForceButton, skipMode == SkipMode.Force);
     }
 
     // Talk 타입 조사 오브젝트(InvestigatableObject.cs 참고, 예: 회사 동료)가
@@ -915,6 +1181,21 @@ public class DialogueSystem : MonoBehaviour
         // 선택지 패널이나 UIManager 팝업(조사기록/인벤토리/사진첩/핸드폰/설정), 자료 뷰어가
         // 열려있을 땐 스페이스바로도 대사가 넘어가면 안 된다.
         if (IsBlockedByOtherUI()) return;
+
+        // 스킵(already/force) 중에 플레이어가 직접 넘기려는 입력을 하면, "더 빠르게"가 아니라
+        // "멈추고 싶다"는 뜻으로 보고 스킵을 완전히 해제한다. 이번 입력은 해제 용도로만 쓰고
+        // 대사를 진행시키진 않는다 - 한 프레임 안에서 "스킵 해제 + 한 줄 진행"이 같이 일어나면
+        // 플레이어가 멈추고 싶었던 줄을 그대로 지나쳐버릴 수 있기 때문이다.
+        if (skipMode != SkipMode.None)
+        {
+            bool manualAdvancePressed = Input.GetKeyDown(KeyCode.Space) || Input.GetKeyDown(KeyCode.Return) ||
+                Input.GetKeyDown(KeyCode.KeypadEnter) || (Input.GetMouseButtonDown(0) && !IsPointerOverButton());
+            if (manualAdvancePressed)
+            {
+                SetSkipMode(SkipMode.None);
+                return;
+            }
+        }
 
         // 조사 모드 처리: 평소엔 조사 화면의 버튼들(InvestigatableObject)이 클릭을 직접
         // 받으므로 여기서 따로 막을 필요가 없다. 다만 "Talk" 타입 오브젝트(예: 회사 동료)를
