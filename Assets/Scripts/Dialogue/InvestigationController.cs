@@ -142,9 +142,11 @@ public class InvestigationController : MonoBehaviour
             }
 
             // 일반 조사 오브젝트
+            // Standing/Prop은 "보이기만 하고 조사는 안 되는" 장식이다 (HotspotType 주석 참고).
             if (!Enum.TryParse(GetField(row, "Type"), true, out HotspotType type))
             {
-                Debug.LogWarning($"[InvestigationController] '{GetField(row, "Type")}'은 조사 타입(Item/Description/Talk)이 아닙니다. " +
+                Debug.LogWarning($"[InvestigationController] '{GetField(row, "Type")}'은 조사 타입이 아닙니다. " +
+                                 $"Item/Description/Talk(조사 가능) 또는 Standing/Prop(장식) 중에서 적어주세요. " +
                                  $"(InvestigationId={id}, HotspotKey={key})");
                 continue;
             }
@@ -200,9 +202,18 @@ public class InvestigationController : MonoBehaviour
 
         // 1) 배경을 깐다. 대사 장면과 같은 배경 시스템을 그대로 쓰므로,
         //    조사 중에도 캐릭터 스탠딩이 필요하면 그대로 남길 수 있다.
-        if (StageController.Instance != null && !string.IsNullOrEmpty(screen.backgroundName))
+        if (StageController.Instance != null)
         {
-            StageController.Instance.ApplyBackground(screen.backgroundName);
+            // ===== 조사 화면과 대화 장면은 서로 구분된다 =====
+            // 조사 화면에 놓일 그림은 InvestigationData.csv가 전부 정한다(오브젝트, 그리고
+            // Type=Standing/Prop인 장식). 그래서 들어오기 전 대화 장면에서 올려둔 소품은
+            // 여기까지 따라오면 안 된다 - 안 치우면 엉뚱한 소품이 조사 화면에 겹쳐 보인다.
+            StageController.Instance.ClearProps();
+
+            if (!string.IsNullOrEmpty(screen.backgroundName))
+            {
+                StageController.Instance.ApplyBackground(screen.backgroundName);
+            }
         }
 
         // 2) 배경 위에 조사 오브젝트를 올린다.
@@ -294,6 +305,14 @@ public class InvestigationController : MonoBehaviour
     // 조사 오브젝트 하나를 만든다.
     private void CreateHotspot(HotspotData data)
     {
+        // ===== 장식(Standing/Prop)은 아예 다른 방식으로 만든다 =====
+        // 누를 수 없어야 하므로 Button도 InvestigatableObject도 붙이지 않는다.
+        if (data.type == HotspotType.Standing || data.type == HotspotType.Prop)
+        {
+            CreateDecoration(data);
+            return;
+        }
+
         var go = new GameObject(data.key, typeof(RectTransform), typeof(Image), typeof(Button), typeof(InvestigatableObject));
         go.transform.SetParent(hotspotRoot.transform, false);
 
@@ -307,6 +326,10 @@ public class InvestigationController : MonoBehaviour
         io.talkSpeaker = string.IsNullOrEmpty(data.speaker) ? data.objectName : data.speaker;
         io.talkSentence = data.text;
 
+        // 이 오브젝트가 속한 조사 화면 이름. 배치표에서 "이 화면 전용 좌표"를 찾는 데 쓴다
+        // (IllustLayout.cs의 [화면별 좌표] 주석 참고).
+        io.screenId = activeScreenId;
+
         var image = go.GetComponent<Image>();
 
         if (string.IsNullOrEmpty(data.spriteName))
@@ -314,7 +337,7 @@ public class InvestigationController : MonoBehaviour
             // 그림이 지정되지 않은 오브젝트(예: 창문처럼 배경에 이미 그려진 것).
             // 눈에 보이는 그림 없이 클릭 영역만 필요한 경우인데, 위치 정보도 없으면
             // 어디를 눌러야 할지 알 수 없으므로 만들지 않고 넘어간다.
-            if (!IllustLayout.TryGet(data.key, out _))
+            if (!IllustLayout.TryGet(data.key, activeScreenId, out var p))
             {
                 Destroy(go);
                 return;
@@ -324,7 +347,6 @@ public class InvestigationController : MonoBehaviour
             image.color = new Color(1f, 1f, 1f, 0f);
             var rt = go.GetComponent<RectTransform>();
             rt.anchorMin = rt.anchorMax = rt.pivot = new Vector2(0.5f, 0.5f);
-            IllustLayout.TryGet(data.key, out var p);
             rt.anchoredPosition = p.Position;
             rt.sizeDelta = new Vector2(120f, 120f) * p.scale;
         }
@@ -336,6 +358,57 @@ public class InvestigationController : MonoBehaviour
         }
 
         go.GetComponent<Button>().onClick.AddListener(io.OnClickInspect);
+    }
+
+    // ---------------------------------------------------------------------------------
+    // 장식 그림 (조사 화면에 올리는 캐릭터 스탠딩 / 소품)
+    // ---------------------------------------------------------------------------------
+    // ===== 왜 따로 만드나? =====
+    // 조사 화면에도 인물이 서 있어야 하는 장면이 있는데(예: 자료실에 직원이 서 있는 화면),
+    // 그 인물은 "조사 대상"이 아니라 그냥 배경의 일부다. 그런데 조사 오브젝트와 똑같이
+    // 만들면 Button이 붙어서 눌리고, 무엇보다 인물 그림이 커서 뒤에 있는 진짜 조사
+    // 오브젝트들을 덮어 가려버린다.
+    //
+    // 그래서 장식은:
+    //   1) Button / InvestigatableObject를 아예 안 붙이고
+    //   2) raycastTarget을 꺼서 클릭이 그대로 통과하게 하고
+    //   3) 다른 조사 오브젝트보다 뒤(먼저 그려지는 자리)에 놓는다
+    // 이렇게 하면 보이기만 하고 조사 진행을 전혀 방해하지 않는다.
+    private void CreateDecoration(HotspotData data)
+    {
+        if (string.IsNullOrEmpty(data.spriteName))
+        {
+            Debug.LogWarning($"[InvestigationController] 장식('{data.key}')에 Sprite가 비어 있어 건너뜁니다. " +
+                             $"(InvestigationId={activeScreenId})");
+            return;
+        }
+
+        // 스탠딩은 Standings 폴더에서, 소품(Prop)은 Objects 폴더에서 찾는다.
+        Sprite sprite = data.type == HotspotType.Standing
+            ? IllustLoader.LoadStanding(data.spriteName)
+            : IllustLoader.LoadObject(data.spriteName);
+
+        if (sprite == null) return;   // 경고는 IllustLoader가 이미 남겼다
+
+        var go = new GameObject(data.key, typeof(RectTransform), typeof(Image));
+        go.transform.SetParent(hotspotRoot.transform, false);
+
+        var image = go.GetComponent<Image>();
+        image.sprite = sprite;
+        image.color = Color.white;
+
+        // ===== 핵심: 클릭이 통과하게 한다 =====
+        // raycastTarget을 끄면 이 그림은 마우스 입력을 아예 받지 않는다.
+        // 그래서 인물 그림이 조사 오브젝트를 덮고 있어도 그 뒤가 정상적으로 눌린다.
+        image.raycastTarget = false;
+
+        // 위치는 조사 오브젝트와 똑같은 규칙으로 배치표에서 찾는다
+        // (표정 상속/화면별 좌표 전부 그대로 적용된다 - IllustLayout.cs 참고).
+        IllustLayout.Apply(image.rectTransform, sprite, data.spriteName, default, activeScreenId);
+
+        // 장식은 조사 오브젝트보다 뒤에 그린다. hotspotRoot 안에서 맨 앞자리로 보내면
+        // 나중에 만들어질 조사 오브젝트들이 그 위에 그려진다.
+        go.transform.SetAsFirstSibling();
     }
 
     // 화면 구석에 "조사 그만하기" 버튼을 만든다.

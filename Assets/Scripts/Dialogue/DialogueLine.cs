@@ -53,10 +53,31 @@ public class DialogueLine
     // 배경 파일 이름 (예: BG_01_Office). 빈 값 = 유지, "none" = 배경 지움.
     public string backgroundName;
 
+    // ===== 배경이 바뀔 때의 연출. CSV의 Transition / TransitionTime 칸 =====
+    //   (빈칸) 또는 cut : 즉시 딱 바뀐다. 예전과 같은 기본 동작이라 안 적어도 된다.
+    //   fade            : 이전 배경이 서서히 사라지며 새 배경이 드러난다(크로스페이드).
+    //
+    // transitionTime은 fade에 걸리는 시간(초). 비우면 0.35초.
+    //
+    // 화면 전체를 검게 덮었다가 밝히는 "암전"은 이것과 다른 기능이며 IsFadeOut 칸이 담당한다.
+    // 둘은 같이 써도 된다 (암전 중에 배경이 바뀌면 자연스럽게 넘어간다).
+    public string transition;
+    public float transitionTime;
+
     // 캐릭터 스탠딩 파일 이름. 두 명 이상은 세로줄(|)로 구분한다.
     // 예: STD_Past01_Hansung_Default|STD_Past01_Jaehoon_Default
     // 빈 값 = 유지(표정 안 바뀜), "none" = 전원 퇴장.
     public string standingNames;
+
+    // ===== 소품(Props). CSV의 Props 칸 =====
+    // 배경 위에 얹는 오브젝트 그림. Resources/Illusts/Objects/ 의 파일 이름을 적는다.
+    // 여러 개면 세로줄(|)로 구분한다. 예: OBJ_01_Documents|OBJ_01_Camera
+    //   (빈칸) = 이전 줄 그대로 유지,  none = 소품 전부 치우기
+    //
+    // 조사 화면의 오브젝트와 달리 **누를 수 없다.** 일반 대화 장면에서는 조사를 하지 않으므로
+    // 그냥 그림일 뿐이고, 클릭은 전부 통과해서 대사 진행을 방해하지 않는다.
+    // 위치는 조사 오브젝트와 같은 IllustLayout.csv를 쓰므로 배치 도구로 잡으면 된다.
+    public string propNames;
 
     // 각 스탠딩이 설 자리. L=왼쪽 C=가운데 R=오른쪽, 세로줄(|)로 구분 (예: L|R).
     // 빈 값이면 인원수에 맞춰 자동 배치한다.

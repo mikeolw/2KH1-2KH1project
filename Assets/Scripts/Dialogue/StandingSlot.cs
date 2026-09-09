@@ -59,7 +59,9 @@ public class StandingSlot : MonoBehaviour
 
     // 이 자리에 스탠딩 그림을 올린다. fileName은 확장자 없는 파일 이름
     // (예: "STD_Past01_Hansung_Default"). IllustLoader가 Resources/Illusts/Standings/에서 찾는다.
-    public void Show(string fileName)
+    // screen: 지금 배경 이름. 배치표에서 "이 배경에서만 쓰는 좌표"를 먼저 찾는 데 쓴다.
+    //         (IllustLayout.cs 상단의 [화면별 좌표] 주석 참고. 안 넘기면 공통 좌표만 본다.)
+    public void Show(string fileName, string screen = null)
     {
         // 이미 같은 그림이 올라와 있으면 아무것도 하지 않는다.
         // (CSV에서 여러 줄 연속으로 같은 표정을 지정해도 깜빡이지 않게 하기 위함)
@@ -84,13 +86,21 @@ public class StandingSlot : MonoBehaviour
         image.sprite = closedMouthSprite;
         image.enabled = true;
 
+        // 색을 흰색(= 그림 그대로)으로 되돌린다.
+        // 씬에 미리 만들어둔 자리를 쓰는 경우 그 Image에 반투명한 placeholder 색이 남아 있을 수
+        // 있는데, 그러면 그림이 뿌옇게 나온다. 여기서 확실히 원래 색으로 맞춰준다.
+        image.color = Color.white;
+
         // ===== 화면 위치 잡기 =====
         // 스탠딩도 조사 오브젝트와 똑같이, 1440x1080 화면의 정해진 자리에 그려진 그림이다.
         // 그림이 1440x1080(여백 포함)이면 화면에 꽉 채우기만 하면 제자리에 나타나고,
         // 여백이 잘려 있으면 IllustLayout.csv에 적어둔 좌표대로 놓는다.
         // 배치 정보가 아직 없으면 이 자리의 기본 좌표(왼쪽/가운데/오른쪽)에 놓여서,
         // 최소한 여러 명이 한자리에 겹쳐 보이지는 않는다.
-        IllustLayout.Apply(image.rectTransform, closedMouthSprite, fileName, fallbackPosition);
+        //
+        // 표정이 다른 그림(_Angry, _Sorry, _OpenMouse ...)은 배치표에 따로 적지 않아도
+        // "STD_장면_캐릭터" 줄 하나를 물려받는다 - IllustLayout.cs의 [표정 상속] 주석 참고.
+        IllustLayout.Apply(image.rectTransform, closedMouthSprite, fileName, fallbackPosition, screen);
     }
 
     // 배치표에 정보가 없을 때 쓸 이 자리의 기본 좌표.

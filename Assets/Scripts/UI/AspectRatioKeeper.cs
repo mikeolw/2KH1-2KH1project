@@ -101,7 +101,48 @@ public class AspectRatioKeeper : MonoBehaviour
             rect.y = 0f;
         }
 
+        // ===== 뷰포트를 정수 픽셀로 맞춘다 (그림이 흐려지는 것을 막는다) =====
+        // Camera.rect는 0~1 비율이라, 그대로 두면 실제 렌더 크기가 1439.6픽셀처럼 소수가 될 수 있다.
+        // 그러면 UI 전체가 어중간한 배율로 다시 그려지면서 모든 그림이 한 겹 뭉개진다.
+        // 비율을 "화면 픽셀 수로 환산했을 때 정수가 되는 값"으로 다듬어 이 문제를 없앤다.
+        int pixelW = Mathf.RoundToInt(rect.width * Screen.width);
+        int pixelH = Mathf.RoundToInt(rect.height * Screen.height);
+        rect.width = (float)pixelW / Screen.width;
+        rect.height = (float)pixelH / Screen.height;
+        rect.x = Mathf.Round(rect.x * Screen.width) / Screen.width;
+        rect.y = Mathf.Round(rect.y * Screen.height) / Screen.height;
+
         cam.rect = rect;
+
+        WarnIfNotPixelPerfect(pixelW, pixelH);
+    }
+
+    // ===== 화면이 원본 크기와 다르면 한 번만 알려준다 =====
+    // 그림이 흐린 원인의 대부분은 "게임 화면이 1440x1080이 아니라서 UI 전체가 축소/확대되는 것"이다.
+    // 텍스처나 좌표 문제가 아니라 화면 크기 문제라는 걸 바로 알 수 있게 실제 배율을 찍어준다.
+    //
+    // 유니티 에디터의 Game 탭은 기본이 "Free Aspect"라 창 크기에 따라 아무 해상도나 되는데,
+    // 이때는 배율이 0.6배 같은 값이 되어 원화가 뭉개져 보인다. Game 탭 해상도를 1440x1080
+    // (또는 1920x1080)으로 고정하면 배율 1.00이 되어 원화 그대로 선명해진다.
+    private static bool pixelPerfectWarned;
+
+    private void WarnIfNotPixelPerfect(int pixelW, int pixelH)
+    {
+        if (pixelPerfectWarned) return;
+        pixelPerfectWarned = true;
+
+        float scale = pixelH / targetHeight;
+        if (Mathf.Abs(scale - 1f) < 0.001f)
+        {
+            Debug.Log($"[AspectRatioKeeper] 렌더 크기 {pixelW}x{pixelH} = 원본 크기. 그림이 원화 그대로 선명하게 나옵니다.");
+            return;
+        }
+
+        Debug.LogWarning(
+            $"[AspectRatioKeeper] 지금 게임 화면이 {pixelW}x{pixelH}라서 그림이 {scale:0.00}배로 " +
+            $"다시 그려지고 있습니다. 이러면 선이 뭉개져 원화보다 흐려 보입니다.\n" +
+            $"→ 에디터에서는 Game 탭 위쪽 해상도 목록을 '{targetWidth:0}x{targetHeight:0}'(또는 1920x1080)으로 " +
+            $"바꾸면 배율이 1.00이 되어 선명해집니다. 빌드에서는 전체화면이면 자동으로 맞습니다.");
     }
 
     // 씬의 Canvas들이 카메라의 표시 영역을 따르도록 설정한다.
@@ -131,6 +172,13 @@ public class AspectRatioKeeper : MonoBehaviour
                 // 카메라의 near/far 사이에 있어야 보인다. 기본값 100이면 대부분 문제없다.
                 canvas.planeDistance = 100f;
             }
+
+            // ===== 그림이 흐려지는 것을 막는다 =====
+            // pixelPerfect를 켜면 유니티가 UI 요소를 화면의 정수 픽셀 자리에 딱 맞춰 그린다.
+            // 꺼져 있으면 그림이 픽셀과 픽셀 사이(예: x=340.5)에 걸쳐 그려지면서 인접 픽셀이
+            // 섞여(바이리니어 보간) 선이 한 픽셀 번지고, 원화보다 흐릿해 보인다.
+            // 이 게임은 움직이는 UI가 거의 없고 선화가 많아서 켜두는 쪽이 훨씬 선명하다.
+            canvas.pixelPerfect = true;
         }
     }
 }

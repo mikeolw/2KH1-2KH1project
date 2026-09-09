@@ -30,9 +30,18 @@ using UnityEngine;
 // "조사 대상 하나에 대한 데이터 + 클릭했다는 신호"만 들고 있는 순수한 데이터/트리거 역할이다.
 public enum HotspotType
 {
-    Item,
-    Description,
-    Talk
+    Item,           // 누르면 가방에 아이템이 들어온다
+    Description,    // 누르면 설명 문구가 대화창에 뜬다
+    Talk,           // 누르면 그 인물의 대사가 대화창에 뜬다
+
+    // ===== 장식 전용 (누를 수 없음) =====
+    // 조사 화면에 캐릭터 스탠딩처럼 "보이기만 하고 조사는 안 되는" 그림을 올릴 때 쓴다.
+    // 이 타입은 Button도 InvestigatableObject도 붙지 않고, 클릭이 그대로 통과해서
+    // 뒤에 있는 진짜 조사 오브젝트를 가리지 않는다 (InvestigationController.BuildHotspot 참고).
+    //   Standing : Resources/Illusts/Standings/ 에서 그림을 찾는다
+    //   Prop     : Resources/Illusts/Objects/ 에서 그림을 찾는다 (장식용 소품)
+    Standing,
+    Prop
 }
 
 public class InvestigatableObject : MonoBehaviour
@@ -52,6 +61,11 @@ public class InvestigatableObject : MonoBehaviour
     // 오브젝트의 Image에 올린다. 인스펙터에서 Sprite를 직접 꽂지 않는 이유는
     // IllustLoader.cs 상단 주석 참고(Resources 폴더가 git으로 공유되지 않아 GUID가 깨지기 때문).
     public string spriteName;
+
+    // 이 오브젝트가 놓인 조사 화면 이름(= 배경 파일 이름). InvestigationController가 채워준다.
+    // 배치표에서 "이 화면에서만 쓰는 좌표"를 먼저 찾는 데 쓴다. 비어 있으면 공통 좌표만 본다.
+    // (IllustLayout.cs 상단의 [화면별 좌표] 주석 참고)
+    public string screenId;
 
     // 투명한 부분은 클릭이 통과하고, 그림이 그려진 부분만 클릭되게 할지 여부.
     // 조사 오브젝트는 대부분 투명 배경 PNG라서 이걸 켜두지 않으면 네모난 판때기처럼
@@ -113,7 +127,8 @@ public class InvestigatableObject : MonoBehaviour
                 // 그림이 1440x1080(여백 포함)이면 화면에 꽉 채우기만 하면 제자리에 나타나고,
                 // 여백이 잘려 있으면 IllustLayout.csv에 적어둔 좌표대로 놓는다.
                 // 자세한 이유는 IllustLayout.cs 상단 주석 참고.
-                IllustLayout.Apply(image.rectTransform, sprite, spriteName);
+                // screenId를 함께 넘기면 "이 화면에서만 쓰는 좌표"가 있을 때 그것을 먼저 쓴다.
+                IllustLayout.Apply(image.rectTransform, sprite, spriteName, default, screenId);
             }
         }
 
