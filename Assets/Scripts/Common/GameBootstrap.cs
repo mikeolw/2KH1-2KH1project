@@ -156,6 +156,14 @@ public static class GameBootstrap
             notePanel.AddComponent<NotePanelUI>();
             Debug.Log("[GameBootstrap] 수첩 패널에 조사기록 표시 기능을 붙였습니다.");
         }
+
+        // ----- 핸드폰(Phone) 탭 -----
+        var phonePanel = UIManager.Instance.phonePanel;
+        if (phonePanel != null && phonePanel.GetComponent<PhonePanelUI>() == null)
+        {
+            phonePanel.AddComponent<PhonePanelUI>();
+            Debug.Log("[GameBootstrap] 핸드폰 패널에 앱 화면 기능을 붙였습니다.");
+        }
     }
 
     // ---------------------------------------------------------------------------------
