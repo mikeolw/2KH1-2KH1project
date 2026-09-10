@@ -1,3 +1,4 @@
+using System.Collections;              // 코루틴(IEnumerator) - 배경 크로스페이드에 쓴다
 using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.UI;
@@ -203,8 +204,19 @@ public class StageController : MonoBehaviour
     // DialogueSystem이 호출하는 부분
     // ---------------------------------------------------------------------------------
 
+    // 지금 깔려 있는 배경 이름. 스탠딩/조사 오브젝트가 "이 화면 전용 배치 좌표"를 찾을 때 쓴다.
+    public string CurrentBackgroundName => currentBackgroundName;
+
     // 배경을 바꾼다. fileName이 비어 있으면 아무것도 하지 않는다(= 이전 배경 유지).
-    public void ApplyBackground(string fileName)
+    //
+    // ===== 전환 연출 (CSV의 Transition / TransitionTime 칸) =====
+    //   transition : ""(또는 "cut")  = 즉시 바뀐다. 예전과 같은 기본 동작.
+    //                "fade"          = 이전 배경이 서서히 사라지며 새 배경이 드러난다(크로스페이드).
+    //   seconds    : fade에 걸리는 시간(초). 0 이하면 기본값 0.35초.
+    //
+    // 대화창/UI는 건드리지 않고 배경만 바뀐다. 화면 전체를 검게 덮는 암전은 이것과 별개로
+    // IsFadeOut 칸이 담당한다(DialogueSystem.cs 참고) - 둘은 같이 써도 된다.
+    public void ApplyBackground(string fileName, string transition = null, float seconds = 0f)
     {
         if (backgroundImage == null) return;
         if (string.IsNullOrWhiteSpace(fileName)) return; // 빈 칸 = 유지
@@ -214,6 +226,7 @@ public class StageController : MonoBehaviour
         // "none"이면 배경을 지운다.
         if (string.Equals(fileName, "none", System.StringComparison.OrdinalIgnoreCase))
         {
+            StopBackgroundFade();
             currentBackgroundName = null;
             backgroundImage.sprite = null;
             backgroundImage.enabled = false;
@@ -226,10 +239,273 @@ public class StageController : MonoBehaviour
         Sprite sprite = IllustLoader.LoadBackground(fileName);
         if (sprite == null) return; // 경고는 IllustLoader가 이미 남겼다
 
+        // ===== 장면이 바뀌면 소품은 전부 치운다 =====
+        // 소품은 "그 장면에 놓인 물건"이지 계속 들고 다니는 것이 아니다. 예전에는 Props 칸이
+        // 비어 있으면 그대로 유지되기만 해서, 한 장면에서 올린 소품이 그 뒤 모든 장면과
+        // 조사 화면까지 따라다녔다("소품이 여기저기 등장").
+        //
+        // 여기서 배경이 실제로 바뀔 때 비워주면, 그 줄의 Props 칸에 적힌 것만 다시 올라온다.
+        // (DialogueSystem이 ApplyBackground -> ApplyProps 순서로 부르므로, 같은 줄에서
+        //  배경과 소품을 같이 지정하면 치웠다가 곧바로 새로 올린다.)
+        // 같은 배경이 이어지는 동안에는 위의 return에 걸려 여기까지 오지 않으므로,
+        // 한 장면 안에서 Props 칸을 비워둔 줄들은 소품이 그대로 유지된다.
+        ClearProps();
+
+        bool wantFade = !string.IsNullOrWhiteSpace(transition)
+                        && transition.Trim().Equals("fade", System.StringComparison.OrdinalIgnoreCase);
+
+        // 아직 배경이 하나도 없을 때(게임 첫 줄 등)는 페이드할 "이전 그림"이 없으므로 그냥 즉시 건다.
+        if (wantFade && backgroundImage.sprite != null && backgroundImage.enabled && isActiveAndEnabled)
+        {
+            StartBackgroundFade(sprite, fileName, seconds > 0f ? seconds : DefaultFadeSeconds);
+            return;
+        }
+
+        StopBackgroundFade();
         currentBackgroundName = fileName;
         backgroundImage.sprite = sprite;
         backgroundImage.enabled = true;
+        // 씬에 미리 만들어둔 Image를 쓰는 경우 반투명 placeholder 색이 남아 있을 수 있어
+        // 배경이 뿌옇게 나온다. 흰색(= 그림 그대로)으로 확실히 되돌린다.
+        backgroundImage.color = Color.white;
+        RefreshPropPlacements();   // 새 배경 기준으로 소품 자리를 다시 잡는다
     }
+
+    // ---------------------------------------------------------------------------------
+    // 배경 크로스페이드
+    // ---------------------------------------------------------------------------------
+    // ===== 어떻게 만드나? =====
+    // 이미지 한 장으로는 "서서히 바뀌는" 연출을 만들 수 없어서, 배경 이미지 바로 위에
+    // 같은 크기의 임시 이미지를 한 장 겹쳐 둔다. 거기에 "이전 배경"을 넣어놓고,
+    // 아래쪽 진짜 배경 이미지에는 "새 배경"을 바로 넣어버린다. 그런 다음 위에 덮인
+    // 이전 배경의 투명도를 1 -> 0으로 천천히 낮추면, 이전 그림이 녹아 사라지면서
+    // 아래 있던 새 그림이 드러나는 것처럼 보인다.
+    //
+    // 임시 이미지는 한 번 만들어두고 계속 재사용한다(매번 만들고 지우면 낭비이므로).
+
+    private const float DefaultFadeSeconds = 0.35f;
+
+    private Image fadeOverlayImage;          // 이전 배경을 덮어 두는 임시 이미지
+    private Coroutine backgroundFadeRoutine;
+
+    private void StartBackgroundFade(Sprite newSprite, string newName, float seconds)
+    {
+        // 이전 페이드가 아직 돌고 있으면 즉시 끝낸 상태로 만들고 새로 시작한다.
+        StopBackgroundFade();
+
+        EnsureFadeOverlay();
+        if (fadeOverlayImage == null)
+        {
+            // 오버레이를 못 만들었으면 연출 없이 즉시 교체한다(게임이 멈추면 안 되므로).
+            currentBackgroundName = newName;
+            backgroundImage.sprite = newSprite;
+            backgroundImage.enabled = true;
+            RefreshPropPlacements();
+            return;
+        }
+
+        // 위에 덮을 이미지 = 이전 배경
+        fadeOverlayImage.sprite = backgroundImage.sprite;
+        fadeOverlayImage.color = Color.white;
+        fadeOverlayImage.enabled = true;
+        fadeOverlayImage.rectTransform.SetSiblingIndex(backgroundImage.rectTransform.GetSiblingIndex() + 1);
+
+        // 아래 진짜 배경 = 새 배경 (이미 바뀌어 있지만 위가 덮고 있어서 아직 안 보인다)
+        currentBackgroundName = newName;
+        backgroundImage.sprite = newSprite;
+        backgroundImage.enabled = true;
+        RefreshPropPlacements();   // 새 배경 기준으로 소품 자리를 다시 잡는다
+
+        backgroundFadeRoutine = StartCoroutine(FadeOutOverlay(seconds));
+    }
+
+    private IEnumerator FadeOutOverlay(float seconds)
+    {
+        float elapsed = 0f;
+        while (elapsed < seconds)
+        {
+            // Time.deltaTime = 지난 프레임부터 지금까지 걸린 실제 시간(초).
+            elapsed += Time.deltaTime;
+            float t = Mathf.Clamp01(elapsed / seconds);
+
+            var c = fadeOverlayImage.color;
+            c.a = 1f - t;                  // 1(완전히 보임) -> 0(완전히 투명)
+            fadeOverlayImage.color = c;
+
+            yield return null;             // 다음 프레임까지 기다린다
+        }
+
+        fadeOverlayImage.enabled = false;
+        fadeOverlayImage.sprite = null;    // 다 쓴 그림은 놓아준다
+        backgroundFadeRoutine = null;
+    }
+
+    // 페이드를 도중에 멈추고 "끝난 상태"로 정리한다.
+    private void StopBackgroundFade()
+    {
+        if (backgroundFadeRoutine != null)
+        {
+            StopCoroutine(backgroundFadeRoutine);
+            backgroundFadeRoutine = null;
+        }
+        if (fadeOverlayImage != null)
+        {
+            fadeOverlayImage.enabled = false;
+            fadeOverlayImage.sprite = null;
+        }
+    }
+
+    private void EnsureFadeOverlay()
+    {
+        if (fadeOverlayImage != null) return;
+        if (backgroundImage == null) return;
+
+        var go = new GameObject("BackgroundFadeOverlay", typeof(RectTransform), typeof(Image));
+        go.transform.SetParent(backgroundImage.transform.parent, false);
+
+        // 배경 이미지와 똑같은 크기/위치로 맞춘다.
+        var rt = go.GetComponent<RectTransform>();
+        rt.anchorMin = Vector2.zero;
+        rt.anchorMax = Vector2.one;
+        rt.offsetMin = Vector2.zero;
+        rt.offsetMax = Vector2.zero;
+
+        fadeOverlayImage = go.GetComponent<Image>();
+        fadeOverlayImage.raycastTarget = false;   // 클릭이 통과해야 조사 오브젝트를 누를 수 있다
+        fadeOverlayImage.enabled = false;
+    }
+
+    // ---------------------------------------------------------------------------------
+    // 일반 대화 장면의 소품(Props)
+    // ---------------------------------------------------------------------------------
+    // ===== 무엇인가? =====
+    // 조사 화면이 아닌 보통 대화 장면에도 배경 위에 오브젝트 그림을 얹고 싶을 때가 있다
+    // (책상 위 서류, 떨어진 카메라 같은 연출용 그림).
+    //
+    // 조사 오브젝트와 다른 점은 **누를 수 없다**는 것이다. 일반 장면에서는 조사를 하지
+    // 않으므로, 소품은 그냥 그림일 뿐이고 클릭은 전부 통과시킨다(대사 진행이 막히면 안 된다).
+    //
+    // ===== CSV 사용법 =====
+    // scenario_*.csv에 Props 칸을 만들고 Objects 폴더의 파일 이름을 적는다.
+    // 여러 개면 세로줄(|)로 구분한다. 스탠딩과 규칙이 같다.
+    //   (빈칸)  : 이전 줄 그대로 유지
+    //   none    : 소품 전부 치우기
+    //   OBJ_A|OBJ_B : 이 둘만 남기고 나머지는 치운다
+    //
+    // 위치는 조사 오브젝트와 똑같이 IllustLayout.csv에서 찾는다(배치 도구로 잡으면 된다).
+    public void ApplyProps(string propSpec)
+    {
+        if (string.IsNullOrWhiteSpace(propSpec)) return;   // 빈 칸 = 유지
+
+        propSpec = propSpec.Trim();
+
+        EnsurePropRoot();
+        if (propRoot == null) return;
+
+        // "none"이면 전부 치운다.
+        if (string.Equals(propSpec, "none", System.StringComparison.OrdinalIgnoreCase))
+        {
+            ClearProps();
+            return;
+        }
+
+        // 이번 줄에 적힌 목록과 지금 올라와 있는 것을 비교해서, 바뀐 것만 손댄다.
+        // (매번 전부 지우고 다시 만들면 같은 소품이 한 프레임 깜빡인다)
+        var wanted = new List<string>();
+        foreach (string raw in propSpec.Split('|'))
+        {
+            string name = raw.Trim();
+            if (!string.IsNullOrEmpty(name)) wanted.Add(name);
+        }
+
+        // 목록에 없는 소품은 치운다.
+        for (int i = activeProps.Count - 1; i >= 0; i--)
+        {
+            if (!wanted.Contains(activeProps[i].name))
+            {
+                Destroy(activeProps[i].gameObject);
+                activeProps.RemoveAt(i);
+            }
+        }
+
+        // 아직 없는 소품은 새로 만든다.
+        foreach (string name in wanted)
+        {
+            bool exists = false;
+            foreach (var p in activeProps) if (p.name == name) { exists = true; break; }
+            if (exists) continue;
+
+            Sprite sprite = IllustLoader.LoadObject(name);
+            if (sprite == null) continue;   // 경고는 IllustLoader가 남겼다
+
+            var go = new GameObject(name, typeof(RectTransform), typeof(Image));
+            go.transform.SetParent(propRoot.transform, false);
+
+            var image = go.GetComponent<Image>();
+            image.sprite = sprite;
+            // 소품은 누를 수 없다. raycastTarget을 꺼서 클릭이 그대로 통과하게 한다
+            // (안 그러면 소품이 대화창 위를 덮어 대사 진행 클릭을 먹어버린다).
+            image.raycastTarget = false;
+
+            // 위치는 조사 오브젝트와 같은 배치표를 쓴다(화면별 좌표도 그대로 적용).
+            IllustLayout.Apply(image.rectTransform, sprite, name, default, currentBackgroundName);
+
+            activeProps.Add(go.transform);
+        }
+    }
+
+    // 소품을 전부 치운다. 조사 화면에 들어갈 때도 불러서 대화 장면의 소품이
+    // 따라 들어오지 않게 한다 (InvestigationController.Enter 참고).
+    public void ClearProps()
+    {
+        foreach (var p in activeProps) if (p != null) Destroy(p.gameObject);
+        activeProps.Clear();
+    }
+
+    // ===== 배경이 바뀌었을 때 소품 위치를 다시 잡는다 =====
+    // 소품은 Props 칸이 비어 있으면 그대로 남는데(유지), 배치표에 "이 배경 전용 좌표"가
+    // 따로 있으면 배경이 바뀐 순간 그 좌표를 써야 맞다. 안 그러면 이전 배경 기준 자리에
+    // 그대로 떠 있게 된다. (IllustLayout.cs의 [화면별 좌표] 주석 참고)
+    private void RefreshPropPlacements()
+    {
+        foreach (var p in activeProps)
+        {
+            if (p == null) continue;
+
+            var image = p.GetComponent<Image>();
+            if (image == null || image.sprite == null) continue;
+
+            IllustLayout.Apply(image.rectTransform, image.sprite, p.name, default, currentBackgroundName);
+        }
+    }
+
+    // 소품을 담을 빈 그릇을 만든다. 배경보다 앞, 스탠딩보다 뒤에 둔다.
+    private void EnsurePropRoot()
+    {
+        if (propRoot != null) return;
+        if (targetCanvas == null) return;
+
+        var go = new GameObject("Stage_Props", typeof(RectTransform));
+        go.transform.SetParent(targetCanvas.transform, false);
+
+        var rt = go.GetComponent<RectTransform>();
+        rt.anchorMin = Vector2.zero;
+        rt.anchorMax = Vector2.one;
+        rt.offsetMin = Vector2.zero;
+        rt.offsetMax = Vector2.zero;
+
+        propRoot = go.transform;
+
+        // 배경 바로 뒤(= 배경보다 앞에 그려지는 자리)에 놓는다. 스탠딩은 그보다 더 뒤 순번이라
+        // 자연스럽게 소품 위에 그려진다. 순서: 배경 → 소품 → 스탠딩 → 대화창/UI
+        if (backgroundImage != null)
+        {
+            propRoot.SetSiblingIndex(backgroundImage.transform.GetSiblingIndex() + 1);
+        }
+    }
+
+    private Transform propRoot;
+    private readonly List<Transform> activeProps = new List<Transform>();
 
     // 캐릭터 스탠딩을 바꾼다.
     //   standingSpec : "STD_A" 또는 "STD_A|STD_B" (비면 유지, "none"이면 전원 퇴장)
@@ -266,7 +542,9 @@ public class StageController : MonoBehaviour
             int slotIndex = ResolveSlotIndex(positions, i, names.Length);
             if (slotIndex < 0 || slotIndex >= standingSlots.Length) continue;
 
-            standingSlots[slotIndex]?.Show(name);
+            // 지금 배경 이름을 함께 넘겨서, 배치표에 "이 배경 전용 좌표"가 있으면 그것을 쓰게 한다
+            // (IllustLayout.cs 상단의 [화면별 좌표] 주석 참고).
+            standingSlots[slotIndex]?.Show(name, currentBackgroundName);
             used[slotIndex] = true;
         }
 

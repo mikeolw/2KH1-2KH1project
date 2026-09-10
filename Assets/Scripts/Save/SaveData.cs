@@ -43,4 +43,16 @@ public class SaveData
 
     // 지금까지 조사기록(메모장)에 추가된 항목의 EntryId 목록.
     public List<string> noteEntryIds = new List<string>();
+
+    // ===== 미니게임 2(진행형 타임어택) 상태 =====
+    // 타이머는 CSV의 특정 줄(제한시간이 적힌 Minigame 행)을 실제로 지나갈 때만 켜진다.
+    // 그런데 저장은 그보다 뒤에 있는 세이브포인트에서도 가능해서, 그 지점에서 저장한 걸
+    // 불러오면 CSV 재생이 그 줄부터 곧바로 이어지고 타이머를 켜는 줄 자체는 다시 지나가지
+    // 않는다. 그래서 "저장 시점에 타이머가 돌고 있었는지, 얼마나 남았는지"를 따로 저장해뒀다가
+    // 불러올 때 TimeAttackController.RestoreTimer()로 그대로 이어서 재생한다
+    // (SavePointManager.SaveToSlot()/RestoreFrom() 참고).
+    public bool timeAttackRunning;
+    public float timeAttackRemainingSeconds;
+    public string timeAttackStopSavePointId;
+    public EndingType timeAttackFailEnding;
 }

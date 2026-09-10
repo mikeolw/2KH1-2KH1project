@@ -96,4 +96,18 @@ public class MinigameController : MonoBehaviour
         panel.SetActive(false);
         onFail?.Invoke();
     }
+
+    // ===== 엔딩이 미니게임 도중에 갑자기 끼어들 때 (예: 미니게임 2 타임어택 시간 초과) =====
+    // Success()/Fail()과 달리 onSuccess/onFail 콜백을 부르지 않는다. 이미 다른 경로
+    // (TimeAttackController -> GameFlowManager.TriggerEnding)로 엔딩이 확정된 상황이라,
+    // 여기서 콜백을 또 부르면 "미니게임도 끝났다"며 대사가 한 번 더 진행되어 버린다.
+    // 그냥 패널만 치우고 이 라운드를 무효화한다. GameFlowManager.TriggerEnding()이 부른다.
+    public void ForceExit()
+    {
+        if (resolved) return;
+        resolved = true;
+        if (panel != null) panel.SetActive(false);
+        onSuccess = null;
+        onFail = null;
+    }
 }

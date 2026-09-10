@@ -508,6 +508,21 @@ public class DialogueSystem : MonoBehaviour
         lineIndex = Mathf.Clamp(startLineIndex, 0, data.lines != null ? data.lines.Count : 0);
 
         if (choicePanel != null) choicePanel.SetActive(false);
+
+        // ===== 세이브를 불러왔을 때 엉뚱한 대사가 잠깐 보이는 문제 =====
+        // 세이브포인트는 대부분 Minigame/Investigate/Deduction 같은 "특수 줄" 바로 앞의
+        // 대사 줄에서 걸린다. 그래서 이어하기로 재생을 재개하는 첫 줄이 곧바로 그런 특수
+        // 줄인 경우가 흔하다(예: 이번 미니게임 2 세이브포인트도 그렇다). 그런데 특수 줄은
+        // ShowNextSentence()가 DisplayLine()을 아예 부르지 않고 곧바로 미니게임/조사/추리
+        // 화면으로 넘어가 버린다 - 즉 대사창(speakerText/sentenceText)을 새로 채워줄 기회가
+        // 없다는 뜻이다. 그러면 씬이 막 시작된 시점에 대사창에 남아있던 값(에디터에서
+        // 미리 넣어둔 안내용 placeholder 문구 등, 예: "안녕하세요!")이 그대로 화면에 남아
+        // 특수 화면 뒤에 비쳐 보이는 버그가 생긴다. 그래서 대사 재생을 시작하기 전에
+        // 대사창을 항상 먼저 비워둔다 - 어차피 곧바로 특수 줄로 넘어가면 아무것도 안 보일
+        // 뿐이고, 일반 대사 줄로 시작하면 어차피 DisplayLine()이 바로 덮어써서 상관없다.
+        SetSpeakerName("");
+        if (sentenceText != null) sentenceText.text = "";
+
         ShowNextSentence();
     }
 
@@ -534,6 +549,27 @@ public class DialogueSystem : MonoBehaviour
         // 실제로 호출되진 않지만, 나중에 진짜 실패 조건이 생겨도 이 호출부는 그대로 두면 된다.
         if (line.isMinigame)
         {
+            // ===== 미니게임 2: 진행형 타임어택 시작 =====
+            // 이 행에 MinigameTimeLimit(초)이 적혀 있으면, 실제 미니게임 패널을 띄우기 전에
+            // 배경 타이머부터 켠다. 이 타이머는 지금 이 미니게임 하나의 성공/실패와는 무관하게
+            // "MinigameTimerStopId 세이브포인트에 도달할 때까지" 대사/조사/다른 미니게임을
+            // 넘나들며 계속 흐른다 (TimeAttackController.cs 참고). 0(또는 빈 칸)이면 그냥
+            // 넘어간다 - 아래의 일반 미니게임 스텁 흐름만 그대로 탄다.
+            if (line.minigameTimeLimitSeconds > 0f)
+            {
+                if (TimeAttackController.Instance == null)
+                {
+                    Debug.LogWarning("[DialogueSystem] TimeAttackController가 없어 타임어택 제한시간을 걸지 못했습니다.");
+                }
+                else
+                {
+                    TimeAttackController.Instance.StartTimer(
+                        line.minigameTimeLimitSeconds,
+                        line.minigameTimerStopSavePointId,
+                        line.minigameFailEnding);
+                }
+            }
+
             // 미니게임 담당이 씬에 없으면(팀원이 아직 만들지 않은 구간 등) 게임이 멈추는
             // 대신 그냥 다음 대사로 넘어간다. 조사/추리 쪽과 같은 방침이다.
             if (MinigameController.Instance == null)
@@ -649,7 +685,11 @@ public class DialogueSystem : MonoBehaviour
         // 여기서 굳이 빈 값인지 검사할 필요가 없다.
         if (StageController.Instance != null)
         {
-            StageController.Instance.ApplyBackground(line.backgroundName);
+            // Transition/TransitionTime 칸이 비어 있으면 예전처럼 즉시 바뀐다(cut).
+            // "fade"라고 적으면 이전 배경이 녹아 사라지며 새 배경이 드러난다.
+            StageController.Instance.ApplyBackground(line.backgroundName, line.transition, line.transitionTime);
+            // 소품은 스탠딩보다 먼저 올린다(배경 → 소품 → 스탠딩 순서로 겹쳐 보이게).
+            StageController.Instance.ApplyProps(line.propNames);
             StageController.Instance.ApplyStandings(line.standingNames, line.standingPositions);
         }
 
@@ -1348,14 +1388,24 @@ public class DialogueSystem : MonoBehaviour
                 if (choice.isEndingChoice)
                 {
                     // TargetEnding 칸에 EndingType 이름(예: Bad_D)을 그대로 적으면 된다.
-                    string endingStr = GetField(data[i], "TargetEnding");
-                    if (Enum.TryParse(endingStr, out EndingType parsedEnding))
+                    //
+                    // ===== 왜 대소문자를 무시하나? (트루엔딩이 안 되던 원인) =====
+                    // 트루엔딩의 값은 True인데, 엑셀은 True/False처럼 생긴 칸을 "논리값"으로 보고
+                    // 저장할 때 전부 대문자 TRUE로 바꿔버린다. 그런데 Enum.TryParse는 기본이
+                    // 대소문자 구분이라 "TRUE"가 EndingType.True와 매칭되지 않아 파싱에 실패했고,
+                    // 결과적으로 트루엔딩 선택지를 골라도 아무 일도 일어나지 않았다.
+                    // (Bad_A 같은 값들은 엑셀이 안 건드려서 멀쩡히 동작했다.)
+                    // 두 번째 인자 true = 대소문자 무시. 이러면 True/TRUE/true 모두 통한다.
+                    string endingStr = GetField(data[i], "TargetEnding").Trim();
+                    if (Enum.TryParse(endingStr, true, out EndingType parsedEnding))
                     {
                         choice.targetEnding = parsedEnding;
                     }
                     else
                     {
-                        Debug.LogWarning($"[DialogueSystem] '{endingStr}'은 EndingType에 없는 값입니다. (CSV: {csvFileName}, 행: {i + 2})");
+                        Debug.LogWarning($"[DialogueSystem] '{endingStr}'은 EndingType에 없는 값입니다. " +
+                                         $"(CSV: {csvFileName}, 행: {i + 2}) " +
+                                         "쓸 수 있는 값: True, Normal, Bad_A ~ Bad_E");
                     }
                 }
                 else
@@ -1377,8 +1427,9 @@ public class DialogueSystem : MonoBehaviour
                 minigameLine.minigameLabel = GetField(data[i], "MinigameLabel");
 
                 // TargetEnding 칸을 실패 엔딩으로 재사용한다 (Choice 행의 TargetEnding과 같은 컬럼).
-                string failEndingStr = GetField(data[i], "TargetEnding");
-                if (Enum.TryParse(failEndingStr, out EndingType parsedFailEnding))
+                // 위 Choice 쪽과 같은 이유로 대소문자를 무시한다(엑셀이 TRUE로 바꿔버리는 문제).
+                string failEndingStr = GetField(data[i], "TargetEnding").Trim();
+                if (Enum.TryParse(failEndingStr, true, out EndingType parsedFailEnding))
                 {
                     minigameLine.minigameFailEnding = parsedFailEnding;
                 }
@@ -1386,6 +1437,22 @@ public class DialogueSystem : MonoBehaviour
                 {
                     Debug.LogWarning($"[DialogueSystem] Minigame 행의 TargetEnding '{failEndingStr}'이 EndingType에 없습니다. (CSV: {csvFileName}, 행: {i + 2})");
                 }
+
+                // 미니게임 2(진행형 타임어택) 전용 칸. 비어 있으면 0으로 남고, 그러면
+                // ShowNextSentence()가 타이머를 켜지 않는다 (DialogueLine.cs 주석 참고).
+                string timeLimitStr = GetField(data[i], "MinigameTimeLimit");
+                if (!string.IsNullOrWhiteSpace(timeLimitStr))
+                {
+                    if (float.TryParse(timeLimitStr, out float parsedTimeLimit))
+                    {
+                        minigameLine.minigameTimeLimitSeconds = parsedTimeLimit;
+                    }
+                    else
+                    {
+                        Debug.LogWarning($"[DialogueSystem] Minigame 행의 MinigameTimeLimit '{timeLimitStr}'이 숫자가 아닙니다. (CSV: {csvFileName}, 행: {i + 2})");
+                    }
+                }
+                minigameLine.minigameTimerStopSavePointId = GetField(data[i], "MinigameTimerStopId");
 
                 currentDialogue.lines.Add(minigameLine);
                 continue;
@@ -1434,6 +1501,16 @@ public class DialogueSystem : MonoBehaviour
             line.standingNames = GetField(data[i], "Standing");
             line.standingPositions = GetField(data[i], "StandingPos");
             line.talkerSlot = GetField(data[i], "Talker");
+
+            // 소품(Props): 배경 위에 얹는 오브젝트 그림. 누를 수는 없다(DialogueLine.cs 주석 참고).
+            line.propNames = GetField(data[i], "Props");
+
+            // ===== 배경이 바뀔 때의 연출 =====
+            // Transition 칸: (빈칸)/cut = 즉시, fade = 서서히 바뀜(크로스페이드).
+            // TransitionTime 칸: fade에 걸리는 시간(초). 비우면 0.35초.
+            // 두 칸 다 없는 예전 CSV도 그대로 동작한다(GetField가 ""를 돌려주므로 cut이 된다).
+            line.transition = GetField(data[i], "Transition");
+            float.TryParse(GetField(data[i], "TransitionTime"), out line.transitionTime);
 
             // ===== 세이브포인트 =====
             // 시나리오 문서의 {세이브포인트}에 해당하는 줄에 IsSavePoint=TRUE를 적어둔다.

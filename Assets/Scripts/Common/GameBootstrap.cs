@@ -66,6 +66,16 @@ public static class GameBootstrap
         if (SavePointManager.Instance == null) Create<SavePointManager>("SavePointManager");
         if (AudioManager.Instance == null) Create<AudioManager>("AudioManager");
         if (FontManager.Instance == null) Create<FontManager>("FontManager");
+
+        // ===== 스킵(이미 읽은 대사) 기록 =====
+        // "이 줄을 예전에 본 적이 있는가"를 기기 단위로 기억하는 매니저다(ReadProgressManager.cs 참고).
+        // 대사창의 스킵 버튼 중 "이미 읽은 곳까지만 넘기기"가 이 기록을 보고 어디서 멈출지 정한다.
+        //
+        // 원래는 씬에 직접 붙여야 하는 것으로 만들어졌는데 어느 씬에도 붙어 있지 않았고,
+        // 그래서 Instance가 계속 null이었다. 호출부가 전부 ?. 로 되어 있어 오류는 안 났지만,
+        // 읽은 줄이 하나도 기록되지 않아 스킵을 누르면 곧바로 멈춰버려 기능이 죽어 있었다.
+        // 다른 전역 매니저와 똑같이 여기서 만들어준다.
+        if (ReadProgressManager.Instance == null) Create<ReadProgressManager>("ReadProgressManager");
     }
 
     // ---------------------------------------------------------------------------------
@@ -96,11 +106,18 @@ public static class GameBootstrap
             if (DocumentViewerController.Instance == null) Create<DocumentViewerController>("DocumentViewer");
             if (SaveSlotDialog.Instance == null) Create<SaveSlotDialog>("SaveSlotDialog");
             if (SettingsPanelUI.Instance == null) Create<SettingsPanelUI>("SettingsPanel");
+
+            // 미니게임 2(진행형 타임어택)의 mm:ss 카운트다운 UI. StageController와 마찬가지로
+            // 인스펙터 연결 없이 스스로 Canvas를 찾아 UI를 만들어내므로 자동 생성해도 안전하다.
+            if (TimeAttackController.Instance == null) Create<TimeAttackController>("TimeAttackController");
         }
         else
         {
             Debug.LogWarning("[GameBootstrap] 씬에 Canvas가 없어 배경/스탠딩과 자료 뷰어를 준비하지 못했습니다.");
         }
+
+        // 예전 방식으로 씬에 미리 만들어둔 껍데기 UI를 정리한다.
+        HideLegacyPlaceholders();
 
         // 카메라에 화면 비율 고정(검은 여백 처리)을 붙인다.
         EnsureAspectRatioKeeper();
@@ -139,6 +156,59 @@ public static class GameBootstrap
             notePanel.AddComponent<NotePanelUI>();
             Debug.Log("[GameBootstrap] 수첩 패널에 조사기록 표시 기능을 붙였습니다.");
         }
+    }
+
+    // ---------------------------------------------------------------------------------
+    // 예전 껍데기 UI 정리
+    // ---------------------------------------------------------------------------------
+    // ===== 왜 필요한가? =====
+    // 이 씬은 원래 "미리 만들어둔 UI 판때기"로 게임을 흉내 내던 시절에 꾸며진 것이다.
+    // 지금은 배경/스탠딩/조사 오브젝트를 전부 코드가 런타임에 만들어 쓰는데, 그 시절의
+    // 껍데기 오브젝트들이 씬에 그대로 남아 켜져 있어서 화면을 덮고 있었다.
+    //
+    // 실제로 확인된 증상:
+    //   background     : 화면 전체를 덮는 흰색 반투명(알파 0.392) 판.
+    //                    새로 만든 Stage_Background 위에 얹혀서 배경/스탠딩/소품이
+    //                    전부 뿌옇게 보였다("흐린 색으로 나온다").
+    //   ItemModalPanel : 화면 전체를 덮는 검은 반투명(알파 0.6) 판. 위와 같은 이유로
+    //                    화면을 어둡게 덮고 있었다.
+    //   MinigamePanel  : 화면 한가운데 900x220 크기의 거의 불투명한 검은 상자.
+    //                    조사 화면 한복판을 가려서 배경+스탠딩+오브젝트 조합이
+    //                    제대로 안 보였다.
+    //
+    // 이 판들은 원래 각자의 컨트롤러가 Awake()에서 꺼주게 되어 있는데, 그 컨트롤러
+    // (MinigameController / ItemModalController)가 씬에 없으면 끄는 코드 자체가 실행되지
+    // 않아 계속 켜진 채로 남는다. 그래서 여기서 확실히 정리한다.
+    //
+    // ===== 지우지 않고 "끄기"만 하는 이유 =====
+    // 씬 파일을 고치면 팀원끼리 충돌이 잦고, 나중에 예전 방식이 필요해질 수도 있다.
+    // 끄기만 하면 씬 파일은 그대로 두고 화면만 깨끗해진다.
+    private static void HideLegacyPlaceholders()
+    {
+        // 배경 껍데기: 코드가 만드는 Stage_Background가 이 역할을 대신하므로 항상 끈다.
+        HideIfActive("background", "Stage_Background가 대신하므로");
+
+        // 아래 둘은 "그 판을 관리하는 컨트롤러가 씬에 있으면" 그쪽이 알아서 켜고 끄므로
+        // 건드리지 않는다. 컨트롤러가 없을 때만 우리가 꺼준다.
+        if (Object.FindAnyObjectByType<MinigameController>(FindObjectsInactive.Include) == null)
+        {
+            HideIfActive("MinigamePanel", "MinigameController가 씬에 없어 아무도 끄지 않으므로");
+        }
+        if (Object.FindAnyObjectByType<ItemModalController>(FindObjectsInactive.Include) == null)
+        {
+            HideIfActive("ItemModalPanel", "ItemModalController가 씬에 없어 아무도 끄지 않으므로");
+        }
+    }
+
+    // 이름으로 찾아서 켜져 있으면 끈다.
+    // GameObject.Find는 "켜져 있는 것"만 찾아주는데, 우리는 켜져 있는 것만 끄면 되므로 딱 맞다.
+    private static void HideIfActive(string objectName, string reason)
+    {
+        var go = GameObject.Find(objectName);
+        if (go == null) return;
+
+        go.SetActive(false);
+        Debug.Log($"[GameBootstrap] 예전 껍데기 '{objectName}'을(를) 껐습니다 ({reason}).");
     }
 
     // 메인 카메라에 AspectRatioKeeper가 없으면 붙여준다.

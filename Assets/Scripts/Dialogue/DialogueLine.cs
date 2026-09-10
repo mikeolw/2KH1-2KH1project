@@ -53,10 +53,31 @@ public class DialogueLine
     // 배경 파일 이름 (예: BG_01_Office). 빈 값 = 유지, "none" = 배경 지움.
     public string backgroundName;
 
+    // ===== 배경이 바뀔 때의 연출. CSV의 Transition / TransitionTime 칸 =====
+    //   (빈칸) 또는 cut : 즉시 딱 바뀐다. 예전과 같은 기본 동작이라 안 적어도 된다.
+    //   fade            : 이전 배경이 서서히 사라지며 새 배경이 드러난다(크로스페이드).
+    //
+    // transitionTime은 fade에 걸리는 시간(초). 비우면 0.35초.
+    //
+    // 화면 전체를 검게 덮었다가 밝히는 "암전"은 이것과 다른 기능이며 IsFadeOut 칸이 담당한다.
+    // 둘은 같이 써도 된다 (암전 중에 배경이 바뀌면 자연스럽게 넘어간다).
+    public string transition;
+    public float transitionTime;
+
     // 캐릭터 스탠딩 파일 이름. 두 명 이상은 세로줄(|)로 구분한다.
     // 예: STD_Past01_Hansung_Default|STD_Past01_Jaehoon_Default
     // 빈 값 = 유지(표정 안 바뀜), "none" = 전원 퇴장.
     public string standingNames;
+
+    // ===== 소품(Props). CSV의 Props 칸 =====
+    // 배경 위에 얹는 오브젝트 그림. Resources/Illusts/Objects/ 의 파일 이름을 적는다.
+    // 여러 개면 세로줄(|)로 구분한다. 예: OBJ_01_Documents|OBJ_01_Camera
+    //   (빈칸) = 이전 줄 그대로 유지,  none = 소품 전부 치우기
+    //
+    // 조사 화면의 오브젝트와 달리 **누를 수 없다.** 일반 대화 장면에서는 조사를 하지 않으므로
+    // 그냥 그림일 뿐이고, 클릭은 전부 통과해서 대사 진행을 방해하지 않는다.
+    // 위치는 조사 오브젝트와 같은 IllustLayout.csv를 쓰므로 배치 도구로 잡으면 된다.
+    public string propNames;
 
     // 각 스탠딩이 설 자리. L=왼쪽 C=가운데 R=오른쪽, 세로줄(|)로 구분 (예: L|R).
     // 빈 값이면 인원수에 맞춰 자동 배치한다.
@@ -102,6 +123,22 @@ public class DialogueLine
     public EndingType minigameFailEnding; // 실패 시 연결할 엔딩 (CSV의 TargetEnding 컬럼 재사용,
                                            // 지금 스텁은 항상 성공하므로 실제로 쓰이진 않지만
                                            // 나중에 진짜 실패 조건이 생기면 바로 쓸 수 있게 남겨둠)
+
+    // ===== 미니게임 2: 시나리오 진행형 타임어택 (TimeAttackController.cs 참고) =====
+    // 위의 미니게임 스텁들("버튼 하나 누르면 성공")과는 종류가 다르다. 이건 그 자리에서
+    // 성공/실패를 즉시 가리는 게 아니라, "지금부터 제한시간 안에 특정 세이브포인트까지
+    // 도달해야 한다"는 배경 타이머를 하나 켜두는 용도다. CSV의 MinigameTimeLimit 칸에
+    // 초 단위 숫자가 적혀 있는 Minigame 행에서만 채워진다(0이면 "이 행은 타이머를 켜지
+    // 않는다"는 뜻 - 나머지 미니게임 행들처럼 그냥 스텁으로만 동작한다).
+    //   MinigameTimeLimit   : 제한시간(초). 예) 300 = 5분.
+    //   MinigameTimerStopId : 이 세이브포인트(SavePointId)에 도달하면 타이머가 조용히
+    //                         꺼진다(성공). CSV의 IsSavePoint=TRUE 행에 적어둔 SavePointId와
+    //                         철자가 정확히 같아야 한다.
+    // 시간이 다 되면(도달 전) TimeAttackController가 곧바로 minigameFailEnding(=이 행의
+    // TargetEnding 칸, 보통 Bad_D)으로 엔딩을 발동시킨다 - 지금 대사가 어디까지 진행됐든,
+    // 조사 화면이나 다른 미니게임 패널이 열려 있든 상관없이 즉시 끼어든다.
+    public float minigameTimeLimitSeconds;
+    public string minigameTimerStopSavePointId;
 
     [Header("조사 모드 (선택)")]
     // CSV의 LineType이 "Investigate"인 행에서만 채워진다. isInvestigation이 true면
