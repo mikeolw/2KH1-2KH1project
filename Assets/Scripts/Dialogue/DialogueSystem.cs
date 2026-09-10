@@ -1209,7 +1209,21 @@ public class DialogueSystem : MonoBehaviour
                 (Input.GetKeyDown(KeyCode.Space) || Input.GetKeyDown(KeyCode.Return) || Input.GetKeyDown(KeyCode.KeypadEnter) ||
                  (Input.GetMouseButtonDown(0) && !IsPointerOverButton())))
             {
-                InvestigationController.Instance.DismissTalkLine();
+                // 일반 대사와 똑같이: 타이핑 중이면 먼저 그 줄을 즉시 완성만 시키고,
+                // 이미 다 찍힌 뒤에 한 번 더 눌러야 대화창을 닫는다. 이 검사가 없으면
+                // 조사 설명이 찍히는 도중 첫 클릭에 바로 창이 닫혀버린다.
+                if (isTyping)
+                {
+                    CompleteTypingImmediately();
+                }
+                else if (HasMorePages)
+                {
+                    ShowNextPage();
+                }
+                else
+                {
+                    InvestigationController.Instance.DismissTalkLine();
+                }
             }
             return;
         }
