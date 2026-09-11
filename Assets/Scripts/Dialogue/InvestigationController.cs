@@ -68,6 +68,9 @@ public class InvestigationController : MonoBehaviour
     //   - Sprite     : 배경 위에 올릴 그림 (Resources/Illusts/Objects/ 기준 파일 이름)
     //   - 특수 키 IntroText   : 조사 시작할 때 대화창에 띄울 안내문
     //   - 특수 키 Background  : 이 조사 화면의 배경 그림 (Sprite 칸에 배경 파일 이름)
+    //   - 특수 키 NextScreen/PrevScreen : 옆 조사 화면으로 이동하는 화살표가 가리킬
+    //     InvestigationId (Sprite 칸에 적는다). 예) 재훈의 책상 화면에 NextScreen=회의실 ID,
+    //     회의실 화면에 PrevScreen=책상 ID를 적으면 두 화면을 화살표로 오갈 수 있다.
     private const string InvestigationDataCsv = "InvestigationData";
 
     private class HotspotData
@@ -86,11 +89,26 @@ public class InvestigationController : MonoBehaviour
     {
         public string backgroundName;
         public string introText;
+        // ===== 화면 이동(다음/이전) =====
+        // 한 조사(예: #07 회사 조사)가 여러 화면(재훈의 책상 ↔ 회의실)으로 나뉘어 있을 때,
+        // "조사 그만하기"로 완전히 나가지 않고도 화면끼리 오갈 수 있게 하는 연결 정보다.
+        // CSV에 HotspotKey="NextScreen"/"PrevScreen" 특수 줄로 적으며, Sprite 칸에
+        // 이동할 대상 InvestigationId를 적는다(Background 특수 키와 같은 방식).
+        // 비어 있으면(연결이 없으면) 해당 방향 화살표를 만들지 않는다.
+        public string nextScreenId;
+        public string prevScreenId;
         public readonly List<HotspotData> hotspots = new List<HotspotData>();
     }
 
     // InvestigationId -> 화면 정보
     private Dictionary<string, ScreenData> screenData;
+
+    // ===== 지금 진행 중인 조사에서 오간 화면들 =====
+    // NextScreen/PrevScreen 화살표로 여러 화면을 옮겨 다닐 수 있으므로, "조사 그만하기"를
+    // 누른 시점에 마지막으로 있던 화면 하나만 수첩에 "조사 완료"로 남기면 나머지 화면은
+    // 조사를 다 했어도 기록이 안 남는다. 그래서 Enter()부터 지금까지 거쳐 간 화면
+    // InvestigationId를 전부 모아뒀다가 Exit()에서 한 번에 전부 기록한다.
+    private readonly HashSet<string> visitedScreenIds = new HashSet<string>();
 
     private void Awake()
     {
@@ -138,6 +156,23 @@ public class InvestigationController : MonoBehaviour
                 string bg = GetField(row, "Sprite").Trim();
                 if (string.IsNullOrEmpty(bg)) bg = GetField(row, "Text").Trim();
                 screen.backgroundName = bg;
+                continue;
+            }
+
+            // 특수 키 3-4: 옆 화면으로 이동하는 화살표가 가리킬 대상
+            // (Background와 같은 방식: Sprite 칸에 적고, 비어있으면 Text 칸도 확인한다)
+            if (key == "NextScreen")
+            {
+                string next = GetField(row, "Sprite").Trim();
+                if (string.IsNullOrEmpty(next)) next = GetField(row, "Text").Trim();
+                screen.nextScreenId = next;
+                continue;
+            }
+            if (key == "PrevScreen")
+            {
+                string prev = GetField(row, "Sprite").Trim();
+                if (string.IsNullOrEmpty(prev)) prev = GetField(row, "Text").Trim();
+                screen.prevScreenId = prev;
                 continue;
             }
 
@@ -200,6 +235,10 @@ public class InvestigationController : MonoBehaviour
         onExitCallback = onExit;
         activeScreenId = investigationId.Trim();
 
+        // 이번 조사에서 거쳐 간 화면을 새로 센다 (화면 이동 중 조사 완료 기록용).
+        visitedScreenIds.Clear();
+        visitedScreenIds.Add(activeScreenId);
+
         // 1) 배경을 깐다. 대사 장면과 같은 배경 시스템을 그대로 쓰므로,
         //    조사 중에도 캐릭터 스탠딩이 필요하면 그대로 남길 수 있다.
         if (StageController.Instance != null)
@@ -244,11 +283,17 @@ public class InvestigationController : MonoBehaviour
         // 조사가 끝나면 대화창을 다시 켜서 다음 대사가 보이게 한다.
         SetDialogueVisible(true);
 
-        // 이 조사 화면을 마쳤다는 사실을 조사기록(수첩)에 남긴다.
-        if (NoteManager.Instance != null && !string.IsNullOrEmpty(activeScreenId))
+        // 이 조사에서 거쳐 간 화면을 전부 마쳤다는 사실을 조사기록(수첩)에 남긴다.
+        // (NextScreen/PrevScreen 화살표로 여러 화면을 오갔을 수 있으므로 activeScreenId
+        // 하나만이 아니라 visitedScreenIds 전체를 기록한다.)
+        if (NoteManager.Instance != null)
         {
-            NoteManager.Instance.OnInvestigationFinished(activeScreenId);
+            foreach (var id in visitedScreenIds)
+            {
+                NoteManager.Instance.OnInvestigationFinished(id);
+            }
         }
+        visitedScreenIds.Clear();
         activeScreenId = null;
 
         // 콜백을 지역 변수로 옮긴 뒤 비우고 호출한다. 콜백(ShowNextSentence) 안에서 다시
@@ -273,6 +318,7 @@ public class InvestigationController : MonoBehaviour
         inSession = false;
         IsShowingTalkLine = false;
         activeScreenId = null;
+        visitedScreenIds.Clear();
         onExitCallback = null;
 
         SetDialogueVisible(true);
@@ -300,6 +346,100 @@ public class InvestigationController : MonoBehaviour
         }
 
         CreateExitButton();
+
+        // 옆 화면(재훈의 책상 ↔ 회의실 같은 연결)으로 이동하는 화살표.
+        // CSV에 NextScreen/PrevScreen이 적혀 있는 화면에서만 만들어진다.
+        if (!string.IsNullOrEmpty(screen.nextScreenId))
+        {
+            CreateNavArrow(screen.nextScreenId, isNext: true);
+        }
+        if (!string.IsNullOrEmpty(screen.prevScreenId))
+        {
+            CreateNavArrow(screen.prevScreenId, isNext: false);
+        }
+    }
+
+    // ---------------------------------------------------------------------------------
+    // 화면 이동 (연결된 옆 조사 화면으로 - "조사 그만하기"가 아니다)
+    // ---------------------------------------------------------------------------------
+    // ===== Enter()와 다른 점 =====
+    // Enter()는 CSV의 Investigate 줄에서 새 조사를 "시작"할 때 쓰고, onExitCallback을
+    // 새로 받는다. 반면 이 함수는 이미 진행 중인 조사 안에서 옆 화면으로 "넘어가기만" 하는
+    // 것이므로 inSession/onExitCallback은 그대로 두고 배경과 오브젝트만 바꿔치기한다.
+    // 그래서 어느 화면에 있든 "조사 그만하기"를 누르면 처음 Enter()를 부른 CSV 줄의
+    // 콜백(ShowNextSentence)이 그대로 이어진다.
+    private void NavigateToLinkedScreen(string targetScreenId)
+    {
+        if (!inSession) return;
+        if (string.IsNullOrWhiteSpace(targetScreenId)) return;
+
+        string targetId = targetScreenId.Trim();
+        if (!screenData.TryGetValue(targetId, out ScreenData targetScreen))
+        {
+            Debug.LogWarning($"[InvestigationController] 연결된 조사 화면 '{targetId}'을(를) 찾을 수 없습니다. " +
+                             "InvestigationData.csv의 NextScreen/PrevScreen 값을 확인하세요.");
+            return;
+        }
+
+        activeScreenId = targetId;
+        visitedScreenIds.Add(activeScreenId);
+
+        if (StageController.Instance != null)
+        {
+            StageController.Instance.ClearProps();
+            if (!string.IsNullOrEmpty(targetScreen.backgroundName))
+            {
+                StageController.Instance.ApplyBackground(targetScreen.backgroundName);
+            }
+        }
+
+        BuildHotspots(targetScreen);
+
+        if (!string.IsNullOrWhiteSpace(targetScreen.introText))
+        {
+            ShowLineInDialogue("", targetScreen.introText);
+        }
+        else
+        {
+            SetDialogueVisible(false);
+        }
+    }
+
+    // 옆 화면으로 이동하는 화살표 버튼을 만든다.
+    //   isNext == true  : 오른쪽 중앙에 '>' (다음 화면)
+    //   isNext == false : 왼쪽 중앙에 '<' (이전 화면)
+    private void CreateNavArrow(string targetScreenId, bool isNext)
+    {
+        var go = new GameObject(isNext ? "Btn_NextScreen" : "Btn_PrevScreen",
+            typeof(RectTransform), typeof(Image), typeof(Button));
+        go.transform.SetParent(hotspotRoot.transform, false);
+
+        var rt = go.GetComponent<RectTransform>();
+        float edgeX = isNext ? 1f : 0f;
+        rt.anchorMin = new Vector2(edgeX, 0.5f);
+        rt.anchorMax = new Vector2(edgeX, 0.5f);
+        rt.pivot = new Vector2(edgeX, 0.5f);
+        rt.anchoredPosition = new Vector2(isNext ? -24f : 24f, 0f);
+        rt.sizeDelta = new Vector2(64f, 96f);
+
+        var img = go.GetComponent<Image>();
+        img.color = new Color(0f, 0f, 0f, 0.55f);
+
+        var textGo = new GameObject("Text", typeof(RectTransform));
+        textGo.transform.SetParent(go.transform, false);
+        StretchFull(textGo.GetComponent<RectTransform>());
+        var tmp = textGo.AddComponent<TMPro.TextMeshProUGUI>();
+        tmp.text = isNext ? ">" : "<";
+        tmp.fontSize = 40;
+        tmp.alignment = TMPro.TextAlignmentOptions.Center;
+        tmp.color = Color.white;
+        tmp.raycastTarget = false;
+
+        go.GetComponent<Button>().onClick.AddListener(() => NavigateToLinkedScreen(targetScreenId));
+
+        // 코드로 만든 글자라 기본 글꼴에는 한글이 없다(여기선 '>' '<' 뿐이라 실제로는
+        // 문제 없지만, 다른 버튼들과 같은 방식을 맞춰 둔다).
+        UIFontHelper.ApplyToChildren(go);
     }
 
     // 조사 오브젝트 하나를 만든다.
