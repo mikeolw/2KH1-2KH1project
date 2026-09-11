@@ -543,6 +543,19 @@ public class DialogueSystem : MonoBehaviour
         // 분기하기 전에 먼저 읽음 처리한다 (스킵(already)이 참고하는 기록).
         ReadProgressManager.Instance?.MarkRead(currentScenarioCsv, shownIndex);
 
+        // ===== 세이브 불러오기 시 BGM이 안 나오던 버그 수정 =====
+        // 미니게임/조사/추리 줄은 DisplayLine()을 거치지 않고 곧장 다른 화면으로 넘어가버려서,
+        // 그 줄에 적힌 SFX/BGM 칸이 원래는 한 번도 적용되지 않았다. 평소 플레이 중에는 문제가
+        // 안 보였는데(이미 이전 줄에서 같은 BGM이 재생 중이었으므로), 세이브포인트는 대부분
+        // 이런 특수 줄 바로 앞에 찍혀 있어서 "이어하기"로 들어오면 재생 재개 첫 줄이 곧바로
+        // 특수 줄인 경우가 흔했다. 그 경우 bgmSource가 씬 시작 직후라 비어있는 채로 아무 소리도
+        // 나지 않았다. 그래서 특수 줄로 분기하기 직전에 이 줄의 SFX/BGM을 먼저 적용해준다.
+        if (line.isMinigame || line.isInvestigation || line.isDeduction)
+        {
+            ApplyLineAudio(sfxSource, line.sfxToPlay);
+            ApplyLineAudio(bgmSource, line.bgmToPlay);
+        }
+
         // LineType이 "Minigame"인 줄은 대사 대신 미니게임 패널을 띄운다 (MinigameController.cs
         // 상단 주석 참고). 성공하면 다음 줄로 계속 진행하고, 실패하면 바로 엔딩으로 분기한다.
         // 지금은 MinigameController가 "버튼 하나 누르면 무조건 성공"하는 스텁이라 onFailCallback이
@@ -1454,6 +1467,10 @@ public class DialogueSystem : MonoBehaviour
                 }
                 minigameLine.minigameTimerStopSavePointId = GetField(data[i], "MinigameTimerStopId");
 
+                // 이 줄의 BGM/SFX 칸도 읽어둔다 (ApplySoundColumns() 상단 주석 참고 - 원래
+                // 여기가 빠져 있어서 미니게임 줄에서 세이브를 불러오면 BGM이 안 나오는 버그가 있었다).
+                ApplySoundColumns(minigameLine, data[i]);
+
                 currentDialogue.lines.Add(minigameLine);
                 continue;
             }
@@ -1466,6 +1483,10 @@ public class DialogueSystem : MonoBehaviour
                 deductionLine.isDeduction = true;
                 deductionLine.deductionId = GetField(data[i], "DeductionId");
 
+                // 이 줄의 BGM/SFX 칸도 읽어둔다 (ApplySoundColumns() 상단 주석 참고 - 원래
+                // 여기가 빠져 있어서 추리 줄에서 세이브를 불러오면 BGM이 안 나오는 버그가 있었다).
+                ApplySoundColumns(deductionLine, data[i]);
+
                 currentDialogue.lines.Add(deductionLine);
                 continue;
             }
@@ -1477,6 +1498,11 @@ public class DialogueSystem : MonoBehaviour
                 var investigateLine = new DialogueLine();
                 investigateLine.isInvestigation = true;
                 investigateLine.investigationId = GetField(data[i], "InvestigationId");
+
+                // 이 줄의 BGM/SFX 칸도 읽어둔다 (ApplySoundColumns() 상단 주석 참고 - 원래
+                // 여기가 빠져 있어서 조사 줄에서 세이브를 불러오면 BGM이 안 나오는 버그가 있었다.
+                // #07 회사 조사 세이브가 대표적으로 이 버그를 겪던 경우다).
+                ApplySoundColumns(investigateLine, data[i]);
 
                 currentDialogue.lines.Add(investigateLine);
                 continue;
@@ -1530,20 +1556,10 @@ public class DialogueSystem : MonoBehaviour
                 currentDialogue.autoNextScenarioCsv = autoNextScenario;
             }
 
-            // 사운드 파일명이 적혀있다면 Resources 폴더에서 오디오 불러오기
-            // 효과음(SFX)은 배경음악(BGM)과 구분하기 쉽도록 Sounds/SFX/ 하위 폴더에 모아둔다.
-            string sfxName = GetField(data[i], "SFX");
-            if (!string.IsNullOrEmpty(sfxName))
-            {
-                line.sfxToPlay = Resources.Load<AudioClip>("Sounds/SFX/" + sfxName);
-            }
-
-            // BGM도 SFX와 동일한 방식으로 불러온다. 실제 재생/전환 로직은 ShowNextSentence()에 있다.
-            string bgmName = GetField(data[i], "BGM");
-            if (!string.IsNullOrEmpty(bgmName))
-            {
-                line.bgmToPlay = Resources.Load<AudioClip>("Sounds/" + bgmName);
-            }
+            // 사운드 파일명이 적혀있다면 Resources 폴더에서 오디오 불러오기.
+            // (Minigame/Investigate/Deduction 행에서도 똑같이 필요해서 아래에 별도 함수로 뺐다 -
+            //  ApplySoundColumns() 함수 설명 참고)
+            ApplySoundColumns(line, data[i]);
 
             currentDialogue.lines.Add(line);
         }
@@ -1557,5 +1573,50 @@ public class DialogueSystem : MonoBehaviour
     private string GetField(Dictionary<string, object> row, string column)
     {
         return row.TryGetValue(column, out var value) ? value.ToString() : "";
+    }
+
+    // ===================================================================================
+    // CSV의 SFX/BGM 칸을 읽어서 DialogueLine에 채워 넣는다.
+    // ===================================================================================
+    // ===== 왜 이 함수가 따로 빠져있는가 (세이브 불러오기 시 BGM이 안 나오던 버그의 원인) =====
+    // LoadDialogueFromCSV()는 CSV의 LineType 칸 값에 따라 서로 다른 코드 블록에서
+    // DialogueLine을 새로 만든다:
+    //   - "Minigame"  -> 미니게임용 DialogueLine (미니게임 라벨/실패 엔딩 등만 채움)
+    //   - "Deduction" -> 추리용 DialogueLine (추리 문제 id만 채움)
+    //   - "Investigate" -> 조사용 DialogueLine (조사 화면 id만 채움)
+    //   - 그 외(Normal/Narration) -> 일반 대사용 DialogueLine (대사/배경/스탠딩 등 다 채움)
+    //
+    // 원래는 SFX/BGM 칸을 읽는 코드가 "그 외" 블록 안에만 있었다. 그래서 Minigame/
+    // Investigate/Deduction 행은 CSV에 BGM 칸을 채워놔도 그 값이 DialogueLine에 전혀
+    // 담기지 않았다 - line.bgmToPlay가 항상 null이었던 것.
+    //
+    // 평소에는 이 문제가 안 보였다. 미니게임/조사 직전 줄(보통 일반 대사)에서 이미 같은
+    // BGM이 재생 중이었고, ShowNextSentence()의 ApplyLineAudio()는 "같은 클립이면 그대로
+    // 둔다"는 규칙이라 미니게임/조사 줄의 bgmToPlay가 null이어도 눈치채기 어려웠다.
+    // 그런데 세이브를 불러오면 얘기가 다르다: 세이브포인트는 대부분 미니게임/조사 직전
+    // 대사 줄에서 걸리는데(SavePointManager.cs 참고), 정작 저장되는 재개 지점은 그
+    // "다음 줄"인 미니게임/조사 줄 자신이다. 즉 이어하기의 첫 줄이 곧바로 이 함수가
+    // 빠져 있던 그 특수 줄이 되어, 씬을 새로 시작해 텅 빈 bgmSource로는 아무 BGM도
+    // 재생되지 않는 문제가 생겼다 (#07 회사 조사 세이브가 대표적인 예).
+    //
+    // 그래서 SFX/BGM을 읽는 코드를 함수로 뽑아 4곳(Minigame/Deduction/Investigate/일반)
+    // 전부에서 호출하도록 고쳤다. 나중에 CSV에 사운드 관련 칸을 또 추가하게 되면
+    // (예: 볼륨 개별 조절 칸 등) 이 함수 한 곳만 고치면 모든 LineType에 반영된다.
+    //
+    // 파일 위치: SFX는 Assets/Resources/Sounds/SFX/, BGM은 Assets/Resources/Sounds/ 바로 밑.
+    // 둘 다 확장자 없이 파일명만 CSV 칸에 적는다.
+    private void ApplySoundColumns(DialogueLine line, Dictionary<string, object> row)
+    {
+        string sfxName = GetField(row, "SFX");
+        if (!string.IsNullOrEmpty(sfxName))
+        {
+            line.sfxToPlay = Resources.Load<AudioClip>("Sounds/SFX/" + sfxName);
+        }
+
+        string bgmName = GetField(row, "BGM");
+        if (!string.IsNullOrEmpty(bgmName))
+        {
+            line.bgmToPlay = Resources.Load<AudioClip>("Sounds/" + bgmName);
+        }
     }
 }
