@@ -61,7 +61,19 @@ SYSTEM_DESIGN.md
 UpgradeLog*.htm
 
 # =============== 드라이브로 따로 공유하는 리소스 ===============
-# 그림·소리·CSV는 gitignore하고 구글 드라이브로 주고받는다 (CLAUDE.md 참고).
+# 그림·소리, 그리고 일러스트 배치 도구가 건드리지 않는 CSV(ItemData, NoteEntries,
+# Characters, DeductionData, ItemCombinations)는 gitignore하고 구글 드라이브로 주고받는다.
 # 폴더 자체의 .meta도 함께 제외해야 팀원 PC에서 orphan meta 경고가 안 뜬다.
 Assets/Resources/
 Assets/Resources.meta
+
+# =============== git으로 공유하는 CSV (이슈 #10) ===============
+# 일러스트 배치 도구가 저장하는 CSV는 Assets/StreamingAssets/Dialogues/ 에 두고 git으로 공유한다.
+#   IllustLayout.csv, InvestigationData.csv, scenario_*.csv
+# 예전에는 Resources 안에 있어서 위 규칙에 걸려 gitignore됐고, 좌표를 고칠 때마다
+# 드라이브에 다시 올려야 해서 팀원마다 배치가 달라지는 문제가 반복됐다.
+# StreamingAssets는 위 무시 규칙에 해당하지 않으므로 따로 예외 규칙을 둘 필요가 없다.
+# (주의: 이 CSV들을 Assets/Resources/ 로 되돌려 넣으면 다시 gitignore된다)
+
+# 엑셀이 CSV를 열어둘 때 만드는 임시 잠금 파일. 저장소에 올리지 않는다.
+~$*

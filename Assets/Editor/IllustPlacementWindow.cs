@@ -23,7 +23,9 @@ using UnityEngine;
 //   4) 미리보기에서 그림을 마우스로 끌어 제자리에 놓는다.
 //      - 클릭하면 선택되고, 방향키로 1픽셀씩(Shift=10픽셀) 움직인다.
 //      - 오른쪽 패널에서 X, Y, 크기를 숫자로 직접 넣을 수도 있다.
-//   5) [저장](또는 Ctrl+S)을 누르면 Assets/Resources/Dialogues/IllustLayout.csv 에 기록된다.
+//   5) [저장](또는 Ctrl+S)을 누르면 Assets/StreamingAssets/Dialogues/IllustLayout.csv 에 기록된다.
+//      이 폴더는 git으로 공유되므로, 저장한 뒤 commit/push만 하면 팀원 모두에게 전달된다
+//      (구글 드라이브에 따로 올릴 필요 없음 - 이슈 #10).
 //
 // ===== 저장 범위: [공통] 과 [이 화면 전용] =====
 // 같은 오브젝트가 여러 배경에 나올 때 배경마다 다른 자리에 놓고 싶을 수 있다. 그래서
@@ -48,9 +50,14 @@ public class IllustPlacementWindow : EditorWindow
     // ---------------------------------------------------------------------------------
     // 상수 / 경로
     // ---------------------------------------------------------------------------------
-    private const string LayoutCsvPath = "Assets/Resources/Dialogues/IllustLayout.csv";
-    private const string InvestigationCsvPath = "Assets/Resources/Dialogues/InvestigationData.csv";
-    private const string DialogueFolder = "Assets/Resources/Dialogues";
+    // ===== 이 도구가 고치는 CSV는 전부 git으로 공유한다 (이슈 #10) =====
+    // 예전에는 Assets/Resources/Dialogues/ 에 있었는데 그 폴더는 gitignore라, 좌표를 고칠 때마다
+    // 구글 드라이브에 다시 올려야 했다. 지금은 Assets/StreamingAssets/Dialogues/ 에 두고
+    // 저장 → git commit/push만 하면 팀원 모두에게 전달된다. (CSVReader.cs 상단 주석 참고)
+    // 그림은 용량이 커서 계속 Resources(드라이브 공유)에 둔다 - 아래 Illusts 경로들.
+    private const string LayoutCsvPath = "Assets/StreamingAssets/Dialogues/IllustLayout.csv";
+    private const string InvestigationCsvPath = "Assets/StreamingAssets/Dialogues/InvestigationData.csv";
+    private const string DialogueFolder = "Assets/StreamingAssets/Dialogues";
     private const string BackgroundFolder = "Assets/Resources/Illusts/Backgrounds";
     private const string ObjectFolder = "Assets/Resources/Illusts/Objects";
     private const string StandingFolder = "Assets/Resources/Illusts/Standings";
@@ -336,15 +343,47 @@ public class IllustPlacementWindow : EditorWindow
 
         foreach (var item in activeItems)
         {
-            // 사용자가 손대지 않았고 이미 어딘가에서 좌표를 물려받고 있다면, 굳이 새 줄을
-            // 만들지 않는다. 그래야 "표정 하나 보려고 올렸을 뿐인데 줄이 잔뜩 생기는" 일이 없다.
-            bool alreadyStored = saveToCurrentScreen ? item.hasScreenRow : item.hasGlobalRow;
-            if (!item.edited && !alreadyStored) continue;
+            // ===== 캐릭터 스탠딩은 "캐릭터 기본 이름"으로 저장한다 =====
+            // 예전에는 드래그한 그림의 파일 이름(예: STD_Past01_Hansung_Default)으로 저장해서,
+            // 그 표정 하나에만 좌표가 붙고 Angry 같은 다른 표정은 옛 좌표에 그대로 서 있었다.
+            // 스탠딩 위치는 캐릭터마다 하나여야 하므로(표정은 CSV가 줄마다 바꾸는 것일 뿐),
+            // 어느 표정을 끌어서 옮기든 STD_장면_캐릭터 한 줄로 저장하고, 같은 캐릭터의
+            // 표정별 줄은 지워서 모든 표정이 이 좌표를 따르게 한다.
+            // (_Stand 계열은 자세가 다른 별개의 스탠딩이라 STD_장면_캐릭터_Stand 로 저장된다 -
+            //  이름을 자르는 규칙은 IllustLayout.NameCandidates 와 같다)
+            bool isStanding = item.fileName.StartsWith("STD_", System.StringComparison.OrdinalIgnoreCase);
+            var nameCandidates = IllustLayout.NameCandidates(item.fileName);
+            string saveName = isStanding && nameCandidates.Count > 0
+                ? nameCandidates[nameCandidates.Count - 1]
+                : item.fileName;
 
-            string key = MakeKey(targetScreen, item.fileName);
+            if (isStanding)
+            {
+                // 스탠딩은 실제로 옮긴 경우에만 저장한다(물려받은 좌표를 다시 적을 필요 없음).
+                if (!item.edited) continue;
+
+                var stale = new List<string>();
+                foreach (var pair in rows)
+                {
+                    if (pair.Value.screen != targetScreen) continue;
+                    if (pair.Value.fileName == saveName) continue;
+                    var c = IllustLayout.NameCandidates(pair.Value.fileName);
+                    if (c.Count > 0 && c[c.Count - 1] == saveName) stale.Add(pair.Key);   // 같은 캐릭터의 표정별 줄
+                }
+                foreach (string k in stale) rows.Remove(k);
+            }
+            else
+            {
+                // 사용자가 손대지 않았고 이미 어딘가에서 좌표를 물려받고 있다면, 굳이 새 줄을
+                // 만들지 않는다. 그래야 "그림 하나 보려고 올렸을 뿐인데 줄이 잔뜩 생기는" 일이 없다.
+                bool alreadyStored = saveToCurrentScreen ? item.hasScreenRow : item.hasGlobalRow;
+                if (!item.edited && !alreadyStored) continue;
+            }
+
+            string key = MakeKey(targetScreen, saveName);
             rows[key] = new Row
             {
-                fileName = item.fileName,
+                fileName = saveName,
                 screen = targetScreen,
                 x = item.x,
                 y = item.y,
@@ -479,6 +518,12 @@ public class IllustPlacementWindow : EditorWindow
             string key = Cell(investigationTable[i], keyCol);
             if (string.Equals(key, "Background", System.StringComparison.OrdinalIgnoreCase)) continue;
             if (string.Equals(key, "IntroText", System.StringComparison.OrdinalIgnoreCase)) continue;
+            // NextScreen/PrevScreen은 "옆 화면으로 가는 화살표"를 만드는 특수 줄이라
+            // 조사 오브젝트가 아니다 (InvestigationController.cs 참고). Sprite 칸에 이동할
+            // 화면 이름이 적혀 있어서 걸러내지 않으면 오브젝트인 척 목록에 섞여 들어가고,
+            // 배치 도구에서 지우거나 옮기면 화살표가 통째로 사라진다.
+            if (string.Equals(key, "NextScreen", System.StringComparison.OrdinalIgnoreCase)) continue;
+            if (string.Equals(key, "PrevScreen", System.StringComparison.OrdinalIgnoreCase)) continue;
 
             result.Add(i);
         }
@@ -1398,9 +1443,73 @@ public class IllustPlacementWindow : EditorWindow
             {
                 screens[id] = (sprite, screens[id].sprites);
             }
+            else if (string.Equals(key, "IntroText", System.StringComparison.OrdinalIgnoreCase)
+                  || string.Equals(key, "NextScreen", System.StringComparison.OrdinalIgnoreCase)
+                  || string.Equals(key, "PrevScreen", System.StringComparison.OrdinalIgnoreCase))
+            {
+                // 안내문/화살표는 그림이 아니다. Sprite 칸에 값이 들어 있어도 오브젝트 수에
+                // 세면 안 된다 (메뉴에 "(N개)"로 표시되는 그 숫자).
+            }
             else if (!string.IsNullOrEmpty(sprite))
             {
                 screens[id].sprites.Add(sprite);
+            }
+        }
+
+        // ===== 게임에서 실제로 들어가는 조사 화면만 목록에 올린다 =====
+        // InvestigationData.csv에는 배경 34개가 전부 조사 화면으로 등록되어 있지만, 게임이 실제로
+        // 조사 화면으로 여는 것은 시나리오 CSV에 LineType=Investigate 줄이 있는 화면뿐이다.
+        // 나머지 배경은 대사 장면으로만 나오고, 그때는 시나리오 CSV의 Standing/Props 칸만 쓴다.
+        //
+        // 예전에는 34개가 전부 목록에 떠서, 한 번도 열리지 않는 조사 화면에 인물/오브젝트를
+        // 올려놓고 "분명 추가했는데 게임엔 배경만 나온다"는 일이 생겼다. 같은 배경이 도구 안에
+        // 두 벌 있었던 셈이다. 그래서 여기서는 실제로 열리는 조사 화면만 보여주고, 그 외 배경은
+        // [시나리오 장면 불러오기]에서만 편집하게 한다. (InvestigationData.csv 자체는 그대로 둔다)
+        var enteredScreens = new HashSet<string>();
+        foreach (string scenarioFile in Directory.GetFiles(DialogueFolder, "scenario_*.csv"))
+        {
+            if (Path.GetFileName(scenarioFile).StartsWith("~$")) continue;
+            var scenario = ParseCsv(File.ReadAllText(scenarioFile, Encoding.UTF8));
+            if (scenario.Count == 0) continue;
+            int typeCol = ColumnIndex(scenario[0], "LineType");
+            int invCol = ColumnIndex(scenario[0], "InvestigationId");
+            for (int i = 1; i < scenario.Count; i++)
+            {
+                if (!string.Equals(Cell(scenario[i], typeCol), "Investigate", System.StringComparison.OrdinalIgnoreCase)) continue;
+                string invId = Cell(scenario[i], invCol);
+                if (!string.IsNullOrEmpty(invId)) enteredScreens.Add(invId);
+            }
+        }
+
+        // ===== 화살표로만 닿는 옆 화면도 목록에 남긴다 =====
+        // NextScreen/PrevScreen 기능이 생기면서(InvestigationController.cs 참고), 시나리오 CSV에
+        // Investigate 줄이 없어도 조사 도중 화살표로 건너갈 수 있는 화면이 생겼다.
+        // 예) #07 회사 조사: 재훈의 책상(Site_01)으로만 들어가고, 회의실(Site_02)은 화살표로 간다.
+        // 이런 화면을 목록에서 빼버리면 "게임엔 나오는데 도구에서는 배치할 수 없는 화면"이 되므로,
+        // 들어가는 화면에서 연결을 따라가며 닿는 화면을 전부 더한다(연결이 여러 단계여도 되게 반복).
+        int textCol = ColumnIndex(header, "Text");
+        bool linkAdded = true;
+        while (linkAdded)
+        {
+            linkAdded = false;
+            for (int i = 1; i < table.Count; i++)
+            {
+                string linkKey = Cell(table[i], keyCol);
+                if (!string.Equals(linkKey, "NextScreen", System.StringComparison.OrdinalIgnoreCase)
+                 && !string.Equals(linkKey, "PrevScreen", System.StringComparison.OrdinalIgnoreCase)) continue;
+
+                string from = Cell(table[i], idCol);
+                // 이동할 화면 이름은 Sprite 칸에 적는다. 비어 있으면 Text 칸도 본다
+                // (InvestigationController가 읽는 방식과 똑같이 맞춘 것).
+                string to = Cell(table[i], spriteCol);
+                if (string.IsNullOrEmpty(to)) to = Cell(table[i], textCol);
+                if (string.IsNullOrEmpty(from) || string.IsNullOrEmpty(to)) continue;
+
+                if (enteredScreens.Contains(from) && !enteredScreens.Contains(to))
+                {
+                    enteredScreens.Add(to);
+                    linkAdded = true;
+                }
             }
         }
 
@@ -1408,6 +1517,9 @@ public class IllustPlacementWindow : EditorWindow
         {
             string id = pair.Key;
             var data = pair.Value;
+
+            // 게임에서 한 번도 열리지 않는 조사 화면은 건너뛴다 (위 주석 참고).
+            if (!enteredScreens.Contains(id)) continue;
 
             menu.AddItem(new GUIContent($"{id}  ({data.sprites.Count}개)"), false, () =>
             {
@@ -1502,8 +1614,19 @@ public class IllustPlacementWindow : EditorWindow
             string runningBg = "";
             string runningStanding = "";
 
+            // ===== 게임이 화면 칸을 읽지 않는 줄은 목록에서 뺀다 =====
+            // 선택지(Choice)/미니게임(Minigame)/조사(Investigate)/추리(Deduction) 줄은 대사를
+            // 보여주는 줄이 아니라서, 거기에 Background/Standing/Props를 적어도 게임은 읽지 않는다
+            // (DialogueSystem의 CSV 읽는 부분 참고). 그런데 예전에는 이런 줄도 목록에 올라와서
+            // "도구에는 있는데 게임에는 절대 안 나오는 장면"이 생겼다. 그래서 여기서 제외한다.
+            int typeCol = ColumnIndex(header, "LineType");
+
             for (int i = 1; i < table.Count; i++)
             {
+                string lineType = Cell(table[i], typeCol).ToLowerInvariant();
+                if (lineType == "choice" || lineType == "minigame" ||
+                    lineType == "investigate" || lineType == "deduction") continue;
+
                 string bg = Cell(table[i], bgCol);
                 string standing = standCol >= 0 ? Cell(table[i], standCol) : "";
 
@@ -1655,9 +1778,115 @@ public class IllustPlacementWindow : EditorWindow
         scenarioDirty = true;
     }
 
+    // ===== 장면 첫 줄을 저장할 때 그 장면의 나머지 줄을 맞춘다 =====
+    // 도구의 장면 하나 = 배경 칸이 적힌 줄 하나다. 그 장면의 배경/인물 목록/소품은 이 줄이 정하고,
+    // 다음 장면이 시작되기 전까지의 줄들은 "캐릭터 스탠딩 표정"만 바꿀 수 있어야 한다.
+    //
+    // 그런데 장면 안의 줄들은 표정을 바꾸려고 Standing 칸에 인물 이름을 적어두기 때문에,
+    // 도구에서 장면의 인물을 빼거나 바꿔도 그 줄들이 옛 인물을 다시 불러와 버렸다.
+    // (예: 95행 장면에서 아이를 뺐는데 105행/110행이 아이 표정을 바꾸면서 아이가 다시 나타남)
+    //
+    // 그래서 저장할 때 같은 장면 안의 줄들을 훑어서
+    //   - Standing 칸: 장면 첫 줄의 인물 목록은 그대로 두고, 그 줄이 적은 "표정"만 반영한다.
+    //                  장면에 없는 인물은 버린다. 장면에 인물이 없으면 칸을 비운다.
+    //   - Props 칸   : 비운다 (소품은 장면 첫 줄이 정한다)
+    // 로 맞춘다. 표정을 바꾸는 줄 자체는 그대로 살아 있으므로 대사 연출은 유지된다.
+    // 반환값 = 고친 칸 수.
+    private int NormalizeScenarioSegment(int entryRow)
+    {
+        if (scenarioTable == null || entryRow <= 0 || entryRow >= scenarioTable.Count) return 0;
+
+        string[] header = scenarioTable[0];
+        int typeCol = ColumnIndex(header, "LineType");
+        int bgCol = ColumnIndex(header, "Background");
+        int stCol = ColumnIndex(header, "Standing");
+        int prCol = ColumnIndex(header, "Props");
+        if (bgCol < 0 || stCol < 0) return 0;
+
+        // 배경이 적힌 줄만 "장면 첫 줄"이다 (CSV 맨 앞의 "장면 시작" 항목처럼 배경이 비어 있으면 건너뜀)
+        if (Cell(scenarioTable[entryRow], bgCol) == "") return 0;
+
+        // 장면 첫 줄의 인물 목록(지금 표정 포함)과 자리
+        var current = new List<string>();
+        foreach (string raw in Cell(scenarioTable[entryRow], stCol).Split('|'))
+        {
+            string n = raw.Trim();
+            if (n != "" && !n.Equals("none", System.StringComparison.OrdinalIgnoreCase)) current.Add(n);
+        }
+
+        int changed = 0;
+        for (int i = entryRow + 1; i < scenarioTable.Count; i++)
+        {
+            string lineType = Cell(scenarioTable[i], typeCol).ToLowerInvariant();
+            if (lineType == "investigate") break;                 // 조사 화면으로 넘어가면 이 장면은 끝
+            if (lineType == "choice" || lineType == "minigame" || lineType == "deduction") continue;
+            if (Cell(scenarioTable[i], bgCol) != "") break;        // 다음 장면이 시작됨
+
+            if (prCol >= 0 && Cell(scenarioTable[i], prCol) != "")
+            {
+                SetScenarioCellAt(i, prCol, "");
+                changed++;
+            }
+
+            string st = Cell(scenarioTable[i], stCol);
+            if (st == "") continue;
+
+            // 이 줄이 적은 이름을 캐릭터(기본 이름)별로 모은 뒤, 장면 인물의 표정만 바꾼다.
+            var byBase = new Dictionary<string, string>();
+            foreach (string raw in st.Split('|'))
+            {
+                string n = raw.Trim();
+                if (n == "" || n.Equals("none", System.StringComparison.OrdinalIgnoreCase)) continue;
+                string b = StandingBaseName(n);
+                if (!byBase.ContainsKey(b)) byBase[b] = n;
+            }
+            for (int k = 0; k < current.Count; k++)
+            {
+                if (byBase.TryGetValue(StandingBaseName(current[k]), out string expression)) current[k] = expression;
+            }
+
+            string newSt = current.Count > 0 ? string.Join("|", current) : "";
+            if (newSt != st)
+            {
+                SetScenarioCellAt(i, stCol, newSt);
+                changed++;
+            }
+        }
+
+        if (changed > 0) scenarioDirty = true;
+        return changed;
+    }
+
+    // STD_Past01_Hansung_Angry -> STD_Past01_Hansung (표정 상속 규칙과 같다)
+    private static string StandingBaseName(string fileName)
+    {
+        var candidates = IllustLayout.NameCandidates(fileName);
+        return candidates.Count > 0 ? candidates[candidates.Count - 1] : fileName;
+    }
+
+    // 시나리오 표의 한 칸에 값을 넣는다. 줄이 짧으면(엑셀이 뒤쪽 빈 칸을 잘라낸 경우) 늘린다.
+    private void SetScenarioCellAt(int rowIndex, int col, string value)
+    {
+        if (scenarioTable[rowIndex].Length <= col)
+        {
+            var grown = new string[col + 1];
+            System.Array.Copy(scenarioTable[rowIndex], grown, scenarioTable[rowIndex].Length);
+            for (int j = scenarioTable[rowIndex].Length; j <= col; j++) grown[j] = "";
+            scenarioTable[rowIndex] = grown;
+        }
+        scenarioTable[rowIndex][col] = value;
+    }
+
     private void SaveScenarioTable()
     {
         if (scenarioTable == null || string.IsNullOrEmpty(scenarioPath)) return;
+
+        // 저장 전에 이 장면의 나머지 줄을 장면 첫 줄에 맞춘다 (위 NormalizeScenarioSegment 주석 참고).
+        int synced = NormalizeScenarioSegment(scenarioRow);
+        if (synced > 0)
+        {
+            Debug.Log($"[일러스트 배치 도구] 같은 장면 안의 줄 {synced}칸을 장면 첫 줄에 맞췄습니다 (표정만 남김).");
+        }
 
         var sb = new StringBuilder();
         foreach (var row in scenarioTable)

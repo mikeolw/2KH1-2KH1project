@@ -20,7 +20,6 @@ using UnityEngine.UI;
 //                  - none 이라고 적으면 모든 캐릭터를 화면에서 지운다.
 //                  - 두 명 이상 세우려면 세로줄(|)로 구분한다.
 //                    예) STD_Past01_Hansung_Default|STD_Past01_Jaehoon_Default
-//   StandingPos  : 각 캐릭터의 서는 위치. Standing과 같은 순서로 세로줄(|)로 구분한다.
 //                  L=왼쪽, C=가운데, R=오른쪽. 비워두면 인원수에 맞춰 자동 배치한다.
 //                    1명 -> 가운데 / 2명 -> 왼쪽,오른쪽 / 3명 -> 왼쪽,가운데,오른쪽
 //                  예) L|R
@@ -230,6 +229,13 @@ public class StageController : MonoBehaviour
             currentBackgroundName = null;
             backgroundImage.sprite = null;
             backgroundImage.enabled = false;
+
+            // ===== 암전도 "장면이 바뀐 것"이므로 소품을 치운다 =====
+            // 예전에는 배경만 끄고 소품은 그대로 둬서, 검은 화면 위에 이전 장면의 소품이
+            // 둥둥 떠 있었다(예: 공사장 승강기가 "나는..." 암전 대사 위에 남음). 암전 화면은
+            // 배치 도구 목록에 올릴 수 없는 화면이라 그림이 하나도 없어야 한다.
+            // 다른 배경으로 바뀔 때와 똑같이 여기서도 치운다.
+            ClearProps();
             return;
         }
 
@@ -509,8 +515,7 @@ public class StageController : MonoBehaviour
 
     // 캐릭터 스탠딩을 바꾼다.
     //   standingSpec : "STD_A" 또는 "STD_A|STD_B" (비면 유지, "none"이면 전원 퇴장)
-    //   posSpec      : "L|R" 같은 자리 지정 (비면 인원수에 맞춰 자동 배치)
-    public void ApplyStandings(string standingSpec, string posSpec)
+    public void ApplyStandings(string standingSpec)
     {
         if (standingSlots == null) return;
         if (string.IsNullOrWhiteSpace(standingSpec)) return; // 빈 칸 = 유지
@@ -525,9 +530,6 @@ public class StageController : MonoBehaviour
         }
 
         string[] names = standingSpec.Split('|');
-        string[] positions = string.IsNullOrWhiteSpace(posSpec)
-            ? null
-            : posSpec.Trim().Split('|');
 
         // 이번 줄에서 실제로 사용할 자리들을 먼저 계산해둔다.
         // (계산이 끝난 뒤에 "쓰이지 않은 자리"를 비워야, 같은 캐릭터가 자리만 옮길 때
@@ -539,7 +541,7 @@ public class StageController : MonoBehaviour
             string name = names[i].Trim();
             if (string.IsNullOrEmpty(name)) continue;
 
-            int slotIndex = ResolveSlotIndex(positions, i, names.Length);
+            int slotIndex = ResolveSlotIndex(i, names.Length);
             if (slotIndex < 0 || slotIndex >= standingSlots.Length) continue;
 
             // 지금 배경 이름을 함께 넘겨서, 배치표에 "이 배경 전용 좌표"가 있으면 그것을 쓰게 한다
@@ -556,19 +558,9 @@ public class StageController : MonoBehaviour
     }
 
     // i번째 캐릭터가 어느 자리에 설지 결정한다.
-    //   posSpec이 있으면 그대로 따르고(L/C/R),
     //   없으면 인원수에 맞춰 자동 배치한다: 1명=가운데, 2명=왼쪽/오른쪽, 3명=왼쪽/가운데/오른쪽
-    private int ResolveSlotIndex(string[] positions, int index, int totalCount)
+    private int ResolveSlotIndex(int index, int totalCount)
     {
-        if (positions != null && index < positions.Length)
-        {
-            switch (positions[index].Trim().ToUpperInvariant())
-            {
-                case "L": return SlotLeft;
-                case "C": return SlotCenter;
-                case "R": return SlotRight;
-            }
-        }
 
         // 자동 배치
         if (totalCount <= 1) return SlotCenter;

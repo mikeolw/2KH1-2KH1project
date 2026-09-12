@@ -46,7 +46,7 @@ public class DialogueLine
     // 달라져서 연결이 깨지므로, BGM/SFX와 똑같이 "파일 이름"으로 불러온다.
     // 자세한 이유는 IllustLoader.cs 상단 주석 참고.
     //
-    // 아래 4개는 CSV의 Background / Standing / StandingPos / Talker 컬럼에서 그대로 들어온다.
+    // 아래 3개는 CSV의 Background / Standing / Talker 컬럼에서 그대로 들어온다.
     // 값이 비어 있으면 "이전 줄의 상태를 그대로 유지"한다는 뜻이라, 장면이나 표정이 바뀌는
     // 줄에만 적어주면 된다 (매 줄마다 채울 필요 없음).
 
@@ -79,9 +79,6 @@ public class DialogueLine
     // 위치는 조사 오브젝트와 같은 IllustLayout.csv를 쓰므로 배치 도구로 잡으면 된다.
     public string propNames;
 
-    // 각 스탠딩이 설 자리. L=왼쪽 C=가운데 R=오른쪽, 세로줄(|)로 구분 (예: L|R).
-    // 빈 값이면 인원수에 맞춰 자동 배치한다.
-    public string standingPositions;
 
     // 지금 말하는 캐릭터의 자리(L/C/R). 대사가 타이핑되는 동안 그 캐릭터만 입을 뻐끔거린다.
     // 빈 값이면 Speaker 이름으로 자동 인식한다 (Dialogues/Characters.csv의 매핑 사용).

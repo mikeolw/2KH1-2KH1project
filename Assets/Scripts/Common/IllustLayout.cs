@@ -25,7 +25,7 @@ using UnityEngine;
 //                  마우스로 끌어 위치를 맞추고 저장할 수 있다(IllustPlacementWindow.cs).
 //
 // ===== 파일 =====
-// Assets/Resources/Dialogues/IllustLayout.csv
+// Assets/StreamingAssets/Dialogues/IllustLayout.csv  (git으로 공유 - 드라이브에 올릴 필요 없음)
 //   FileName : 그림 파일 이름 (확장자 제외). 예: OBJ_01_Notepad
 //   X, Y     : 화면 한가운데를 (0,0)으로 봤을 때의 위치(픽셀). X는 오른쪽이 +, Y는 위쪽이 +.
 //              그림의 한가운데가 이 좌표에 오도록 놓인다.

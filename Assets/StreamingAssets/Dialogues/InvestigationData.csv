@@ -1,0 +1,141 @@
+﻿InvestigationId,HotspotKey,Type,ObjectName,Speaker,Text,ItemId,Sprite
+BG_01_Office,Background,,,,,,BG_01_Office
+BG_01_Office,IntroText,,,,사무실을 둘러본다. 창문과 회사 동료를 조사할 수 있다.,,
+BG_01_Office,Hotspot_STD_0107_Conductor_Angry1,Standing,STD_0107_Conductor_Angry1,,,,STD_0107_Conductor_Angry1
+BG_01_MyDesk,Background,,,,,,BG_01_MyDesk
+BG_01_MyDesk,IntroText,,,,"내 책상이다. 메모장, 카메라, 서랍, 캐비닛, 서류 뭉치, 반출 기록부, 핸드폰을 조사할 수 있다.",,
+BG_01_MyDesk,Hotspot_Notepad,Item,메모장,,업무 기록이 빼곡히 적혀있다. 중요한 비밀번호나 열쇠의 위치도 적혀 있어 잃어버리면 안되는 물건. 볼펜도 함께 챙겼다.,notepad_pen,OBJ_01_Notepad
+BG_01_MyDesk,Hotspot_Camera,Item,카메라,,현장의 사진들이 담겨있다. 그리고... 친구와 은사의 사진이 찍혀있다.,camera,OBJ_01_Camera
+BG_01_MyDesk,Hotspot_Drawer,Item,서랍,,물건들이 난잡하게 어질러져 있다. 사직서를 발견했다.,resignation_letter,OBJ_01_Drawer
+BG_01_MyDesk,Hotspot_Cabinet,Description,캐비닛,,열쇠가 꽂힌 채 잠겨 있던 캐비닛이다. 열어보니 안은 텅 비어 있다. 누군가 최근에 내용물을 통째로 빼낸 듯하다.,,OBJ_01_Cabinet
+BG_01_MyDesk,Hotspot_Documents,Description,서류 뭉치,,결재가 끝난 사내 서류가 쌓여 있다. 몇 장은 중간 페이지가 빠졌는지 문서 번호가 이어지지 않는다.,,OBJ_01_Documents
+BG_01_MyDesk,Hotspot_CellPhone,Description,핸드폰,,"전화, 문자 기록, 앨범을 확인할 수 있다. 라디오도 청취할 수 있다. 친구의 부고 문자를 확인했다.",,OBJ_01_CellPhone
+BG_01_ConductorDesk,Background,,,,,,BG_01_ConductorDesk
+BG_01_ConductorDesk,IntroText,,,,차장의 자리다. 그는 자리에 없다.,,
+BG_01_ConductorDesk,Hotspot_Document2,Description,OBJ_01_Document2,,,,OBJ_01_Document2
+BG_02_CoastalRoad,Background,,,,,,BG_02_CoastalRoad
+BG_02_CoastalRoad,IntroText,,,,"동네 주민, 바다, 갯바위, 핏자국이 남은 돌, 절벽, 동네 학생을 조사할 수 있다.",,
+BG_02_CoastalRoad,Hotspot_Sea,Description,바다,,갯바위에 거친 파도가 쓸려와 부딪히는 것을 확인할 수 있다.,,OBJ_02_Sea
+BG_02_CoastalRoad,Hotspot_Rocks,Description,갯바위,,바위들은 한 군데에 모여있다. 절벽 아래에서 바위 쪽으로 떨어질 확률은 낮아 보인다.,,OBJ_02_Rocks
+BG_02_CoastalRoad,Hotspot_Cliff,Description,절벽,,"높이가 낮아질수록 면적이 줄어드는 고깔 모양 형태의 절벽이다. 절벽 위를 살펴보면, 바닥에 파여있는 홈 사이에 끼어 있는 작은 돌멩이에 핏덩이가 있는 것을 확인하게 된다.",,OBJ_02_Cliff
+BG_02_CoastalRoad,Hotspot_BloodRock,Description,핏자국이 남은 돌,,절벽 위 홈에 끼어 있던 작은 돌멩이다. 검붉게 말라붙은 핏자국이 선명하다. 추락하며 부딪힌 흔적이라기엔 놓인 위치가 어색하다.,,OBJ_02_BloodRock
+BG_02_CoastalRoad,Hotspot_OldMan,Talk,동네 주민,동네 주민,"자네 고기잡이라도 하러 온 게야? 비도 내리고, 꺼림직한 일도 있어서 오늘은 영 날이 아니네. 뭐? 뭔 일이냐고? 며칠 전에 저쪽 저 앞바다에서 사람이 죽었어. 운도 없게 물이 아니라 바위 쪽으로 떨어졌다고 하드만. 지 대가리 지가 깼다고.\n\n근데 말이지, 아무리 생각해도 영 찝찝해. 여긴 조차가 그리 심하지 않아. 비가 이렇게 거세게 와도 바위 쪽은 맨눈으로 잘 보이는데, 사지를 헤매는 지경이 아닌 이상, 죽으려면 물 쪽으로 뛰어들지, 뻔히 보이는 바위로 떨어지겄어? 어휴…. 아무튼, 생긴 거 보니 멀쩡한 도시 양반 같은데, 헛걸음한 건 아쉽지만 버스표 끊고 돌아가시게.",,OBJ_02_OldMan
+BG_02_CoastalRoad,Hotspot_Student,Talk,동네 학생,동네 학생,"경찰이신가요? 저, 사실 말해야 했는데, 머뭇거리다가 때를 놓쳐서요…. 여기서 사람이 스스로 바다로 뛰어드는 걸 제 눈으로 직접 봤어요. 멀리서도 보일 정도로 피가 흥건하게 젖어있는 사람이었어요. 다쳤는지 거동도 불편해 보였고요. 그런데 그때 도로 쪽에서 그 분께 달려가는 사람이 있었어요. 바위 쪽으로 떨어지셨냐고요? 아뇨. 물이었어요.",,OBJ_02_Student
+BG_03_Police,Background,,,,,,BG_03_Police
+BG_03_Police,IntroText,,,,"한성이 쓰던 책상이다. 아이, 형사, 형사들의 대화, 유류품 서류, 휴대폰, 지갑, 액자를 조사할 수 있다.",,
+BG_03_Police,Hotspot_Child,Talk,아이,아이,"아저씨, 여기 사람들은 다 바빠 보여요. 저 아저씨 얘기는 아무도 안 물어봤어요.",,OBJ_03_Child
+BG_03_Police,Hotspot_PoliceMan,Talk,형사,형사,가족도 아니신데 이러시면 곤란합니다. 단순 추락사로 종결된 건이에요. 더 볼 것도 없습니다.,,OBJ_03_PoliceMan
+BG_03_Police,Hotspot_PoliceMansConversation,Talk,형사들,형사,(낮은 목소리) …위에서 빨리 덮으라고 내려왔대. 건설사 쪽이랑 얽히면 골치 아파지니까 적당히 하고 넘어가자고.,,OBJ_03_PoliceMansConversation
+BG_03_Police,Hotspot_Documents,Item,유류품 서류,,"한성의 유류품 목록이다. 소지품은 대부분 적혀 있는데, 회사 출입증 항목만 '미발견'으로 비어 있다.",police_documents,OBJ_03_Documents
+BG_03_Police,Hotspot_CellPhone,Item,한성의 휴대폰,,유류품으로 보관 중인 한성의 휴대폰이다. 초기화되어 있어 아무것도 알 수가 없다.,hansung_phone,OBJ_03_CellPhone
+BG_03_Police,Hotspot_Wallet,Item,지갑,,"한성의 지갑이다. 주민등록증과 현금, 카드는 그대로인데, 명함 꽂이에 낯선 전화번호가 적힌 쪽지가 끼어 있다.",note_phone_number,OBJ_03_Wallet
+BG_03_Police,Hotspot_Frame,Description,액자,,"고등학교 졸업사진이다. 나와 은사님, 그리고 죽은 그 녀석까지 세 명이 찍혀 있다.",,OBJ_03_Frame
+BG_04_Home,Background,,,,,,BG_04_Home
+BG_04_Home,IntroText,,,,은사의 집 거실이다.,,
+BG_04_Home,Hotspot_STD_04_Teacher_Default,Standing,STD_04_Teacher_Default,,,,STD_04_Teacher_Default
+BG_04_Room_01,Background,,,,,,BG_04_Room_01
+BG_04_Room_01,IntroText,,,,한성의 방이다.,,
+BG_04_Room_02,Background,,,,,,BG_04_Room_02
+BG_04_Room_02,IntroText,,,,한성의 방을 둘러본다.,,
+BG_04_Room_03,Background,,,,,,BG_04_Room_03
+BG_04_Room_03,IntroText,,,,"벽지 사이 비밀 공간에서 나온 것들이다. 서류, 일기장, SD카드를 조사할 수 있다.",,
+BG_04_Room_03,Hotspot_STD_04_Child_Depressed,Standing,STD_04_Child_Depressed,,,,STD_04_Child_Depressed
+BG_04_Room_04,Background,,,,,,BG_04_Room_04
+BG_04_Room_04,IntroText,,,,한성의 방을 둘러본다.,,
+BG_04_Room_04,Hotspot_STD_04_Child_Stand_Lookatyou,Standing,STD_04_Child_Stand_Lookatyou,,,,STD_04_Child_Stand_Lookatyou
+BG_04_Room_05,Background,,,,,,BG_04_Room_05
+BG_04_Room_05,IntroText,,,,한성의 방을 둘러본다.,,
+BG_04_Room_06,Background,,,,,,BG_04_Room_06
+BG_04_Room_06,IntroText,,,,한성의 방을 둘러본다.,,
+BG_04_Room_06,Hotspot_Diarys,Description,OBJ_04_Diarys,,,,OBJ_04_Diarys
+BG_04_Room_06,Hotspot_File,Description,OBJ_04_File,,,,OBJ_04_File
+BG_04_Room_06,Hotspot_SDCard,Description,OBJ_04_SDCard,,,,OBJ_04_SDCard
+BG_04_Room_07,Background,,,,,,BG_04_Room_07
+BG_04_Room_07,IntroText,,,,한성의 방을 둘러본다.,,
+BG_04_Room_07,Hotspot_STD_040506_Child_DefaultStand_Default,Standing,STD_040506_Child_DefaultStand_Default,,,,STD_040506_Child_DefaultStand_Default
+BG_05_BuildingSite_01,Background,,,,,,BG_05_BuildingSite_01
+BG_05_BuildingSite_01,IntroText,,,,산재가 일어난 공사장이다.,,
+BG_05_BuildingSite_01,Hotspot_STD_040506_Child_DefaultStand_Default,Standing,STD_040506_Child_DefaultStand_Default,,,,STD_040506_Child_DefaultStand_Default
+BG_05_BuildingSite_02,Background,,,,,,BG_05_BuildingSite_02
+BG_05_BuildingSite_02,IntroText,,,,화물 엘리베이터를 조사할 수 있다.,,
+BG_05_BuildingSite_02,Hotspot_Elevator,Description,화물 엘리베이터,,"산재가 발생한 화물 엘리베이터다. 안전 바가 고정되지 않고 헐겁게 덜렁거린다. 점검 스티커 날짜는 최근으로 찍혀 있지만, 부품에는 손댄 흔적이 없다.",,OBJ_05_Elevator
+BG_06_Room,Background,,,,,,BG_06_Room
+BG_06_Room,IntroText,,,,한성의 집으로 돌아왔다.,,
+BG_06_Room,Hotspot_STD_040506_Child_DefaultStand_Default,Standing,STD_040506_Child_DefaultStand_Default,,,,STD_040506_Child_DefaultStand_Default
+BG_07_InvestigationSite_01,Background,,,,,,BG_07_InvestigationSite_01
+BG_07_InvestigationSite_01,Hotspot_Cabinet,Description,OBJ_01_Cabinet,,,,OBJ_01_Cabinet
+BG_07_InvestigationSite_01,Hotspot_Drawer,Description,OBJ_01_Drawer,,,,OBJ_01_Drawer
+BG_07_InvestigationSite_01,Hotspot_Documents,Description,OBJ_01_Documents,,,,OBJ_01_Documents
+BG_07_InvestigationSite_01,NextScreen,,,,,,BG_07_InvestigationSite_02
+BG_07_InvestigationSite_02,Background,,,,,,BG_07_InvestigationSite_02
+BG_07_InvestigationSite_02,PrevScreen,,,,,,BG_07_InvestigationSite_01
+BG_07_InvestigationSite_02,IntroText,,,,사무실이다. 차장과 실장에게 말을 걸 수 있다.,,BG_07_InvestigationSite_02
+BG_07_InvestigationSite_03,Background,,,,,,BG_07_InvestigationSite_03
+BG_07_InvestigationSite_02,IntroText,,,,회의실이다. 회의실 사용 대장을 조사할 수 있다.,,
+BG_07_InvestigationSite_02,Hotspot_Officer1,Description,OBJ_07_Officer1,,,,OBJ_07_Officer1
+BG_07_InvestigationSite_02,Hotspot_Officer2,Description,OBJ_07_Officer2,,,,OBJ_07_Officer2
+BG_07_InvestigationSite_02,Hotspot_Officer3,Description,OBJ_07_Officer3,,,,OBJ_07_Officer3
+BG_07_InvestigationSite_02,Hotspot_Conductor,Description,OBJ_07_Conductor,,,,OBJ_07_Conductor
+BG_07_InvestigationSite_03,Background,,,,,,BG_07_InvestigationSite_03
+BG_07_InvestigationSite_03,IntroText,,,,자료실 앞이다. 문을 조사할 수 있다.,,
+BG_07_InvestigationSite_03,Hotspot_Manager,Description,OBJ_07_Manager,,,,OBJ_07_Manager
+BG_07_InvestigationSite_04,Background,,,,,,BG_07_InvestigationSite_04
+BG_07_InvestigationSite_04,IntroText,,,,"자료실 안이다. 책장, 서류철, 파일, 영수증을 조사할 수 있다.",,
+BG_07_InvestigationSite_04,Hotspot_ResourceRoomdoor,Description,OBJ_07_ResourceRoomdoor,,,,OBJ_07_ResourceRoomdoor
+BG_07_InvestigationSite_05,Background,,,,,,BG_07_InvestigationSite_05
+BG_07_InvestigationSite_05,IntroText,,,,사장실 앞이다. 문을 조사할 수 있다.,,
+BG_07_InvestigationSite_05,Hotspot_Documents_F01L,Description,OBJ_07_Documents_F01L,,,,OBJ_07_Documents_F01L
+BG_07_InvestigationSite_05,Hotspot_Documents_F01R,Description,OBJ_07_Documents_F01R,,,,OBJ_07_Documents_F01R
+BG_07_InvestigationSite_05,Hotspot_Documents_F01R_Clue,Description,OBJ_07_Documents_F01R_Clue,,,,OBJ_07_Documents_F01R_Clue
+BG_07_InvestigationSite_05,Hotspot_Documents_F02L,Description,OBJ_07_Documents_F02L,,,,OBJ_07_Documents_F02L
+BG_07_InvestigationSite_05,Hotspot_Documents_F02R,Description,OBJ_07_Documents_F02R,,,,OBJ_07_Documents_F02R
+BG_07_InvestigationSite_05,Hotspot_Documents_F02R_Clue1,Description,OBJ_07_Documents_F02R_Clue1,,,,OBJ_07_Documents_F02R_Clue1
+BG_07_InvestigationSite_05,Hotspot_Documents_F02R_Clue2,Description,OBJ_07_Documents_F02R_Clue2,,,,OBJ_07_Documents_F02R_Clue2
+BG_07_InvestigationSite_06,Background,,,,,,BG_07_InvestigationSite_06
+BG_07_InvestigationSite_06,IntroText,,,,"사장실 안이다. 책상, 소파, 커튼, 트로피, 사진을 조사할 수 있다.",,
+BG_07_InvestigationSite_06,Hotspot_CEORoomDoor,Description,OBJ_07_CEORoomDoor,,,,OBJ_07_CEORoomDoor
+BG_07_InvestigationSite_07,Background,,,,,,BG_07_InvestigationSite_07
+BG_07_InvestigationSite_07,IntroText,,,,금고 안이다. 회의 기록 파일을 조사할 수 있다.,,
+BG_07_InvestigationSite_07,Hotspot_Curtain,Description,OBJ_07_Curtain,,,,OBJ_07_Curtain
+BG_07_InvestigationSite_07,Hotspot_CEODesk,Description,OBJ_07_CEODesk,,,,OBJ_07_CEODesk
+BG_07_InvestigationSite_07,Hotspot_BookCase,Description,OBJ_07_BookCase,,,,OBJ_07_BookCase
+BG_07_InvestigationSite_07,Hotspot_Trophy,Description,OBJ_07_Trophy,,,,OBJ_07_Trophy
+BG_07_InvestigationSite_07,Hotspot_Sofa,Description,OBJ_07_Sofa,,,,OBJ_07_Sofa
+BG_07_InvestigationSite_08,Background,,,,,,BG_07_InvestigationSite_08
+BG_07_InvestigationSite_08,IntroText,,,,형사들이 와 있다. 말을 걸 수 있다.,,
+BG_07_InvestigationSite_08,Hotspot_File,Description,OBJ_07_File,,,,OBJ_07_File
+BG_07_InvestigationSite_08,Hotspot_File2,Description,OBJ_07_File2,,,,OBJ_07_File2
+BG_07_InvestigationSite_08,Hotspot_Pictures,Description,OBJ_07_Pictures,,,,OBJ_07_Pictures
+BG_07_InvestigationSite_08,Hotspot_Receipt,Description,OBJ_07_Receipt,,,,OBJ_07_Receipt
+BG_Past01_Home,Background,,,,,,BG_Past01_Home
+BG_Past01_Home,IntroText,,,,어린 시절 은사의 집이다.,,
+BG_Past01_Home,Hotspot_STD_Past01_Jaehoon_CloseEyes,Standing,STD_Past01_Jaehoon_CloseEyes,,,,STD_Past01_Jaehoon_CloseEyes
+BG_Past01_Home,Hotspot_STD_Past01_Hansung_Default,Standing,STD_Past01_Hansung_Default,,,,STD_Past01_Hansung_Default
+BG_Past02_Bus_01,Background,,,,,,BG_Past02_Bus_01
+BG_Past02_Bus_01,IntroText,,,,고등학생 시절의 버스 안이다.,,
+BG_Past02_Bus_01,Hotspot_STD_Past02_Hansung_Default,Standing,STD_Past02_Hansung_Default,,,,STD_Past02_Hansung_Default
+BG_Past02_Bus_02,Background,,,,,,BG_Past02_Bus_02
+BG_Past02_Bus_02,IntroText,,,,버스 안이다.,,
+BG_Past02_Mom,Background,,,,,,BG_Past02_Mom
+BG_Past02_Mom,IntroText,,,,병상에 누운 어머니가 있다.,,
+BG_Past03_Family,Background,,,,,,BG_Past03_Family
+BG_Past03_Family,IntroText,,,,친척들이 모인 자리다.,,
+BG_Past03_Friend,Background,,,,,,BG_Past03_Friend
+BG_Past03_Friend,IntroText,,,,친구와 함께 있던 자리다.,,
+BG_Past03_Home,Background,,,,,,BG_Past03_Home
+BG_Past03_Home,IntroText,,,,은사의 집 거실이다.,,
+BG_Past03_Home,Hotspot_Cabinet,Description,OBJ_01_Cabinet,,,,OBJ_01_Cabinet
+BG_Past03_Home,Hotspot_Camera,Description,OBJ_01_Camera,,,,OBJ_01_Camera
+BG_Past03_Home,Hotspot_CellPhone,Description,OBJ_01_CellPhone,,,,OBJ_01_CellPhone
+BG_Past03_Home,Hotspot_Documents,Description,OBJ_01_Documents,,,,OBJ_01_Documents
+BG_Past03_Home,Hotspot_Notepad,Description,OBJ_01_Notepad,,,,OBJ_01_Notepad
+BG_Past03_Home,Hotspot_Drawer,Description,OBJ_01_Drawer,,,,OBJ_01_Drawer
+BG_Past04_Room,Background,,,,,,BG_Past04_Room
+BG_Past04_Room,IntroText,,,,학창 시절 한성의 방이다.,,
+BG_Past04_Room,Hotspot_STD_Past04_Hansung_Angry,Standing,STD_Past04_Hansung_Angry,,,,STD_Past04_Hansung_Angry
+BG_Past05_Dinner,Background,,,,,,BG_Past05_Dinner
+BG_Past05_Dinner,IntroText,,,,포장마차다.,,
+BG_Past05_Dinner,Hotspot_STD_Past05_Hansung_Angry,Standing,STD_Past05_Hansung_Angry,,,,STD_Past05_Hansung_Angry
+BG_Past05_Loby,Background,,,,,,BG_Past05_Loby
+BG_Past05_Loby,IntroText,,,,회사 로비다.,,
+BG_Past05_Loby,Hotspot_STD_Past05_Hansung_Stand_Default,Standing,STD_Past05_Hansung_Stand_Default,,,,STD_Past05_Hansung_Stand_Default

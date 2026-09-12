@@ -1,0 +1,26 @@
+﻿LineType,Speaker,Sentence,BGM,SFX,IsFadeOut,Item,ChoiceText,NextScenario,IsEndingChoice,TargetEnding,MinigameLabel,MinigameTimeLimit,MinigameBoxCount,MinigameCorrectIndex,Background,Standing,Talker,IsSavePoint,SavePointId,InvestigationId,Props
+Normal,재훈,……?,,,FALSE,,,,,,,,,,none,none,none,,,,
+Normal,재훈,...안자고 왜 여기 있어.,,,TRUE,,,,,,,,,,BG_05_BuildingSite_01,STD_040506_Child_DefaultStand_Default,none,,,,
+Normal,아이,궁금해서요.,,,FALSE,,,,,,,,,,,STD_040506_Child_DefaultStand_Default_OpenMouse,none,,,,
+Normal,재훈,"궁금해서, 지하철 타고 따라왔어?",,,FALSE,,,,,,,,,,,STD_040506_Child_DefaultStand_Default,none,,,,
+Normal,아이,네.,,,FALSE,,,,,,,,,,,STD_040506_Child_DefaultStand_Default_OpenMouse,none,,,,
+Normal,재훈,"…여긴, 너희 아버지 사고 현장이야.",,,FALSE,,,,,,,,,,BG_05_BuildingSite_02,none,none,,,,
+Normal,아이,….,,,FALSE,,,,,,,,,,,,none,,,,OBJ_05_Elevator
+Normal,재훈,...저 승강기. 지금도 운행해. \n사고 난 뒤에 제대로 보강해 두긴 한 건지 잘 모르겠네.,,,FALSE,,,,,,,,,,,,none,,,,
+Normal,아이,"...너무, 너무 높아요.",,,FALSE,,,,,,,,,,,,none,,,,
+Normal,재훈,잠깐 살아계셨던 게...기적인 거야.,,,FALSE,,,,,,,,,,,,none,,,,
+Normal,아이,…….,,,FALSE,,,,,,,,,,,,none,,,,
+Investigate,,,Investigation,,,,,,,,,,,,,,none,,,BG_05_BuildingSite_02,none
+Normal,재훈,"궁금한 게 있는데. \n아빠가 그렇게 아프고, 무서운 어른들이 찾아와서 어슬렁댈 때 기분이 어땠어.",,,FALSE,,,,,,,,,,BG_05_BuildingSite_01,STD_040506_Child_DefaultStand_Sorry,none,,,,
+Normal,아이,...숨쉬기 힘들고 무서웠어요. \n나쁜 꿈 꾸는 것 같았어요.,,,FALSE,,,,,,,,,,,STD_040506_Child_DefaultStand_Sorry_OpenMouse,none,,,,
+Normal,재훈,"...더는 조사가 힘들 것 같다는 이야기를 들었을 때는, 어땠어.",,,FALSE,,,,,,,,,,,STD_040506_Child_DefaultStand_Sorry,none,,,,
+Normal,아이,내가 스르륵 사라지는 것 같은 느낌이 들었어요. 아빠처럼.,,,FALSE,,,,,,,,,,,STD_040506_Child_DefaultStand_Sorry_OpenMouse,none,,,,
+Normal,재훈,……..,,,FALSE,,,,,,,,,,,STD_040506_Child_DefaultStand_Sorry,none,,,,
+Normal,아이,"...그냥 아무것도 하지 말자고 생각하니까 이젠 아무 생각도 안 나요. 제가 처음부터 떼쓰지 않았다면, 형사님은 괜찮으셨을 텐데. ",,,FALSE,,,,,,,,,,,STD_040506_Child_DefaultStand_Sorry_OpenMouse,none,,,,
+Normal,아이,제 마음이 잠깐 아팠다고 너무 큰 일에 휘말리시게 만들었어요... \n죄송해요.,,,FALSE,,,,,,,,,,,STD_040506_Child_DefaultStand_Sorry,none,,,,
+Normal,재훈,…….,,,FALSE,,,,,,,,,,none,none,none,,,,
+Normal,재훈,나는...,,,TRUE,,,,,,,,,,,,none,,,,none
+Narration,,,,,TRUE,,,,,,,,,,BG_05_BuildingSite_02,,none,TRUE,#05 공사장,,
+Choice,,,,,,,지금까지 본 것들은 잊고 다시 일상을 살아간다.,,TRUE,Bad_D,,,,,,,none,,,,
+Choice,,,,,,,내가 해야할 일은 배후를 샅샅히 파헤치는 것이다.,scenario_03,FALSE,,,,,,,,none,,,,
+Choice,,,,,,,화가 나니 복수한다.,,TRUE,Bad_E,,,,,,,none,,,,

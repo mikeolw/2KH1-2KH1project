@@ -36,7 +36,7 @@ public class GameFlowManager : MonoBehaviour
     public float endingFadeDelay = 0.5f;
 
     // 엔딩 종류 -> 재생할 CSV 파일 이름(확장자 제외).
-    // 파일은 Assets/Resources/Dialogues/ 안에 있어야 한다.
+    // 파일은 Assets/StreamingAssets/Dialogues/ 안에 있어야 한다(git으로 공유, CSVReader.cs 참고).
     private readonly Dictionary<EndingType, string> endingCsvMap = new Dictionary<EndingType, string>
     {
         { EndingType.True,   "scenario_ending_true" },
