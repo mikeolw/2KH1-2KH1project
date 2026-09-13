@@ -374,10 +374,35 @@ public class InvestigationController : MonoBehaviour
         }
     }
 
+    // ===== #07 자료실 열쇠를 얻기 전에 조사를 포기하면 배드엔딩(Bad_F) =====
+    // 자료실 열쇠(archive_key)는 BG_07_InvestigationSite_01의 Hotspot_Drawer에서만 얻을 수
+    // 있다. 화살표로 이어진 BG_07_InvestigationSite_02까지 갔더라도 열쇠를 안 챙긴 채
+    // "조사 그만하기"를 누르면 이후 자료실에 들어갈 방법이 없어지므로, 여기서 곧장
+    // 배드엔딩으로 보낸다. visitedScreenIds를 보는 이유는 화살표로 옆 화면에 있는 채로
+    // 그만두더라도(activeScreenId만으로는 놓침) 놓치지 않기 위해서다.
+    private const string ArchiveKeyInvestigationId = "BG_07_InvestigationSite_01";
+    private const string ArchiveKeyItemId = "archive_key";
+
+    private bool IsGivingUpWithoutArchiveKey()
+    {
+        if (!visitedScreenIds.Contains(ArchiveKeyInvestigationId)) return false;
+        return InventoryManager.Instance == null || !InventoryManager.Instance.HasItem(ArchiveKeyItemId);
+    }
+
     // "조사 그만하기" 버튼이 호출한다.
     public void Exit()
     {
         if (!inSession) return;
+
+        if (IsGivingUpWithoutArchiveKey())
+        {
+            ForceExit();
+            if (GameFlowManager.Instance != null)
+            {
+                GameFlowManager.Instance.TriggerEnding(EndingType.Bad_F);
+            }
+            return;
+        }
 
         ClearHotspots();
 

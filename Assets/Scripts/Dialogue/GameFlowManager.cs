@@ -1,3 +1,4 @@
+using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
 
@@ -35,6 +36,17 @@ public class GameFlowManager : MonoBehaviour
     [Tooltip("엔딩 CSV로 넘어가기 전에 화면을 어둡게 해서 장면 전환을 부드럽게 만든다.")]
     public float endingFadeDelay = 0.5f;
 
+    // ===== Bad_F(자료실 열쇠 미획득) 전용: 엔딩 대사 전에 보여줄 타이틀 카드 =====
+    // 다른 배드엔딩은 곧바로 대사(CSV)로 들어가지만, 이 엔딩은 "조사를 그만둔 대가로
+    // 이야기가 여기서 끊겼다"는 느낌을 주기 위해 화면 전체를 검게 덮고 중앙에 큰 흰
+    // 글자로 문구를 잠깐 띄운 뒤에 대사로 넘어간다. 씬에 미리 만들어둘 필요 없이
+    // InvestigationController의 "조사 그만하기" 버튼처럼 코드로 그때그때 만든다.
+    [Header("Bad_F(자료실 열쇠 미획득) 타이틀 카드")]
+    [Tooltip("검은 화면 중앙에 보여줄 문구.")]
+    public string archiveKeyGiveUpTitleText = "Bad Ending";
+    [Tooltip("위 문구를 보여주고 있을 시간(초).")]
+    public float archiveKeyGiveUpTitleHoldSeconds = 2f;
+
     // 엔딩 종류 -> 재생할 CSV 파일 이름(확장자 제외).
     // 파일은 Assets/Resources/Dialogues/ 안에 있어야 한다.
     private readonly Dictionary<EndingType, string> endingCsvMap = new Dictionary<EndingType, string>
@@ -45,6 +57,7 @@ public class GameFlowManager : MonoBehaviour
         { EndingType.Bad_C,  "scenario_ending_bad_c" },
         { EndingType.Bad_D,  "scenario_ending_bad_d" },
         { EndingType.Bad_E,  "scenario_ending_bad_e" },
+        { EndingType.Bad_F,  "scenario_ending_bad_f" },
         // Normal 엔딩은 아직 전용 CSV가 없어서 트루엔딩 파일을 임시로 쓴다.
         // 노말엔딩 대본이 나오면 여기 파일 이름만 바꾸면 된다.
         { EndingType.Normal, "scenario_ending_true" },
@@ -133,6 +146,21 @@ public class GameFlowManager : MonoBehaviour
         {
             Debug.LogError("[GameFlowManager] DialogueSystem이 없어 엔딩 CSV를 재생할 수 없습니다.");
             return;
+        }
+
+        StartCoroutine(LoadEndingCsvRoutine(ending, csvName));
+    }
+
+    // 엔딩 CSV를 재생하기 직전 단계. Bad_F만 CSV보다 먼저 타이틀 카드를 보여준다는
+    // 점만 다르고, 그 외 엔딩은 예전과 똑같이 곧바로 CSV를 재생한다.
+    // 타이틀 카드 자체(암전 + 중앙 큰 글자)는 DialogueSystem.ShowFullscreenNotice()가
+    // 만든다 - 화면 연출(암전 오버레이 fadeCanvasGroup, 입력 차단 isFading)을 이미
+    // DialogueSystem이 갖고 있어서 그걸 그대로 재사용하는 편이 새로 만드는 것보다 안전하다.
+    private IEnumerator LoadEndingCsvRoutine(EndingType ending, string csvName)
+    {
+        if (ending == EndingType.Bad_F)
+        {
+            yield return DialogueSystem.Instance.ShowFullscreenNotice(archiveKeyGiveUpTitleText, archiveKeyGiveUpTitleHoldSeconds);
         }
 
         DialogueSystem.Instance.LoadDialogueFromCSV(csvName);
