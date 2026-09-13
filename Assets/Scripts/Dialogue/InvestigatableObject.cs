@@ -44,6 +44,18 @@ public enum HotspotType
     Prop
 }
 
+// Talk 타입 오브젝트가 대사 끝에 선택지를 보여줘야 할 때 쓰는 보기 하나.
+// Resources/Dialogues/InvestigationTalkChoices.csv에서 읽어온다
+// (InvestigationController.LoadTalkChoices() 참고).
+public class InvestigationTalkChoice
+{
+    public string choiceText;       // 선택지 버튼 문구
+    public string responseSpeaker;  // 이 보기를 고르면 나올 대답의 화자 (비우면 대답 없이 바로 닫힘)
+    public string responseText;     // 이 보기를 고르면 나올 대답
+    public string itemId;           // 이 보기를 고르면 얻는 아이템 (비우면 안 얻음)
+    public EndingType targetEnding; // None이 아니면 이 보기를 고르는 즉시 그 엔딩으로 직행 (대답/아이템은 무시)
+}
+
 public class InvestigatableObject : MonoBehaviour
 {
     [Header("조사 반응 타입")]
@@ -86,6 +98,10 @@ public class InvestigatableObject : MonoBehaviour
     public string talkSpeaker;         // 대사창에 표시할 화자 이름
     [TextArea(2, 5)]
     public string talkSentence;        // 대사창에 표시할 대사 내용
+
+    // 대사 끝에 선택지를 보여줘야 하면 채워진다 (없으면 대사 한 줄 보여주고 바로 닫힌다).
+    // InvestigationController.BuildScreens()가 InvestigationTalkChoices.csv를 읽어 채운다.
+    public System.Collections.Generic.List<InvestigationTalkChoice> talkChoices;
 
     // 이 오브젝트의 Button 컴포넌트 OnClick()에 연결해서 쓴다.
     public void OnClickInspect()

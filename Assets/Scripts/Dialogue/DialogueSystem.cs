@@ -1497,6 +1497,18 @@ public class DialogueSystem : MonoBehaviour
         // (SavePointManager.cs 참고).
         currentScenarioCsv = csvFileName;
 
+        // ===== #07부터는 수첩이 더 이상 갱신되지 않는다 =====
+        // #07(회사 잠입 조사)은 시나리오의 마지막 이야기 챕터라 그 뒤로 수첩을 다시 볼
+        // 장면이 없다. NoteManager.SetRealtimeUpdate(false)를 걸어두면 이후에 조사/아이템
+        // 획득으로 쌓이는 메모는 전부 보류함(deferred)에만 쌓이고 수첩에는 나타나지 않는다
+        // (FlushDeferredEntries()를 부르지 않는 한 - 이 챕터는 일부러 부르지 않는다).
+        // 세이브를 #07 도중부터 불러올 때도 이 줄을 다시 지나가므로 매번 안전하게 꺼진다.
+        if (csvFileName != null && csvFileName.StartsWith("scenario_07", StringComparison.OrdinalIgnoreCase)
+            && NoteManager.Instance != null)
+        {
+            NoteManager.Instance.SetRealtimeUpdate(false);
+        }
+
         // Resources/Dialogues/ 폴더 내의 CSV 파일 읽기
         List<Dictionary<string, object>> data = CSVReader.Read("Dialogues/" + csvFileName);
 

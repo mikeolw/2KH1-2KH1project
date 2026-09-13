@@ -61,6 +61,10 @@ public class InvestigationController : MonoBehaviour
     // "조사 대사 닫기"로 돌린다.
     public bool IsShowingTalkLine { get; private set; }
 
+    // 지금 보여주고 있는 Talk 대사를 닫으면(DismissTalkLine) 이어서 띄울 선택지.
+    // Inspect()가 Talk 오브젝트에 선택지가 달려 있을 때 채워둔다 (ShowTalkChoices 참고).
+    private List<InvestigationTalkChoice> pendingTalkChoices;
+
     // ===== 조사 데이터는 두 파일로 나뉜다 =====
     //   1) Assets/StreamingAssets/Stage/InvestigationStage.csv  (git으로 공유 - 스토리 없음, 배치 도구가 고친다)
     //        컬럼: InvestigationId,HotspotKey,Type,Sprite
@@ -90,6 +94,18 @@ public class InvestigationController : MonoBehaviour
     private const string InvestigationStageCsv = "Stage/InvestigationStage";
     private const string InvestigationDataCsv = "Dialogues/InvestigationData";
 
+    // ===== Talk 타입 오브젝트의 선택지 =====
+    // 대부분의 Talk 오브젝트는 대사 한 줄 보여주고 끝이지만, 몇몇은 "누가 시켰냐" 같은
+    // 질문에 선택지로 답해야 한다. 그 선택지 데이터만 따로 여기 담는다(InvestigationId +
+    // HotspotKey로 InvestigationData.csv와 짝을 맞춘다). 컬럼:
+    //   InvestigationId,HotspotKey,ChoiceText,ResponseSpeaker,ResponseText,ItemId,TargetEnding
+    //   - ChoiceText     : 선택지 버튼 문구
+    //   - ResponseSpeaker/ResponseText : 이 보기를 고르면 나올 대답 (비우면 대답 없이 바로 닫힘)
+    //   - ItemId         : 이 보기를 고르면 얻는 아이템 (비우면 안 얻음)
+    //   - TargetEnding   : 비어있지 않으면 이 보기를 고르는 즉시 그 엔딩으로 직행
+    // 같은 InvestigationId+HotspotKey로 여러 줄을 적으면 그 줄 순서대로 선택지 버튼이 뜬다.
+    private const string InvestigationTalkChoicesCsv = "Dialogues/InvestigationTalkChoices";
+
     private class HotspotData
     {
         public string key;
@@ -99,6 +115,7 @@ public class InvestigationController : MonoBehaviour
         public string text;
         public string itemId;
         public string spriteName;
+        public List<InvestigationTalkChoice> talkChoices;
     }
 
     // 조사 화면 하나에 대한 정보
@@ -143,6 +160,7 @@ public class InvestigationController : MonoBehaviour
 
         var stageRows = CSVReader.Read(InvestigationStageCsv);
         var textRows = CSVReader.Read(InvestigationDataCsv);
+        var talkChoicesByKey = LoadTalkChoices();
 
         // 구성 파일이 없으면 예전 형식(한 파일에 구성과 대사가 같이 있음)으로 읽는다.
         if (stageRows == null || stageRows.Count == 0)
@@ -153,7 +171,7 @@ public class InvestigationController : MonoBehaviour
                 return;
             }
             Debug.LogWarning($"[InvestigationController] {InvestigationStageCsv}.csv가 없어 예전 형식({InvestigationDataCsv}.csv 한 파일)으로 읽습니다.");
-            BuildScreens(textRows, null);
+            BuildScreens(textRows, null, talkChoicesByKey);
             return;
         }
 
@@ -170,7 +188,7 @@ public class InvestigationController : MonoBehaviour
             }
         }
 
-        BuildScreens(stageRows, texts);
+        BuildScreens(stageRows, texts, talkChoicesByKey);
 
         // 안내문(IntroText)은 대사 파일에만 있다. 구성 파일에 없는 화면의 안내문은 쓸 곳이 없으므로 알린다.
         // 구성 파일에 없는데 대사만 적힌 오브젝트도 화면에 나타나지 않으므로 함께 알린다.
@@ -215,7 +233,9 @@ public class InvestigationController : MonoBehaviour
     // 구성 줄들로 조사 화면을 만든다.
     //   texts == null : 예전 형식. 한 줄에 구성과 대사/이름이 같이 적혀 있다.
     //   texts != null : 새 형식. 대사/이름은 InvestigationId + HotspotKey로 대사 파일에서 찾는다.
-    private void BuildScreens(List<Dictionary<string, object>> rows, Dictionary<string, Dictionary<string, object>> texts)
+    //   talkChoicesByKey : InvestigationTalkChoices.csv를 TextKey(id,key)로 묶어둔 것. 없으면(null) 아무 Talk에도 선택지가 안 붙는다.
+    private void BuildScreens(List<Dictionary<string, object>> rows, Dictionary<string, Dictionary<string, object>> texts,
+        Dictionary<string, List<InvestigationTalkChoice>> talkChoicesByKey = null)
     {
         foreach (var row in rows)
         {
@@ -290,6 +310,9 @@ public class InvestigationController : MonoBehaviour
                 objectName = GetField(row, "ObjectName");
             }
 
+            List<InvestigationTalkChoice> talkChoices = null;
+            talkChoicesByKey?.TryGetValue(TextKey(id, key), out talkChoices);
+
             screen.hotspots.Add(new HotspotData
             {
                 key = key,
@@ -298,9 +321,52 @@ public class InvestigationController : MonoBehaviour
                 speaker = GetField(textRow, "Speaker"),
                 text = GetField(textRow, "Text"),
                 itemId = GetField(textRow, "ItemId"),
-                spriteName = spriteName
+                spriteName = spriteName,
+                talkChoices = talkChoices
             });
         }
+    }
+
+    // Resources/Dialogues/InvestigationTalkChoices.csv를 읽어 TextKey(InvestigationId,HotspotKey)
+    // 별로 묶는다. 파일이 없거나 비어 있으면 빈 표를 돌려준다(선택지가 있는 Talk 오브젝트가
+    // 없다는 뜻이므로 게임 진행에는 지장이 없다 - InvestigationController.Enter()와 같은 방침).
+    private Dictionary<string, List<InvestigationTalkChoice>> LoadTalkChoices()
+    {
+        var result = new Dictionary<string, List<InvestigationTalkChoice>>();
+
+        var rows = CSVReader.Read(InvestigationTalkChoicesCsv);
+        if (rows == null) return result;
+
+        foreach (var row in rows)
+        {
+            string id = GetField(row, "InvestigationId").Trim();
+            string key = GetField(row, "HotspotKey").Trim();
+            string choiceText = GetField(row, "ChoiceText").Trim();
+            if (string.IsNullOrEmpty(id) || string.IsNullOrEmpty(key) || string.IsNullOrEmpty(choiceText)) continue;
+
+            if (!Enum.TryParse(GetField(row, "TargetEnding").Trim(), true, out EndingType ending))
+            {
+                ending = EndingType.None;
+            }
+
+            string listKey = TextKey(id, key);
+            if (!result.TryGetValue(listKey, out var list))
+            {
+                list = new List<InvestigationTalkChoice>();
+                result[listKey] = list;
+            }
+
+            list.Add(new InvestigationTalkChoice
+            {
+                choiceText = choiceText,
+                responseSpeaker = GetField(row, "ResponseSpeaker"),
+                responseText = GetField(row, "ResponseText"),
+                itemId = GetField(row, "ItemId"),
+                targetEnding = ending
+            });
+        }
+
+        return result;
     }
 
     private string GetField(Dictionary<string, object> row, string column)
@@ -338,6 +404,20 @@ public class InvestigationController : MonoBehaviour
         IsShowingTalkLine = false;
         onExitCallback = onExit;
         activeScreenId = investigationId.Trim();
+
+        // ===== #07부터는 수첩이 더 이상 갱신되지 않는다 =====
+        // #07(회사 잠입 조사)은 시나리오의 마지막 이야기 챕터라 그 뒤로 수첩을 다시 볼
+        // 장면이 없다. 조사 화면 id는 배경 파일 이름과 같아서 "BG_07_"로 시작하는 화면에
+        // 들어오는 순간이 곧 "#07에 들어왔다"는 뜻이다 - DialogueSystem.LoadDialogueFromCSV()의
+        // scenario_07 CSV 훅과 같은 목적이지만, scenario_07.csv가 아직 없어도(테스트용
+        // DialogueData 에셋으로 곧장 들어오는 경우 등) 확실히 걸리도록 여기서도 한 번 더 끈다.
+        // NoteManager.SetRealtimeUpdate(false)를 걸면 이후 조사/아이템 획득으로 쌓이는 메모는
+        // 전부 보류함(deferred)에만 쌓이고 수첩에는 나타나지 않는다 - 이 챕터는 끝난 뒤에도
+        // 일부러 FlushDeferredEntries()를 부르지 않으므로 계속 안 보인다.
+        if (activeScreenId.StartsWith("BG_07", StringComparison.OrdinalIgnoreCase) && NoteManager.Instance != null)
+        {
+            NoteManager.Instance.SetRealtimeUpdate(false);
+        }
 
         // 이번 조사에서 거쳐 간 화면을 새로 센다 (화면 이동 중 조사 완료 기록용).
         visitedScreenIds.Clear();
@@ -449,6 +529,7 @@ public class InvestigationController : MonoBehaviour
         activeScreenId = null;
         visitedScreenIds.Clear();
         onExitCallback = null;
+        pendingTalkChoices = null;
 
         SetDialogueVisible(true);
     }
@@ -594,6 +675,7 @@ public class InvestigationController : MonoBehaviour
         io.spriteName = data.spriteName;
         io.talkSpeaker = string.IsNullOrEmpty(data.speaker) ? data.objectName : data.speaker;
         io.talkSentence = data.text;
+        io.talkChoices = data.talkChoices;
 
         // 이 오브젝트가 속한 조사 화면 이름. 배치표에서 "이 화면 전용 좌표"를 찾는 데 쓴다
         // (IllustLayout.cs의 [화면별 좌표] 주석 참고).
@@ -741,7 +823,13 @@ public class InvestigationController : MonoBehaviour
         {
             bool hasWrittenNote = NoteManager.Instance.OnHotspotInspected(activeScreenId, obj.gameObject.name);
 
-            if (!hasWrittenNote)
+            // 선택지가 달린 Talk 오브젝트(예: OBJ_07_Officer2)는 질문 문장만으로는 아직
+            // 확정된 사실이 아니다 - 플레이어가 무엇을 고르느냐에 따라 결과가 갈리므로,
+            // 질문 자체를 수첩에 자동으로 옮겨 적지 않는다. (꼭 남겨야 하면 NoteEntries.csv에
+            // 직접 써두면 위의 hasWrittenNote로 잡혀 그대로 적힌다.)
+            bool isChoiceTalk = obj.type == HotspotType.Talk && obj.talkChoices != null && obj.talkChoices.Count > 0;
+
+            if (!hasWrittenNote && !isChoiceTalk)
             {
                 // Talk 타입은 대사이므로 "누가 이렇게 말했다" 형태로, 나머지는 조사 설명 그대로 적는다.
                 string noteBody = obj.type == HotspotType.Talk ? obj.talkSentence : obj.description;
@@ -765,6 +853,11 @@ public class InvestigationController : MonoBehaviour
         if (obj.type == HotspotType.Talk)
         {
             string speaker = string.IsNullOrEmpty(obj.talkSpeaker) ? obj.objectName : obj.talkSpeaker;
+
+            // 이 대사 끝에 선택지가 있으면 기억해뒀다가, 대사를 다 읽고 닫는 시점에
+            // DismissTalkLine()에서 곧바로 이어서 보여준다 (ShowTalkChoices 참고).
+            pendingTalkChoices = (obj.talkChoices != null && obj.talkChoices.Count > 0) ? obj.talkChoices : null;
+
             ShowLineInDialogue(speaker, obj.talkSentence);
         }
         else
@@ -793,9 +886,92 @@ public class InvestigationController : MonoBehaviour
 
         IsShowingTalkLine = false;
 
+        // 방금 닫은 대사에 선택지가 달려 있었다면, 대화창은 그대로 둔 채 선택지를 이어서 띄운다
+        // (Inspect()에서 pendingTalkChoices에 미리 담아둔다).
+        if (pendingTalkChoices != null)
+        {
+            var choices = pendingTalkChoices;
+            pendingTalkChoices = null;
+            ShowTalkChoices(choices);
+            return;
+        }
+
         // 대화창을 닫아서 조사 화면을 가리지 않게 한다.
         // (조사 오브젝트들은 계속 그 자리에 있으므로 바로 다음 것을 누를 수 있다)
         SetDialogueVisible(false);
+    }
+
+    // ===== Talk 오브젝트의 선택지 =====
+    // DeductionController(추리 파트)와 똑같은 방식: 새 UI를 만들지 않고 DialogueSystem이
+    // 이미 갖고 있는 선택지 UI(choicePanel/choiceContainer/choiceButtonPrefab)를 그대로
+    // 빌려 쓰고, 여기서는 보기 목록과 "골랐을 때 할 일"만 채운다.
+    private void ShowTalkChoices(List<InvestigationTalkChoice> choices)
+    {
+        var ds = DialogueSystem.Instance;
+        if (ds == null || ds.choicePanel == null || ds.choiceContainer == null || ds.choiceButtonPrefab == null)
+        {
+            Debug.LogWarning("[InvestigationController] 선택지 UI(DialogueSystem.choicePanel 등)를 찾을 수 없어 " +
+                             "선택지 없이 대화를 닫습니다.");
+            SetDialogueVisible(false);
+            return;
+        }
+
+        ds.choicePanel.SetActive(true);
+
+        // 이전에 떠 있던 선택지 버튼을 지운다.
+        foreach (Transform child in ds.choiceContainer) Destroy(child.gameObject);
+
+        foreach (var choice in choices)
+        {
+            GameObject btnObj = Instantiate(ds.choiceButtonPrefab, ds.choiceContainer);
+            var label = btnObj.GetComponentInChildren<TMPro.TMP_Text>();
+            if (label != null) label.text = choice.choiceText;
+
+            // 람다 안에서 반복 변수를 그대로 쓰면 마지막 값만 잡히므로 지역 변수로 복사해둔다
+            // (DialogueSystem.ShowChoices, DeductionController.ShowCurrentStep과 같은 이유).
+            InvestigationTalkChoice captured = choice;
+            var button = btnObj.GetComponent<Button>();
+            if (button != null)
+            {
+                button.onClick.AddListener(() => OnTalkChoiceSelected(captured));
+            }
+        }
+    }
+
+    // 선택지 하나를 골랐을 때.
+    private void OnTalkChoiceSelected(InvestigationTalkChoice choice)
+    {
+        if (DialogueSystem.Instance != null && DialogueSystem.Instance.choicePanel != null)
+        {
+            DialogueSystem.Instance.choicePanel.SetActive(false);
+        }
+
+        // 엔딩으로 직행하는 보기라면 대답/아이템은 볼 것도 없이 바로 엔딩으로 넘어간다
+        // (Exit()의 자료실 열쇠 미획득 처리와 같은 방식 - InvestigationController.Exit() 참고).
+        if (choice.targetEnding != EndingType.None)
+        {
+            ForceExit();
+            if (GameFlowManager.Instance != null)
+            {
+                GameFlowManager.Instance.TriggerEnding(choice.targetEnding);
+            }
+            return;
+        }
+
+        if (!string.IsNullOrWhiteSpace(choice.itemId) && InventoryManager.Instance != null)
+        {
+            InventoryManager.Instance.AddItem(choice.itemId.Trim());
+        }
+
+        if (!string.IsNullOrWhiteSpace(choice.responseText))
+        {
+            // 대답도 대사 한 줄이므로 평소 Talk 흐름과 똑같이 보여주고 닫는다.
+            ShowLineInDialogue(choice.responseSpeaker, choice.responseText);
+        }
+        else
+        {
+            SetDialogueVisible(false);
+        }
     }
 
     private bool TryOpenDocumentViewer(string itemId)
