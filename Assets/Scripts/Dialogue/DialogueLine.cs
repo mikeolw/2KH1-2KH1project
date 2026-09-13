@@ -46,11 +46,13 @@ public class DialogueLine
     // 달라져서 연결이 깨지므로, BGM/SFX와 똑같이 "파일 이름"으로 불러온다.
     // 자세한 이유는 IllustLoader.cs 상단 주석 참고.
     //
-    // 아래 4개는 CSV의 Background / Standing / StandingPos / Talker 컬럼에서 그대로 들어온다.
+    // 배경/소품은 CSV의 Scene 칸(장면 ID)을 SceneStage.csv에서 풀어서 채우고,
+    // 스탠딩/화자 자리는 CSV의 Standing / Talker 칸에서 그대로 들어온다 (SceneStage.cs 참고).
     // 값이 비어 있으면 "이전 줄의 상태를 그대로 유지"한다는 뜻이라, 장면이나 표정이 바뀌는
     // 줄에만 적어주면 된다 (매 줄마다 채울 필요 없음).
 
     // 배경 파일 이름 (예: BG_01_Office). 빈 값 = 유지, "none" = 배경 지움.
+    // CSV에 직접 적는 칸이 아니라 Scene 칸의 장면 ID로부터 채워진다.
     public string backgroundName;
 
     // ===== 배경이 바뀔 때의 연출. CSV의 Transition / TransitionTime 칸 =====
@@ -69,9 +71,10 @@ public class DialogueLine
     // 빈 값 = 유지(표정 안 바뀜), "none" = 전원 퇴장.
     public string standingNames;
 
-    // ===== 소품(Props). CSV의 Props 칸 =====
-    // 배경 위에 얹는 오브젝트 그림. Resources/Illusts/Objects/ 의 파일 이름을 적는다.
+    // ===== 소품(Props) =====
+    // 배경 위에 얹는 오브젝트 그림. Resources/Illusts/Objects/ 의 파일 이름.
     // 여러 개면 세로줄(|)로 구분한다. 예: OBJ_01_Documents|OBJ_01_Camera
+    // CSV에 직접 적는 칸이 아니라 Scene 칸의 장면 ID로부터 채워진다 (SceneStage.csv의 Props 칸).
     //   (빈칸) = 이전 줄 그대로 유지,  none = 소품 전부 치우기
     //
     // 조사 화면의 오브젝트와 달리 **누를 수 없다.** 일반 대화 장면에서는 조사를 하지 않으므로
@@ -79,9 +82,6 @@ public class DialogueLine
     // 위치는 조사 오브젝트와 같은 IllustLayout.csv를 쓰므로 배치 도구로 잡으면 된다.
     public string propNames;
 
-    // 각 스탠딩이 설 자리. L=왼쪽 C=가운데 R=오른쪽, 세로줄(|)로 구분 (예: L|R).
-    // 빈 값이면 인원수에 맞춰 자동 배치한다.
-    public string standingPositions;
 
     // 지금 말하는 캐릭터의 자리(L/C/R). 대사가 타이핑되는 동안 그 캐릭터만 입을 뻐끔거린다.
     // 빈 값이면 Speaker 이름으로 자동 인식한다 (Dialogues/Characters.csv의 매핑 사용).
