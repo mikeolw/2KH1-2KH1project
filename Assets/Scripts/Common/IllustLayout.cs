@@ -25,7 +25,7 @@ using UnityEngine;
 //                  마우스로 끌어 위치를 맞추고 저장할 수 있다(IllustPlacementWindow.cs).
 //
 // ===== 파일 =====
-// Assets/Resources/Dialogues/IllustLayout.csv
+// Assets/StreamingAssets/Stage/IllustLayout.csv  (git으로 공유 - 스토리가 없는 좌표만 담는다)
 //   FileName : 그림 파일 이름 (확장자 제외). 예: OBJ_01_Notepad
 //   X, Y     : 화면 한가운데를 (0,0)으로 봤을 때의 위치(픽셀). X는 오른쪽이 +, Y는 위쪽이 +.
 //              그림의 한가운데가 이 좌표에 오도록 놓인다.
@@ -114,7 +114,7 @@ public static class IllustLayout
     //   STD_Past05_Hansung_Angry                  ┘  (위 _Stand 계열과 서로 영향 없음)
     private const string StandToken = "Stand";
 
-    private const string LayoutCsv = "Dialogues/IllustLayout";
+    private const string LayoutCsv = "Stage/IllustLayout";
 
     // "화면\0파일이름" -> 배치 정보. 화면이 비어 있으면(공통 기본값) 앞부분이 빈 문자열이다.
     // Dictionary 키에 두 값을 합쳐 넣기 위해 파일 이름에 절대 나오지 않는 '\0'으로 이어 붙인다.

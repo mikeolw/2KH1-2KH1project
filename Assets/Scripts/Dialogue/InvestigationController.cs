@@ -61,17 +61,34 @@ public class InvestigationController : MonoBehaviour
     // "조사 대사 닫기"로 돌린다.
     public bool IsShowingTalkLine { get; private set; }
 
-    // ===== 조사 데이터 (Resources/Dialogues/InvestigationData.csv) =====
-    // 컬럼: InvestigationId,HotspotKey,Type,ObjectName,Speaker,Text,ItemId,Sprite
-    //   - HotspotKey : 오브젝트를 구분하는 이름. 조사기록(NoteEntries.csv)에서 이 이름으로 가리킨다.
-    //   - Type       : Item(획득) / Description(설명만) / Talk(말 걸기)
-    //   - Sprite     : 배경 위에 올릴 그림 (Resources/Illusts/Objects/ 기준 파일 이름)
-    //   - 특수 키 IntroText   : 조사 시작할 때 대화창에 띄울 안내문
-    //   - 특수 키 Background  : 이 조사 화면의 배경 그림 (Sprite 칸에 배경 파일 이름)
-    //   - 특수 키 NextScreen/PrevScreen : 옆 조사 화면으로 이동하는 화살표가 가리킬
-    //     InvestigationId (Sprite 칸에 적는다). 예) 재훈의 책상 화면에 NextScreen=회의실 ID,
-    //     회의실 화면에 PrevScreen=책상 ID를 적으면 두 화면을 화살표로 오갈 수 있다.
-    private const string InvestigationDataCsv = "InvestigationData";
+    // ===== 조사 데이터는 두 파일로 나뉜다 =====
+    //   1) Assets/StreamingAssets/Stage/InvestigationStage.csv  (git으로 공유 - 스토리 없음, 배치 도구가 고친다)
+    //        컬럼: InvestigationId,HotspotKey,Type,Sprite
+    //        - 화면에 어떤 오브젝트가 있는지와 그 종류, 그림. 이 파일에 있는 것만 화면에 나타난다.
+    //        - HotspotKey : 오브젝트를 구분하는 이름. 조사기록(NoteEntries.csv)에서 이 이름으로 가리킨다.
+    //        - Type       : Item(획득) / Description(설명만) / Talk(말 걸기) / Standing·Prop(장식)
+    //        - Sprite     : 배경 위에 올릴 그림 파일 이름
+    //        - 특수 키 Background  : 이 조사 화면의 배경 그림 (Sprite 칸에 배경 파일 이름)
+    //        - 특수 키 NextScreen/PrevScreen : 옆 조사 화면으로 가는 화살표가 가리킬
+    //          InvestigationId (Sprite 칸에 적는다). 예) 재훈의 책상 화면에 NextScreen=회의실 ID,
+    //          회의실 화면에 PrevScreen=책상 ID를 적으면 두 화면을 화살표로 오갈 수 있다.
+    //   2) Assets/Resources/Dialogues/InvestigationData.csv       (드라이브로 공유 - 스토리, 작가가 고친다)
+    //        컬럼: InvestigationId,HotspotKey,ObjectName,Speaker,Text,ItemId
+    //        - ObjectName : 플레이어에게 보이는 이름 (예: "메모장")
+    //        - Speaker    : Talk일 때 말하는 사람
+    //        - Text       : 조사했을 때 나오는 문구 / 대사
+    //        - ItemId     : Type=Item일 때 얻는 아이템
+    //        - 특수 키 IntroText : 조사를 시작할 때 대화창에 띄울 안내문 (Text 칸)
+    // 두 파일은 InvestigationId + HotspotKey로 짝을 맞춘다.
+    //
+    // ===== 왜 나눴나? =====
+    // 이 저장소는 공개라서 대사가 든 2번은 git에 올릴 수 없다. 예전에는 두 내용이 한 파일에 섞여
+    // 있어서, 배치 도구로 오브젝트를 넣고 뺄 때마다 그 파일을 드라이브에 다시 올려야 했다.
+    // 구성(1번)을 떼어낸 덕분에 배치 도구 작업은 git으로 전달되고, 드라이브는 대사를 고칠 때만 쓴다.
+    //
+    // (1번 파일이 없으면 드라이브의 예전 InvestigationData.csv 한 파일에 전부 적혀 있다고 보고 읽는다)
+    private const string InvestigationStageCsv = "Stage/InvestigationStage";
+    private const string InvestigationDataCsv = "Dialogues/InvestigationData";
 
     private class HotspotData
     {
@@ -124,13 +141,82 @@ public class InvestigationController : MonoBehaviour
         if (screenData != null) return;
         screenData = new Dictionary<string, ScreenData>();
 
-        var rows = CSVReader.Read("Dialogues/" + InvestigationDataCsv);
-        if (rows == null || rows.Count == 0)
+        var stageRows = CSVReader.Read(InvestigationStageCsv);
+        var textRows = CSVReader.Read(InvestigationDataCsv);
+
+        // 구성 파일이 없으면 예전 형식(한 파일에 구성과 대사가 같이 있음)으로 읽는다.
+        if (stageRows == null || stageRows.Count == 0)
         {
-            Debug.LogWarning($"[InvestigationController] Dialogues/{InvestigationDataCsv}.csv를 읽지 못했습니다.");
+            if (textRows == null || textRows.Count == 0)
+            {
+                Debug.LogWarning($"[InvestigationController] {InvestigationStageCsv}.csv와 {InvestigationDataCsv}.csv를 모두 읽지 못했습니다.");
+                return;
+            }
+            Debug.LogWarning($"[InvestigationController] {InvestigationStageCsv}.csv가 없어 예전 형식({InvestigationDataCsv}.csv 한 파일)으로 읽습니다.");
+            BuildScreens(textRows, null);
             return;
         }
 
+        // 대사/이름 표: "InvestigationId|HotspotKey" -> 그 줄. 같은 키가 두 번 있으면 뒤에 적힌 줄을 쓴다(예전과 같다).
+        var texts = new Dictionary<string, Dictionary<string, object>>();
+        if (textRows != null)
+        {
+            foreach (var row in textRows)
+            {
+                string id = GetField(row, "InvestigationId").Trim();
+                string key = GetField(row, "HotspotKey").Trim();
+                if (string.IsNullOrEmpty(id) || string.IsNullOrEmpty(key)) continue;
+                texts[TextKey(id, key)] = row;
+            }
+        }
+
+        BuildScreens(stageRows, texts);
+
+        // 안내문(IntroText)은 대사 파일에만 있다. 구성 파일에 없는 화면의 안내문은 쓸 곳이 없으므로 알린다.
+        // 구성 파일에 없는데 대사만 적힌 오브젝트도 화면에 나타나지 않으므로 함께 알린다.
+        var orphans = new List<string>();
+        if (textRows != null)
+        {
+            foreach (var row in textRows)
+            {
+                string id = GetField(row, "InvestigationId").Trim();
+                string key = GetField(row, "HotspotKey").Trim();
+                if (string.IsNullOrEmpty(id) || string.IsNullOrEmpty(key)) continue;
+
+                screenData.TryGetValue(id, out ScreenData screen);
+
+                if (key == "IntroText")
+                {
+                    if (screen != null) screen.introText = GetField(row, "Text");
+                    else orphans.Add($"{id}/{key}");
+                    continue;
+                }
+
+                // 예전 형식 파일이 드라이브에 남아 있으면 이런 구성 줄이 섞여 있을 수 있다. 구성 파일이 우선이므로 무시한다.
+                if (key == "Background" || key == "NextScreen" || key == "PrevScreen") continue;
+
+                if (screen == null || !screen.hotspots.Exists(h => h.key == key)) orphans.Add($"{id}/{key}");
+            }
+        }
+        if (orphans.Count > 0)
+        {
+            Debug.LogWarning($"[InvestigationController] {InvestigationDataCsv}.csv에만 있고 {InvestigationStageCsv}.csv에는 없는 줄 {orphans.Count}개는 " +
+                             "화면에 나타나지 않습니다: " + string.Join(", ", orphans.GetRange(0, Mathf.Min(8, orphans.Count))) +
+                             (orphans.Count > 8 ? " ..." : ""));
+        }
+    }
+
+    // 두 파일의 줄을 짝지을 때 쓰는 열쇠. InvestigationId와 HotspotKey에는 세로줄(|)이 들어가지 않는다.
+    private static string TextKey(string id, string key)
+    {
+        return id + "|" + key;
+    }
+
+    // 구성 줄들로 조사 화면을 만든다.
+    //   texts == null : 예전 형식. 한 줄에 구성과 대사/이름이 같이 적혀 있다.
+    //   texts != null : 새 형식. 대사/이름은 InvestigationId + HotspotKey로 대사 파일에서 찾는다.
+    private void BuildScreens(List<Dictionary<string, object>> rows, Dictionary<string, Dictionary<string, object>> texts)
+    {
         foreach (var row in rows)
         {
             string id = GetField(row, "InvestigationId").Trim();
@@ -143,7 +229,7 @@ public class InvestigationController : MonoBehaviour
                 screenData[id] = screen;
             }
 
-            // 특수 키 1: 조사 시작 안내문
+            // 특수 키 1: 조사 시작 안내문 (예전 형식에서만 이 줄에 있다. 새 형식은 대사 파일에서 읽는다)
             if (key == "IntroText")
             {
                 screen.introText = GetField(row, "Text");
@@ -186,15 +272,33 @@ public class InvestigationController : MonoBehaviour
                 continue;
             }
 
+            string spriteName = GetField(row, "Sprite").Trim();
+
+            // 대사/이름을 어디서 가져올지: 새 형식은 대사 파일의 같은 키 줄, 예전 형식은 이 줄 자신.
+            Dictionary<string, object> textRow = row;
+            string objectName;
+            if (texts != null)
+            {
+                texts.TryGetValue(TextKey(id, key), out textRow);   // 없으면 null -> GetField가 ""를 돌려준다
+                objectName = GetField(textRow, "ObjectName");
+                // 배치 도구로 막 추가해서 아직 대사 파일에 이름을 안 적은 오브젝트는 그림 이름으로 대신한다
+                // (예전에는 배치 도구가 ObjectName 칸에 그림 이름을 넣어줬던 것과 같은 결과).
+                if (string.IsNullOrWhiteSpace(objectName)) objectName = spriteName;
+            }
+            else
+            {
+                objectName = GetField(row, "ObjectName");
+            }
+
             screen.hotspots.Add(new HotspotData
             {
                 key = key,
                 type = type,
-                objectName = GetField(row, "ObjectName"),
-                speaker = GetField(row, "Speaker"),
-                text = GetField(row, "Text"),
-                itemId = GetField(row, "ItemId"),
-                spriteName = GetField(row, "Sprite").Trim()
+                objectName = objectName,
+                speaker = GetField(textRow, "Speaker"),
+                text = GetField(textRow, "Text"),
+                itemId = GetField(textRow, "ItemId"),
+                spriteName = spriteName
             });
         }
     }
@@ -219,7 +323,7 @@ public class InvestigationController : MonoBehaviour
             // 데이터가 없으면 조사를 건너뛰고 다음 대사로 넘어간다.
             // (조사 하나 때문에 게임이 멈추는 것보다 낫다)
             Debug.LogWarning($"[InvestigationController] '{investigationId}' 조사 데이터를 찾을 수 없습니다. " +
-                             "InvestigationData.csv의 InvestigationId를 확인하세요.");
+                             "StreamingAssets/Stage/InvestigationStage.csv의 InvestigationId를 확인하세요.");
             onExit?.Invoke();
             return;
         }
@@ -377,7 +481,7 @@ public class InvestigationController : MonoBehaviour
         if (!screenData.TryGetValue(targetId, out ScreenData targetScreen))
         {
             Debug.LogWarning($"[InvestigationController] 연결된 조사 화면 '{targetId}'을(를) 찾을 수 없습니다. " +
-                             "InvestigationData.csv의 NextScreen/PrevScreen 값을 확인하세요.");
+                             "StreamingAssets/Stage/InvestigationStage.csv의 NextScreen/PrevScreen 값을 확인하세요.");
             return;
         }
 

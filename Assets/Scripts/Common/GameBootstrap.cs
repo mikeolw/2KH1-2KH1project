@@ -164,6 +164,22 @@ public static class GameBootstrap
             phonePanel.AddComponent<PhonePanelUI>();
             Debug.Log("[GameBootstrap] 핸드폰 패널에 앱 화면 기능을 붙였습니다.");
         }
+
+        // ----- 퀵바의 카메라 버튼은 숨긴다 -----
+        // 카메라는 가방에서 카메라를 고르고 [작동하기]를 눌러야만 쓸 수 있게 바뀌었다
+        // (InventoryPanelUI.OnOperateClicked, UIManager.OpenCamera 참고). 플레이 화면에 버튼이
+        // 남아 있으면 카메라를 줍기 전에도 쓸 수 있게 되므로 끈다.
+        //
+        // 씬 파일을 직접 고치지 않고 끄기만 하는 이유는 HideLegacyPlaceholders 주석과 같다
+        // (팀원끼리 씬 파일 충돌 방지). QuickBarPanel에는 HorizontalLayoutGroup이 붙어 있어서
+        // 버튼 하나를 끄면 남은 버튼들이 자동으로 빈자리를 메운다.
+        var cameraButton = GameObject.Find("Btn_Photo");
+        if (cameraButton != null && cameraButton.transform.parent != null &&
+            cameraButton.transform.parent.name == "QuickBarPanel")
+        {
+            cameraButton.SetActive(false);
+            Debug.Log("[GameBootstrap] 퀵바의 카메라 버튼을 숨겼습니다 (카메라는 가방에서 [작동하기]로 사용).");
+        }
     }
 
     // ---------------------------------------------------------------------------------

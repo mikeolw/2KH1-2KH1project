@@ -21,6 +21,9 @@ using TMPro;
 //   - "조합하기"를 누른 뒤 다른 아이템을 누르면 두 아이템을 합쳐본다.
 //     (예: SD카드를 고르고 조합하기 -> 카메라를 누르면 사진을 확인할 수 있다)
 //     합칠 수 없는 조합이면 "이 둘은 같이 쓸 수 없다"고 알려준다.
+//   - 카메라를 고르면 "작동하기" 버튼이 뜬다. 누르면 가방이 닫히고 카메라 화면이 열린다.
+//     (플레이 화면 퀵바의 카메라 버튼은 없앴다 - 카메라는 가방 안에서만 쓸 수 있다.
+//      OnOperateClicked / UIManager.OpenCamera / GameBootstrap.EnsurePanelUI 참고)
 //
 // ===== 씬 배치 =====
 // 인스펙터 필드를 비워두면 게임 시작 시 스스로 UI를 만든다. UIManager.inventoryPanel에
@@ -42,6 +45,8 @@ public class InventoryPanelUI : MonoBehaviour
     public Button viewDetailButton;
     [Tooltip("조합 모드로 들어가는 버튼")]
     public Button combineButton;
+    [Tooltip("카메라처럼 '작동'시킬 수 있는 아이템을 쓰는 버튼")]
+    public Button operateButton;
     [Tooltip("조합 결과나 안내 문구를 띄우는 텍스트")]
     public TMP_Text messageText;
 
@@ -134,6 +139,7 @@ public class InventoryPanelUI : MonoBehaviour
             if (selectedIconImage != null) selectedIconImage.enabled = false;
             SetButtonVisible(viewDetailButton, false);
             SetButtonVisible(combineButton, false);
+            SetButtonVisible(operateButton, false);
             return;
         }
 
@@ -284,6 +290,9 @@ public class InventoryPanelUI : MonoBehaviour
         // 조합 버튼은 아이템을 고른 상태면 항상 보여준다
         // (조합 가능 여부는 눌러봐야 알 수 있고, 미리 알려주면 정답을 알려주는 셈이 된다).
         SetButtonVisible(combineButton, true);
+
+        // 카메라처럼 작동시킬 수 있는 아이템일 때만 "작동하기" 버튼을 보여준다.
+        SetButtonVisible(operateButton, IsOperable(itemId));
     }
 
     private void ClearSelection()
@@ -294,6 +303,7 @@ public class InventoryPanelUI : MonoBehaviour
         if (selectedIconImage != null) selectedIconImage.enabled = false;
         SetButtonVisible(viewDetailButton, false);
         SetButtonVisible(combineButton, false);
+        SetButtonVisible(operateButton, false);
     }
 
     // "자세히 보기" 버튼. 서류/사진을 전체 화면 뷰어로 펼친다.
@@ -303,6 +313,45 @@ public class InventoryPanelUI : MonoBehaviour
         if (DocumentViewerController.Instance == null) return;
 
         DocumentViewerController.Instance.ShowItem(selectedItemId);
+    }
+
+    // ---------------------------------------------------------------------------------
+    // 아이템 작동 (카메라)
+    // ---------------------------------------------------------------------------------
+    // ===== 왜 가방 안에서만 쓰나? =====
+    // 예전에는 플레이 화면 하단 퀵바에 카메라 버튼이 있어서, 카메라를 줍기도 전에 언제든
+    // 카메라 화면을 열 수 있었다. 이제는 "가방에서 카메라를 고른 뒤 [작동하기]"를 눌러야만
+    // 쓸 수 있다. 가방에 카메라가 있어야 버튼이 보이므로, 자연스럽게 카메라를 얻은 뒤에만 쓸 수 있다.
+    // (퀵바의 카메라 버튼은 GameBootstrap이 숨긴다.)
+    //
+    // ===== 작동시킬 수 있는 아이템 =====
+    // 지금은 카메라 두 종류(SD카드 꽂기 전/후)뿐이다. 나중에 작동시킬 아이템이 늘어나면
+    // 아래 목록에 ItemId를 추가하고, OnOperateClicked()에 그 아이템이 할 일을 적으면 된다.
+    private static readonly HashSet<string> CameraItemIds = new HashSet<string>
+    {
+        "camera",               // 카메라
+        "camera_with_photos",   // SD카드를 꽂은 카메라 (조합 결과)
+    };
+
+    private static bool IsOperable(string itemId)
+    {
+        return !string.IsNullOrEmpty(itemId) && CameraItemIds.Contains(itemId);
+    }
+
+    // "작동하기" 버튼. 가방을 닫고 카메라 화면을 연다.
+    public void OnOperateClicked()
+    {
+        if (!IsOperable(selectedItemId)) return;
+
+        if (UIManager.Instance == null)
+        {
+            ShowMessage("지금은 카메라를 켤 수 없다.");
+            return;
+        }
+
+        // UIManager.OpenCamera()가 가방 패널을 닫으면 이 스크립트의 OnDisable이 불려
+        // 가방 화면(overlay)도 함께 사라진다.
+        UIManager.Instance.OpenCamera();
     }
 
     // "조합하기" 버튼. 지금 고른 아이템을 첫 번째 재료로 잡고 조합 모드로 들어간다.
@@ -400,6 +449,37 @@ public class InventoryPanelUI : MonoBehaviour
     private void SetButtonVisible(Button button, bool visible)
     {
         if (button != null) button.gameObject.SetActive(visible);
+        LayoutActionButtons();
+    }
+
+    // ===== 오른쪽 아래 버튼 줄 정렬 =====
+    // [작동하기] [자세히 보기] [조합하기] 세 버튼은 아이템에 따라 보였다 숨었다 한다
+    // (카메라는 작동하기+조합하기, 서류는 자세히 보기+조합하기 ...).
+    // 자리를 고정해두면 숨은 버튼 자리가 빈칸으로 남아 어색하므로, 보이는 버튼만 왼쪽부터
+    // 빈틈없이 채워 넣는다. 코드로 만든 버튼일 때만 정렬하고, 인스펙터에서 직접 배치한
+    // 버튼이면 그 배치를 존중해 건드리지 않는다.
+    private bool autoLayoutButtons;
+
+    private void LayoutActionButtons()
+    {
+        if (!autoLayoutButtons) return;
+
+        // 버튼 줄의 영역(가방 상자 안에서의 비율 좌표)과 한 칸의 너비.
+        const float left = 0.58f, right = 0.97f, bottom = 0.155f, top = 0.225f, gap = 0.01f;
+        const float slot = (right - left - gap * 2f) / 3f;
+
+        float x = left;
+        foreach (var button in new[] { operateButton, viewDetailButton, combineButton })
+        {
+            if (button == null || !button.gameObject.activeSelf) continue;
+
+            var rt = (RectTransform)button.transform;
+            rt.anchorMin = new Vector2(x, bottom);
+            rt.anchorMax = new Vector2(x + slot, top);
+            rt.offsetMin = Vector2.zero;
+            rt.offsetMax = Vector2.zero;
+            x += slot + gap;
+        }
     }
 
     // ---------------------------------------------------------------------------------
@@ -516,11 +596,19 @@ public class InventoryPanelUI : MonoBehaviour
         messageText = CreateText("Message", new Vector2(0.58f, 0.05f), new Vector2(0.97f, 0.14f), 19, TextAlignmentOptions.TopLeft);
         messageText.color = new Color(1f, 0.85f, 0.4f);
 
+        // 버튼 셋의 실제 위치는 LayoutActionButtons()가 "보이는 것만 왼쪽부터" 다시 잡는다.
+        // 여기서 넘기는 좌표는 처음 만들 때의 임시 자리일 뿐이다.
+        operateButton = CreateButton("OperateButton", "작동하기",
+            new Vector2(0.58f, 0.155f), new Vector2(0.70f, 0.225f), OnOperateClicked);
         viewDetailButton = CreateButton("ViewDetailButton", "자세히 보기",
-            new Vector2(0.58f, 0.155f), new Vector2(0.765f, 0.225f), OnViewDetailClicked);
+            new Vector2(0.71f, 0.155f), new Vector2(0.84f, 0.225f), OnViewDetailClicked);
         combineButton = CreateButton("CombineButton", "조합하기",
-            new Vector2(0.785f, 0.155f), new Vector2(0.97f, 0.225f), OnCombineClicked);
+            new Vector2(0.85f, 0.155f), new Vector2(0.97f, 0.225f), OnCombineClicked);
 
+        // 코드로 만든 버튼이므로 자동 정렬을 켠다(인스펙터에서 배치한 버튼이면 이 줄에 오지 않는다).
+        autoLayoutButtons = true;
+
+        SetButtonVisible(operateButton, false);
         SetButtonVisible(viewDetailButton, false);
         SetButtonVisible(combineButton, false);
 

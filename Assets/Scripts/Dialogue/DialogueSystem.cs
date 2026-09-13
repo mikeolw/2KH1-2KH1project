@@ -523,7 +523,66 @@ public class DialogueSystem : MonoBehaviour
         SetSpeakerName("");
         if (sentenceText != null) sentenceText.text = "";
 
+        // 세이브에서 이어하는 경우, 그 줄까지 쌓였어야 할 화면(배경/소품/인물)을 먼저 되살린다.
+        if (lineIndex > 0) RestoreStageUpTo(lineIndex);
+
         ShowNextSentence();
+    }
+
+    // ===== 세이브를 불러왔을 때 화면(배경/소품/인물)을 되살린다 =====
+    // CSV의 Background/Standing/Props 칸은 "비어 있으면 이전 줄 그대로 유지"라서, 어느 줄의
+    // 화면은 그 앞줄들이 쌓아온 결과다. 그런데 세이브를 불러오면 저장된 줄부터 곧바로 재생을
+    // 시작하므로 앞줄들이 한 번도 실행되지 않고, 화면이 비어 있거나 엉뚱한 상태로 시작했다.
+    // 특히 세이브포인트 다음 줄은 대부분 조사/미니게임/선택지 줄이라 화면 칸 자체가 없어서,
+    // 예를 들어 "#05 공사장"에서 불러오면 공사장이 아니라 빈 화면 위에 선택지가 떴다.
+    // 이런 화면은 배치 도구 목록에 없는 장면이 된다.
+    //
+    // 그래서 처음부터 그 줄 직전까지 화면 칸만 훑어 "최종 상태"를 계산한 뒤 한 번에 적용한다.
+    // (한 줄씩 전부 실행하면 지나간 배경 그림을 전부 불러오게 되어 낭비라서 결과만 적용한다)
+    // 규칙은 실제 재생과 똑같다:
+    //   - 배경이 다른 그림(또는 none)으로 바뀌면 소품은 치워진다 (StageController.ApplyBackground)
+    //   - 조사 줄은 배경을 그 조사 화면으로 바꾸고 소품을 치운다 (InvestigationController.Enter)
+    //     조사 화면 이름은 배경 파일 이름과 1:1로 같다 (InvestigationData.csv의 규칙)
+    //   - 미니게임/추리 줄은 화면을 바꾸지 않는다
+    // 시나리오 CSV마다 첫 줄에서 배경을 정해두므로, 그 CSV 안만 훑어도 결과가 정확히 맞는다.
+    private void RestoreStageUpTo(int endExclusive)
+    {
+        if (StageController.Instance == null || currentDialogue == null || currentDialogue.lines == null) return;
+
+        string background = null;   // null = 아직 한 번도 정해지지 않음
+        string props = null;
+        string standing = null;
+
+        int end = Mathf.Min(endExclusive, currentDialogue.lines.Count);
+        for (int i = 0; i < end; i++)
+        {
+            var line = currentDialogue.lines[i];
+            if (line.isMinigame || line.isDeduction) continue;
+
+            if (line.isInvestigation)
+            {
+                if (!string.IsNullOrWhiteSpace(line.investigationId)) background = line.investigationId.Trim();
+                props = "none";
+                continue;
+            }
+
+            if (!string.IsNullOrWhiteSpace(line.backgroundName))
+            {
+                string name = line.backgroundName.Trim();
+                if (name != background) props = "none";   // 배경이 바뀌면 소품은 치워진다
+                background = name;
+            }
+            if (!string.IsNullOrWhiteSpace(line.propNames)) props = line.propNames;
+            if (!string.IsNullOrWhiteSpace(line.standingNames))
+            {
+                standing = line.standingNames;
+            }
+        }
+
+        var stage = StageController.Instance;
+        if (background != null) stage.ApplyBackground(background);
+        if (props != null) stage.ApplyProps(props);
+        if (standing != null) stage.ApplyStandings(standing);
     }
 
     public void ShowNextSentence()
@@ -703,7 +762,7 @@ public class DialogueSystem : MonoBehaviour
             StageController.Instance.ApplyBackground(line.backgroundName, line.transition, line.transitionTime);
             // 소품은 스탠딩보다 먼저 올린다(배경 → 소품 → 스탠딩 순서로 겹쳐 보이게).
             StageController.Instance.ApplyProps(line.propNames);
-            StageController.Instance.ApplyStandings(line.standingNames, line.standingPositions);
+            StageController.Instance.ApplyStandings(line.standingNames);
         }
 
         // ===== 2) 사운드 =====
@@ -1519,17 +1578,14 @@ public class DialogueSystem : MonoBehaviour
             line.isFadeOut = GetField(data[i], "IsFadeOut").ToLower() == "true";
             line.acquireItemName = GetField(data[i], "Item");
 
-            // ===== 배경 / 캐릭터 스탠딩 (StageController.cs가 처리) =====
-            // 네 칸 모두 비워두면 "이전 줄 상태 그대로 유지"라는 뜻이라, 장면이나 표정이
-            // 바뀌는 줄에만 적으면 된다. 컬럼 자체가 없는 예전 CSV도 GetField가 ""를 돌려주므로
-            // 아무 문제 없이 동작한다.
-            line.backgroundName = GetField(data[i], "Background");
+            // ===== 장면(배경 + 소품) / 캐릭터 스탠딩 (StageController.cs가 처리) =====
+            // 비워두면 "이전 줄 상태 그대로 유지"라는 뜻이라, 장면이나 표정이 바뀌는 줄에만 적으면 된다.
+            //   Scene    : 장면 ID. 배경과 소품은 SceneStage.csv(git)에서 찾는다 (ApplySceneColumn 참고).
+            //   Standing : 서 있는 캐릭터와 표정. 장면 도중에 인물이 들어오고 나가는 것도 이 칸으로 한다.
+            //   Talker   : 입을 움직일 자리(L/C/R). 비우면 Speaker 이름으로 자동으로 찾는다.
+            ApplySceneColumn(line, data, i);
             line.standingNames = GetField(data[i], "Standing");
-            line.standingPositions = GetField(data[i], "StandingPos");
             line.talkerSlot = GetField(data[i], "Talker");
-
-            // 소품(Props): 배경 위에 얹는 오브젝트 그림. 누를 수는 없다(DialogueLine.cs 주석 참고).
-            line.propNames = GetField(data[i], "Props");
 
             // ===== 배경이 바뀔 때의 연출 =====
             // Transition 칸: (빈칸)/cut = 즉시, fade = 서서히 바뀜(크로스페이드).
@@ -1618,5 +1674,61 @@ public class DialogueSystem : MonoBehaviour
         {
             line.bgmToPlay = Resources.Load<AudioClip>("Sounds/" + bgmName);
         }
+    }
+
+    // ===================================================================================
+    // CSV의 Scene 칸(장면 ID)을 배경/소품 이름으로 풀어 DialogueLine에 채운다.
+    // ===================================================================================
+    // 재생 코드(DisplayLine / RestoreStageUpTo)는 예전처럼 backgroundName / propNames를 그대로 쓰므로,
+    // 장면 ID를 파일 이름으로 푸는 일은 CSV를 읽는 이 순간에 한 번만 한다.
+    //   Scene=(빈칸) -> 둘 다 비워둔다 = 이전 장면 그대로 유지
+    //   Scene=none   -> 배경 none (배경을 지우면 StageController가 소품도 함께 치운다)
+    //   Scene=장면ID -> 그 장면의 배경과 소품. 소품이 없는 장면이면 "none"으로 적어 확실히 치운다
+    //                   (같은 배경이 이어지는 장면 전환에서는 배경을 다시 깔지 않아 소품이
+    //                    남아버리기 때문이다 - StageController.ApplyBackground 참고)
+    //
+    // ===== 예전 형식 CSV도 읽는다 =====
+    // Scene 칸 없이 Background / Props 칸에 파일 이름을 직접 적은 예전 파일이 드라이브에 남아 있을 수
+    // 있다. 그런 파일도 게임이 멈추지 않고 예전과 똑같이 보이게, 파일마다 형식을 한 번 확인해서 읽는다.
+    private List<Dictionary<string, object>> sceneFormatCheckedData;
+    private bool sceneFormatUsesSceneColumn;
+
+    private void ApplySceneColumn(DialogueLine line, List<Dictionary<string, object>> data, int rowIndex)
+    {
+        // 이 CSV가 Scene 칸을 쓰는 새 형식인지 파일마다 한 번만 확인한다.
+        // (엑셀이 줄 끝의 빈 칸을 잘라 저장하는 경우가 있어서 첫 줄만 보지 않고 전체에서 찾는다)
+        if (!ReferenceEquals(data, sceneFormatCheckedData))
+        {
+            sceneFormatCheckedData = data;
+            sceneFormatUsesSceneColumn = false;
+            foreach (var r in data)
+            {
+                if (r.ContainsKey("Scene")) { sceneFormatUsesSceneColumn = true; break; }
+            }
+        }
+
+        var row = data[rowIndex];
+
+        if (!sceneFormatUsesSceneColumn)
+        {
+            line.backgroundName = GetField(row, "Background");
+            line.propNames = GetField(row, "Props");
+            return;
+        }
+
+        string sceneId = GetField(row, "Scene").Trim();
+        if (string.IsNullOrEmpty(sceneId)) return;
+
+        if (string.Equals(sceneId, "none", StringComparison.OrdinalIgnoreCase))
+        {
+            line.backgroundName = "none";
+            return;
+        }
+
+        // 표에 없는 ID면 SceneStage가 경고를 남기고, 이 줄은 이전 장면을 유지한다.
+        if (!SceneStage.TryGet(sceneId, out SceneStage.Composition scene)) return;
+
+        line.backgroundName = scene.background;
+        line.propNames = string.IsNullOrWhiteSpace(scene.props) ? "none" : scene.props;
     }
 }
