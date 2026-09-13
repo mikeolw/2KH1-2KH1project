@@ -11,19 +11,19 @@ using UnityEngine.UI;
 // 담당하고, "눈에 보이는 그림"만 이 클래스가 맡는 구조다.
 //
 // ===== CSV에서 쓰는 컬럼 (scenario_XX.csv) =====
-//   Background   : 배경 파일 이름 (예: BG_01_Office)
-//                  - 비워두면 "이전 줄의 배경을 그대로 유지"한다. 장면이 바뀔 때만 적으면 된다.
-//                  - none 이라고 적으면 배경을 지운다(검은 화면).
+//   Scene        : 장면 ID (예: S_01_Office_A). 배경과 소품은 SceneStage.csv(git)에서 찾는다.
+//                  DialogueSystem이 CSV를 읽을 때 배경/소품 파일 이름으로 풀어서 넘겨준다
+//                  (SceneStage.cs, DialogueSystem.ApplySceneColumn 참고).
+//                  - 비워두면 "이전 줄의 장면을 그대로 유지"한다. 장면이 바뀔 때만 적으면 된다.
+//                  - none 이라고 적으면 배경과 소품을 지운다(검은 화면).
 //   Standing     : 캐릭터 스탠딩 파일 이름 (예: STD_Past01_Hansung_Default)
 //                  - 비워두면 "이전 줄의 스탠딩을 그대로 유지"한다.
 //                    => 표정을 바꾸고 싶은 줄에만 적으면 되므로, 매 줄마다 적을 필요가 없다.
 //                  - none 이라고 적으면 모든 캐릭터를 화면에서 지운다.
 //                  - 두 명 이상 세우려면 세로줄(|)로 구분한다.
 //                    예) STD_Past01_Hansung_Default|STD_Past01_Jaehoon_Default
-//   StandingPos  : 각 캐릭터의 서는 위치. Standing과 같은 순서로 세로줄(|)로 구분한다.
-//                  L=왼쪽, C=가운데, R=오른쪽. 비워두면 인원수에 맞춰 자동 배치한다.
-//                    1명 -> 가운데 / 2명 -> 왼쪽,오른쪽 / 3명 -> 왼쪽,가운데,오른쪽
-//                  예) L|R
+//                  - 장면 도중에 인물이 들어오거나 나가도 이 칸만 바꾸면 된다(새 장면 ID는 필요 없다).
+//                  자리는 인원수에 맞춰 자동 배치한다: 1명 -> 가운데 / 2명 -> 왼쪽,오른쪽 / 3명 -> 왼쪽,가운데,오른쪽
 //   Talker       : 지금 말하고 있는 캐릭터의 자리(L/C/R). 입 뻐끔(립싱크) 연출에 쓴다.
 //                  - 비워두면 Speaker 칸의 이름으로 자동으로 찾는다
 //                    (Characters.csv의 이름 ↔ 스탠딩 매핑을 이용. 아래 설명 참고)
@@ -230,6 +230,13 @@ public class StageController : MonoBehaviour
             currentBackgroundName = null;
             backgroundImage.sprite = null;
             backgroundImage.enabled = false;
+
+            // ===== 암전도 "장면이 바뀐 것"이므로 소품을 치운다 =====
+            // 예전에는 배경만 끄고 소품은 그대로 둬서, 검은 화면 위에 이전 장면의 소품이
+            // 둥둥 떠 있었다(예: 공사장 승강기가 "나는..." 암전 대사 위에 남음). 암전 화면은
+            // 배치 도구 목록에 올릴 수 없는 화면이라 그림이 하나도 없어야 한다.
+            // 다른 배경으로 바뀔 때와 똑같이 여기서도 치운다.
+            ClearProps();
             return;
         }
 
@@ -385,11 +392,12 @@ public class StageController : MonoBehaviour
     // 조사 오브젝트와 다른 점은 **누를 수 없다**는 것이다. 일반 장면에서는 조사를 하지
     // 않으므로, 소품은 그냥 그림일 뿐이고 클릭은 전부 통과시킨다(대사 진행이 막히면 안 된다).
     //
-    // ===== CSV 사용법 =====
-    // scenario_*.csv에 Props 칸을 만들고 Objects 폴더의 파일 이름을 적는다.
-    // 여러 개면 세로줄(|)로 구분한다. 스탠딩과 규칙이 같다.
+    // ===== 어디에 적나 =====
+    // 장면 구성표 SceneStage.csv(git)의 Props 칸에 Objects 폴더의 파일 이름을 적는다(배치 도구로 고친다).
+    // 시나리오 CSV는 Scene 칸에 장면 ID만 적고, DialogueSystem이 그 장면의 소품 목록을 여기로 넘겨준다.
+    // 여러 개면 세로줄(|)로 구분한다. 넘어오는 값의 규칙은 스탠딩과 같다.
     //   (빈칸)  : 이전 줄 그대로 유지
-    //   none    : 소품 전부 치우기
+    //   none    : 소품 전부 치우기 (소품이 없는 장면이면 DialogueSystem이 none을 넘긴다)
     //   OBJ_A|OBJ_B : 이 둘만 남기고 나머지는 치운다
     //
     // 위치는 조사 오브젝트와 똑같이 IllustLayout.csv에서 찾는다(배치 도구로 잡으면 된다).
@@ -509,8 +517,7 @@ public class StageController : MonoBehaviour
 
     // 캐릭터 스탠딩을 바꾼다.
     //   standingSpec : "STD_A" 또는 "STD_A|STD_B" (비면 유지, "none"이면 전원 퇴장)
-    //   posSpec      : "L|R" 같은 자리 지정 (비면 인원수에 맞춰 자동 배치)
-    public void ApplyStandings(string standingSpec, string posSpec)
+    public void ApplyStandings(string standingSpec)
     {
         if (standingSlots == null) return;
         if (string.IsNullOrWhiteSpace(standingSpec)) return; // 빈 칸 = 유지
@@ -525,9 +532,6 @@ public class StageController : MonoBehaviour
         }
 
         string[] names = standingSpec.Split('|');
-        string[] positions = string.IsNullOrWhiteSpace(posSpec)
-            ? null
-            : posSpec.Trim().Split('|');
 
         // 이번 줄에서 실제로 사용할 자리들을 먼저 계산해둔다.
         // (계산이 끝난 뒤에 "쓰이지 않은 자리"를 비워야, 같은 캐릭터가 자리만 옮길 때
@@ -539,7 +543,7 @@ public class StageController : MonoBehaviour
             string name = names[i].Trim();
             if (string.IsNullOrEmpty(name)) continue;
 
-            int slotIndex = ResolveSlotIndex(positions, i, names.Length);
+            int slotIndex = ResolveSlotIndex(i, names.Length);
             if (slotIndex < 0 || slotIndex >= standingSlots.Length) continue;
 
             // 지금 배경 이름을 함께 넘겨서, 배치표에 "이 배경 전용 좌표"가 있으면 그것을 쓰게 한다
@@ -556,19 +560,9 @@ public class StageController : MonoBehaviour
     }
 
     // i번째 캐릭터가 어느 자리에 설지 결정한다.
-    //   posSpec이 있으면 그대로 따르고(L/C/R),
     //   없으면 인원수에 맞춰 자동 배치한다: 1명=가운데, 2명=왼쪽/오른쪽, 3명=왼쪽/가운데/오른쪽
-    private int ResolveSlotIndex(string[] positions, int index, int totalCount)
+    private int ResolveSlotIndex(int index, int totalCount)
     {
-        if (positions != null && index < positions.Length)
-        {
-            switch (positions[index].Trim().ToUpperInvariant())
-            {
-                case "L": return SlotLeft;
-                case "C": return SlotCenter;
-                case "R": return SlotRight;
-            }
-        }
 
         // 자동 배치
         if (totalCount <= 1) return SlotCenter;

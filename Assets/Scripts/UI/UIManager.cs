@@ -45,6 +45,25 @@ public class UIManager : MonoBehaviour
     // 하단 퀵바 버튼에서 호출할 함수들
     public void ToggleInventory() => TogglePanel(inventoryPanel);
     public void TogglePhoto() => TogglePanel(photoPanel);
+
+    // ===== 카메라 작동 (가방에서만 쓸 수 있다) =====
+    // 예전에는 플레이 화면 하단 퀵바의 카메라 버튼(Btn_Photo -> TogglePhoto)으로 언제든 열 수
+    // 있었다. 지금은 가방에서 카메라를 고르고 [작동하기]를 눌러야만 열리도록 바꿨다
+    // (InventoryPanelUI.OnOperateClicked가 이 함수를 부른다). 퀵바의 버튼은 GameBootstrap이 숨긴다.
+    // 그래서 카메라를 줍기 전에는 카메라 기능을 쓸 수 없다.
+    //
+    // TogglePhoto()와 달리 "켜기만" 한다. 가방 화면을 닫고 카메라 화면을 띄운다.
+    public void OpenCamera()
+    {
+        if (photoPanel == null)
+        {
+            Debug.LogWarning("[UIManager] photoPanel(카메라 화면)이 연결되어 있지 않아 카메라를 열 수 없습니다.");
+            return;
+        }
+
+        CloseAllPanels();          // 가방을 닫고
+        photoPanel.SetActive(true); // 카메라 화면을 연다
+    }
     public void TogglePhone()
     {
         bool willOpen = !phonePanel.activeSelf;
