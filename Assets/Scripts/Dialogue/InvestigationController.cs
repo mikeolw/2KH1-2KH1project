@@ -454,7 +454,7 @@ public class InvestigationController : MonoBehaviour
         }
     }
 
-    // ===== #07 자료실 열쇠를 얻기 전에 조사를 포기하면 배드엔딩(Bad_F) =====
+    // ===== #07 자료실 열쇠를 얻기 전에 조사를 포기하면 배드엔딩(Bad_C) =====
     // 자료실 열쇠(archive_key)는 BG_07_InvestigationSite_01의 Hotspot_Drawer에서만 얻을 수
     // 있다. 화살표로 이어진 BG_07_InvestigationSite_02까지 갔더라도 열쇠를 안 챙긴 채
     // "조사 그만하기"를 누르면 이후 자료실에 들어갈 방법이 없어지므로, 여기서 곧장
@@ -479,7 +479,7 @@ public class InvestigationController : MonoBehaviour
             ForceExit();
             if (GameFlowManager.Instance != null)
             {
-                GameFlowManager.Instance.TriggerEnding(EndingType.Bad_F);
+                GameFlowManager.Instance.TriggerEnding(EndingType.Bad_C);
             }
             return;
         }

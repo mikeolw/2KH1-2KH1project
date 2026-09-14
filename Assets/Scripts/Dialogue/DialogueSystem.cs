@@ -753,63 +753,6 @@ public class DialogueSystem : MonoBehaviour
         fadeCanvasGroup.alpha = targetAlpha;
     }
 
-    // ===== 화면 전체를 검게 덮고 중앙에 큰 흰 글자를 잠깐 보여주는 "타이틀 카드" =====
-    // GameFlowManager.TriggerEnding()이 Bad_F(자료실 열쇠를 못 구하고 조사를 포기한 배드엔딩)
-    // 처럼 "대사 없이 화면 중앙에 문구부터 보여준 뒤 대사로 이어가야 하는" 엔딩에서 CSV를
-    // 불러오기 직전에 호출한다.
-    //
-    // ===== 왜 isFadeOut(ShowLineWithFade)을 그대로 쓰지 않았나 =====
-    // isFadeOut은 암전 중에 평소 쓰는 대화창(화면 아래쪽, 보통 크기 글자)에 대사를 띄우는
-    // 연출이다. 여기서 필요한 건 그것과 달리 화면 "중앙"에 "크게" 뜨는 별도의 문구라서,
-    // fadeCanvasGroup은 그대로 재사용하되(이미 배경/스탠딩만 덮고 대화창은 덮지 않도록
-    // 자리가 잡혀 있다 - FixFadeOverlayOrder() 참고) 글자는 새로 만든다.
-    //
-    // ===== 암전을 다시 걷지 않는 이유 =====
-    // 이 카드를 보여준 뒤에는 배경 없이 검은 화면 위에서 바로 다음 대사가 이어져야 하므로
-    // (호출한 쪽이 이 코루틴이 끝나자마자 LoadDialogueFromCSV()를 부른다), 암전을 1로 켜둔
-    // 채로 돌아간다. 대화창만 다시 켜서 그 위에 다음 대사가 보이게 한다. 이 암전 상태는
-    // 씬이 바뀌면(엔딩을 다 보고 타이틀로 돌아가면) 자연히 사라진다.
-    public IEnumerator ShowFullscreenNotice(string noticeText, float holdSeconds)
-    {
-        isFading = true;
-        if (fadeCanvasGroup != null)
-        {
-            fadeCanvasGroup.blocksRaycasts = true;
-            fadeCanvasGroup.alpha = 1f;
-        }
-        if (dialoguePanel != null) dialoguePanel.SetActive(false);
-
-        GameObject textGo = null;
-        if (fadeCanvasGroup != null)
-        {
-            textGo = new GameObject("FullscreenNoticeText", typeof(RectTransform));
-            textGo.transform.SetParent(fadeCanvasGroup.transform, false);
-
-            var rt = textGo.GetComponent<RectTransform>();
-            rt.anchorMin = Vector2.zero;
-            rt.anchorMax = Vector2.one;
-            rt.offsetMin = Vector2.zero;
-            rt.offsetMax = Vector2.zero;
-
-            var tmp = textGo.AddComponent<TextMeshProUGUI>();
-            tmp.text = noticeText;
-            tmp.fontSize = 64;
-            tmp.alignment = TextAlignmentOptions.Center;
-            tmp.color = Color.white;
-            tmp.raycastTarget = false;
-
-            // 코드로 만든 글자는 기본 글꼴에 한글이 없어 깨져 보일 수 있다 (UIFontHelper.cs 참고).
-            UIFontHelper.ApplyToChildren(textGo);
-        }
-
-        yield return new WaitForSeconds(holdSeconds);
-
-        if (textGo != null) Destroy(textGo);
-        if (dialoguePanel != null) dialoguePanel.SetActive(true);
-
-        isFading = false;
-    }
-
     // 지문/나레이션(LineType.Narration)은 화자 이름을 숨긴다 (DialogueLine.cs의 lineType 주석 참고).
     // 다음 문장으로 넘어갈 때마다 SFX/BGM 칸을 확인한다 (규칙은 필드 선언부 주석 참고):
     // 칸이 비어있으면 끊고, 같은 클립이면 이어가고, 다른 클립이면 전환한다.
