@@ -38,6 +38,8 @@ public class DocumentViewerController : MonoBehaviour
     public TMP_Text pageLabel;
     [Tooltip("자료 제목(아이템 이름)")]
     public TMP_Text titleLabel;
+    [Tooltip("자료 그림 아래에 보여줄 설명 텍스트(ItemData.csv의 Description)")]
+    public TMP_Text descriptionLabel;
     [Tooltip("이전 장 버튼")]
     public Button prevButton;
     [Tooltip("다음 장 버튼")]
@@ -100,12 +102,12 @@ public class DocumentViewerController : MonoBehaviour
             return false;
         }
 
-        Show(info.displayName, sprites);
+        Show(info.displayName, info.description, sprites);
         return true;
     }
 
     // 그림 목록을 직접 넘겨서 뷰어를 연다. (아이템이 아닌 자료를 보여줄 때도 쓸 수 있게 열어둠)
-    public void Show(string title, List<Sprite> sprites)
+    public void Show(string title, string description, List<Sprite> sprites)
     {
         if (panel == null) return;
 
@@ -114,6 +116,7 @@ public class DocumentViewerController : MonoBehaviour
         pageIndex = 0;
 
         if (titleLabel != null) titleLabel.text = title;
+        if (descriptionLabel != null) descriptionLabel.text = description;
 
         panel.SetActive(true);
         RefreshPage();
@@ -214,13 +217,13 @@ public class DocumentViewerController : MonoBehaviour
         backdropButton.transition = Selectable.Transition.None; // 눌렀을 때 색이 변하면 어색하다
         backdropButton.onClick.AddListener(Hide);
 
-        // 자료 그림
+        // 제목 + 그림 + 설명을 한 덩어리로 묶어서 화면 세로 중앙에 배치한다.
+        // (예전에는 제목은 맨 위, 설명은 아래쪽에 따로 떨어져 있어 화면 전체에 흩어져 보였다)
         var pageGo = new GameObject("PageImage", typeof(RectTransform), typeof(Image));
         pageGo.transform.SetParent(panel.transform, false);
         var pageRt = pageGo.GetComponent<RectTransform>();
-        // 화면 가장자리에서 조금 띄워서 배치한다(바깥을 클릭해 닫을 여지를 남기기 위함).
-        pageRt.anchorMin = new Vector2(0.08f, 0.10f);
-        pageRt.anchorMax = new Vector2(0.92f, 0.90f);
+        pageRt.anchorMin = new Vector2(0.32f, 0.34f);
+        pageRt.anchorMax = new Vector2(0.68f, 0.64f);
         pageRt.offsetMin = Vector2.zero;
         pageRt.offsetMax = Vector2.zero;
         pageImage = pageGo.GetComponent<Image>();
@@ -229,9 +232,13 @@ public class DocumentViewerController : MonoBehaviour
         // (자료를 다 읽고 아무 데나 누르면 닫히는 게 자연스럽다)
         pageImage.raycastTarget = false;
 
-        // 제목
+        // 제목 - 그림 바로 위.
         titleLabel = CreateLabel("TitleLabel", panel.transform,
-            new Vector2(0.08f, 0.90f), new Vector2(0.92f, 0.97f), 32, TextAlignmentOptions.Center);
+            new Vector2(0.20f, 0.66f), new Vector2(0.80f, 0.74f), 32, TextAlignmentOptions.Center);
+
+        // 설명(ItemData.csv의 Description) - 그림 바로 아래.
+        descriptionLabel = CreateLabel("DescriptionLabel", panel.transform,
+            new Vector2(0.15f, 0.20f), new Vector2(0.85f, 0.34f), 24, TextAlignmentOptions.Center);
 
         // 쪽수
         pageLabel = CreateLabel("PageLabel", panel.transform,
