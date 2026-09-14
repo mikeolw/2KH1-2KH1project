@@ -15,8 +15,8 @@ using UnityEngine;
 // 사용 흐름:
 //   1. SaveData.unity에서 슬롯 목록을 보여줄 때 Load(slotIndex)로 각 슬롯 내용을 읽어와 표시.
 //   2. 세이브가 있는 슬롯을 클릭하면 SetActiveSave()로 "지금 이어서 할 세이브"를 지정하고
-//      게임 씬으로 이동. 게임 씬은 SaveManager.Instance.ActiveSave를 읽어서 이어할 위치를
-//      복원해야 한다 (TODO: 아직 이 복원 로직이 없음. 아래 ActiveSave 주석 참고).
+//      게임 씬으로 이동. 게임 씬(DialogueSystem.Start())이 ActiveSave를 읽어서 이어할
+//      위치를 복원한다 (아래 ActiveSave 주석 참고).
 public class SaveManager : MonoBehaviour
 {
     public static SaveManager Instance;
@@ -30,15 +30,13 @@ public class SaveManager : MonoBehaviour
     public const int SlotCount = 4;
 
     // 타이틀에서 슬롯을 골라 게임 씬으로 넘어갈 때, "지금 어떤 세이브로 플레이 중인지"를
-    // 담아두는 값. 게임 씬(DialogueSystem/GameFlowManager 등)이 시작할 때 이 값을 확인해서
-    // 저장된 챕터부터 이어가야 하는데, 현재는 DialogueSystem.Start()가 무조건
-    // scenario_sample.csv를 처음부터 로드하도록 하드코딩되어 있어 이 값이 아직 쓰이지 않는다.
-    // TODO: DialogueSystem이 ActiveSave.chapterId를 참고해서 이어할 지점을 찾도록 연결 필요.
+    // 담아두는 값. DialogueSystem.Start()가 이 값을 확인해서 scenarioCsv/lineIndex부터
+    // 이어가고, null이면 새 게임(scenario_01부터)으로 시작한다.
     //
     // 참고: "시작하기" 버튼(TitleManager)은 슬롯 선택 없이 바로 게임 씬으로 이동하므로,
-    // 새 게임을 시작한 경우 ActiveSave는 null인 채로 게임이 시작된다. 새 게임 진행 중
-    // {세이브포인트}(DialogueLine.isSavePoint)에 도달했을 때 어느 슬롯에 저장할지 정하는
-    // 로직도 아직 없다 (예: 비어있는 슬롯에 자동 저장하거나, 저장 시점에 슬롯 선택 UI를 띄우는 등).
+    // 새 게임을 시작한 경우 ActiveSave는 null인 채로 게임이 시작된다. 세이브는
+    // {세이브포인트}(DialogueLine.isSavePoint)를 지난 뒤 플레이어가 SaveSlotDialog에서
+    // 직접 슬롯을 골라야 저장된다(자동 저장 없음).
     public SaveData ActiveSave { get; private set; }
 
     private void Awake()
