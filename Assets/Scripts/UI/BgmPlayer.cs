@@ -6,8 +6,8 @@ using UnityEngine.SceneManagement;
 // Title.unity에 이 컴포넌트가 붙은 GameObject를 하나 두면, 최초 생성 시 DontDestroyOnLoad로
 // 살아남아서 SaveData/Settings 씬을 오가도 음악이 끊기지 않고 이어진다.
 // 실제 게임 씬(SampleScene)으로 넘어가면 메뉴 음악이 어울리지 않으므로 자동으로 정지하고
-// 스스로를 파괴한다. 게임 자체의 BGM은 DialogueLine.bgmToPlay를 재생하는 별도 시스템이
-// 맡아야 하는데, 그건 아직 구현되어 있지 않다 (TODO).
+// 스스로를 파괴한다. 게임 자체의 BGM은 DialogueLine.bgmToPlay를 재생하는 별도 시스템
+// (DialogueSystem.ApplyLineAudio)이 맡는다.
 //
 // 볼륨은 SettingsManager.Current.bgmVolume을 매 프레임 읽어와 반영한다. 이벤트 방식이
 // 아니라 폴링인 이유는 지금 프로젝트에 오디오 재생 컴포넌트가 이거 하나뿐이라 별도
