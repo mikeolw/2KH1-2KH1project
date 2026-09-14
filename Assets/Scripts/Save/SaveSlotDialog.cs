@@ -64,6 +64,18 @@ public class SaveSlotDialog : MonoBehaviour
     public void Close()
     {
         if (panel != null) panel.SetActive(false);
+
+        // ===== 닫히면 대사를 이어서 진행한다 =====
+        // 이 창은 항상 세이브포인트 도달의 부작용으로만 뜬다(SavePointManager.ReachSavePoint()
+        // 가 여는 유일한 곳이다). 그래서 창이 열리는 시점엔 이미 DialogueSystem이 다음 줄
+        // (lineIndex)까지 넘겨놓은 상태이고, 플레이어가 창을 닫으면 곧바로 그 다음 줄로
+        // 이어가면 된다. 예전엔 이걸 안 해줘서, 플레이어가 창을 닫은 뒤 대사창을 따로 한 번
+        // 더 클릭해야 다음 줄(미니게임/조사 등)로 넘어갔다 - 그 클릭이 암전(ShowLineWithFade)
+        // 중이면 isFading에 막혀 화면이 멈춘 것처럼 보이는 문제까지 겹쳐 있었다.
+        if (DialogueSystem.Instance != null)
+        {
+            DialogueSystem.Instance.ShowNextSentence();
+        }
     }
 
     // 슬롯마다 "무엇이 저장되어 있는지"를 다시 읽어 표시한다.

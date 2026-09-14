@@ -719,6 +719,19 @@ public class DialogueSystem : MonoBehaviour
         yield return StartCoroutine(Fade(1f));
         DisplayLine(line);
         yield return new WaitForSeconds(blackHoldDuration);
+
+        // ===== 세이브 창이 열려 있으면 닫힐 때까지 암전을 유지한다 =====
+        // 이 줄이 세이브포인트(IsSavePoint=TRUE)이기도 하면 DisplayLine() 안에서
+        // SaveSlotDialog가 자동으로 뜬다. blackHoldDuration은 세이브 창과 무관하게 자기
+        // 타이머대로 끝나버리므로, 플레이어가 세이브 창을 빠르게 닫으면 아직 isFading==true인
+        // 순간에 대사를 클릭하게 되어 그 클릭이 씹히고 "화면이 멈춘 것처럼" 보였다
+        // (Update()가 isFading일 때 진행 클릭을 무시하기 때문 - 아래 참고).
+        // 세이브 창이 실제로 닫힐 때까지 암전 해제를 미루면 이 경합이 사라진다.
+        while (SaveSlotDialog.Instance != null && SaveSlotDialog.Instance.IsOpen)
+        {
+            yield return null;
+        }
+
         yield return StartCoroutine(Fade(0f));
 
         if (fadeCanvasGroup != null) fadeCanvasGroup.blocksRaycasts = false;
