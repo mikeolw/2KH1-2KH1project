@@ -521,9 +521,8 @@ public class InvestigationController : MonoBehaviour
         hotspotRoot.transform.SetParent(targetCanvas.transform, false);
         StretchFull(hotspotRoot.GetComponent<RectTransform>());
 
-        // 그리는 순서: 배경/스탠딩보다는 앞, 대화창보다는 뒤.
-        // 대화창 바로 앞자리에 끼워 넣으면 이 조건이 자동으로 맞는다.
-        PlaceBehindDialogue(hotspotRoot.transform);
+        // 그리는 순서: 배경/스탠딩보다는 앞, 암전 판(FadeOverlay)·대화창보다는 뒤.
+        PlaceAboveStage(hotspotRoot.transform);
 
         foreach (var data in screen.hotspots)
         {
@@ -989,6 +988,31 @@ public class InvestigationController : MonoBehaviour
     {
         var panel = GetDialoguePanel();
         if (panel != null) panel.SetActive(visible);
+    }
+
+    // ===== 조사 오브젝트를 배경 바로 위, 암전 판(FadeOverlay)보다는 아래에 둔다 =====
+    // 예전에는 대화창 바로 앞자리(암전 판보다도 앞)에 두었다. 그런데 조사 직전 줄이
+    // IsFadeOut=TRUE인 암전 연출인데, 화면이 아직 다 밝아지기 전에(예: 세이브 창을 닫으며
+    // SaveSlotDialog.Close()가 곧장 다음 줄로 넘기는 경우) 조사가 시작되면, 암전 판을
+    // 뚫고 오브젝트만 먼저 보이고 배경은 판 뒤에 가려진 채로 남아 "오브젝트는 바로
+    // 보이는데 배경만 몇 초 늦게 나타나는" 것처럼 보였다.
+    // 오브젝트를 배경·스탠딩과 똑같이 암전 판보다 뒤(=무대 바로 위)에 두면, 암전이 아직
+    // 안 걷혔을 땐 오브젝트도 배경과 함께 가려지고, 암전이 걷히는 순간 항상 같이 나타난다.
+    private void PlaceAboveStage(Transform target)
+    {
+        var stage = StageController.Instance;
+        if (stage != null)
+        {
+            int stageTop = stage.GetTopStageSiblingIndex();
+            if (stageTop >= 0)
+            {
+                target.SetSiblingIndex(stageTop + 1);
+                return;
+            }
+        }
+
+        // 무대(배경/스탠딩)를 못 찾으면 예전 방식(대화창 바로 앞자리)으로 대신한다.
+        PlaceBehindDialogue(target);
     }
 
     // 조사 오브젝트들이 대화창보다 뒤에 그려지도록 계층 순서를 잡는다.
