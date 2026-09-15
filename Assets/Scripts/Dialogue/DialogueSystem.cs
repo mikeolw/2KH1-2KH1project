@@ -814,6 +814,17 @@ public class DialogueSystem : MonoBehaviour
             SavePointManager.Instance.ReachSavePoint(line.savePointId, currentScenarioCsv, lineIndex);
         }
 
+        // ===== 4-1) 대화 로그(아래 화살표) 기록 =====
+        // 실제 대사(NormalDialogue/Narration)만 남긴다. EventTrigger는 대사가 없는 연출
+        // 전용 줄이라 로그에 빈 줄만 남기 때문에 제외한다 (DialogueLogController.cs 참고).
+        if (DialogueLogController.Instance != null &&
+            line.lineType != LineType.EventTrigger &&
+            !string.IsNullOrWhiteSpace(line.sentence))
+        {
+            string logSpeaker = line.lineType == LineType.Narration ? "" : line.speaker;
+            DialogueLogController.Instance.AddEntry(logSpeaker, line.sentence);
+        }
+
         // ===== 5) 대사 텍스트 타이핑 시작 =====
         StartTyping(line.sentence);
     }
@@ -1252,9 +1263,17 @@ public class DialogueSystem : MonoBehaviour
             string nextCsv = choice.nextScenarioCsv;
             bool isEnding = choice.isEndingChoice;
             EndingType ending = choice.targetEnding;
+            string pickedText = choice.choiceText;
 
             btn.GetComponent<Button>().onClick.AddListener(() => {
                 choicePanel.SetActive(false);
+
+                // 고른 선택지도 대화 로그에 남긴다 - 안 남기면 로그만 봤을 때 대사 흐름이
+                // 뚝뚝 끊겨 보인다. 화자는 항상 주인공(재훈)이다 (선택지는 재훈의 결정이므로).
+                if (DialogueLogController.Instance != null && !string.IsNullOrWhiteSpace(pickedText))
+                {
+                    DialogueLogController.Instance.AddEntry("재훈", pickedText);
+                }
 
                 if (isEnding)
                 {
@@ -1292,8 +1311,13 @@ public class DialogueSystem : MonoBehaviour
         if (DocumentViewerController.Instance != null && DocumentViewerController.Instance.IsOpen) return true;
         if (DeductionController.Instance != null && DeductionController.Instance.IsActive) return true;
         if (SaveSlotDialog.Instance != null && SaveSlotDialog.Instance.IsOpen) return true;
+        if (DialogueLogController.Instance != null && DialogueLogController.Instance.IsOpen) return true;
         return false;
     }
+
+    // 다른 스크립트(DialogueLogController의 아래 화살표 처리 등)가 "지금 새 오버레이를 열어도
+    // 안전한 상태인가"를 확인할 때 쓴다 - 암전 중이거나 이미 다른 팝업이 떠 있으면 안전하지 않다.
+    public bool CanOpenOverlay => !isFading && !IsBlockedByOtherUI();
 
     void Update()
     {
@@ -1452,6 +1476,11 @@ public class DialogueSystem : MonoBehaviour
         // 저장했는지"를 남겨야 나중에 정확히 그 지점부터 이어할 수 있기 때문이다
         // (SavePointManager.cs 참고).
         currentScenarioCsv = csvFileName;
+
+        // ===== 대화 로그는 파일(챕터) 단위로 새로 시작한다 =====
+        // 세이브 파일 포맷을 안 건드리려고 로그는 세션 한정으로만 쌓는다 - 새 CSV를 불러올
+        // 때마다(챕터 전환/세이브 불러오기 모두 포함) 비우고 이 파일 안에서 다시 쌓는다.
+        DialogueLogController.Instance?.ClearLog();
 
         // ===== #07부터는 수첩이 더 이상 갱신되지 않는다 =====
         // #07(회사 잠입 조사)은 시나리오의 마지막 이야기 챕터라 그 뒤로 수첩을 다시 볼
