@@ -106,6 +106,7 @@ public static class GameBootstrap
             if (DocumentViewerController.Instance == null) Create<DocumentViewerController>("DocumentViewer");
             if (SaveSlotDialog.Instance == null) Create<SaveSlotDialog>("SaveSlotDialog");
             if (SettingsPanelUI.Instance == null) Create<SettingsPanelUI>("SettingsPanel");
+            if (DialogueLogController.Instance == null) Create<DialogueLogController>("DialogueLog");
 
             // 미니게임 2(진행형 타임어택)의 mm:ss 카운트다운 UI. StageController와 마찬가지로
             // 인스펙터 연결 없이 스스로 Canvas를 찾아 UI를 만들어내므로 자동 생성해도 안전하다.
