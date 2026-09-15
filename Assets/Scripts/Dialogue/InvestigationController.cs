@@ -77,11 +77,25 @@ public class InvestigationController : MonoBehaviour
     //          InvestigationId (Sprite 칸에 적는다). 예) 재훈의 책상 화면에 NextScreen=회의실 ID,
     //          회의실 화면에 PrevScreen=책상 ID를 적으면 두 화면을 화살표로 오갈 수 있다.
     //   2) Assets/Resources/Dialogues/InvestigationData.csv       (드라이브로 공유 - 스토리, 작가가 고친다)
-    //        컬럼: InvestigationId,HotspotKey,ObjectName,Speaker,Text,ItemId
+    //        컬럼: InvestigationId,HotspotKey,ObjectName,Speaker,Text,ItemId,RequiredItemId,
+    //             RequiredItemMissingText,AfterItemId,AfterTargetScreenId
     //        - ObjectName : 플레이어에게 보이는 이름 (예: "메모장")
     //        - Speaker    : Talk일 때 말하는 사람
     //        - Text       : 조사했을 때 나오는 문구 / 대사
     //        - ItemId     : Type=Item일 때 얻는 아이템
+    //        - RequiredItemId          : 비워두면 항상 조사 가능. 적어두면 그 itemId를 가방에
+    //          먼저 얻어야만 평소 반응(Text/대사)이 나온다. 아직 못 얻었으면 아래
+    //          RequiredItemMissingText만 보여주고 아이템 획득/수첩 기록은 건너뛴다.
+    //          예) 자료실 문(OBJ_07_ResourceRoomdoor)에 RequiredItemId=archive_key를 적어두면,
+    //          자료실 열쇠를 얻기 전엔 문을 조사해도 열리지 않고 안내문만 나온다.
+    //        - RequiredItemMissingText : RequiredItemId를 아직 못 얻었을 때 보여줄 문구.
+    //        - AfterItemId/AfterTargetScreenId : 선택지를 통해 이 itemId를 이미 얻었으면,
+    //          평소 반응(설명/대사/선택지) 대신 곧바로 AfterTargetScreenId 화면으로 넘어간다.
+    //          "선택지 딸린 문을 한 번 통과하면 다음부턴 안 물어보고 바로 다음 방으로" 같은
+    //          용도. AfterItemId는 InventoryTalkChoices.csv의 ItemId 칸으로 얻게 해두면 된다.
+    //          예) 자료실 문에서 "알리지 않는다"를 고르면 resource_room_entered를 얻고,
+    //          AfterItemId=resource_room_entered / AfterTargetScreenId=BG_07_InvestigationSite_05로
+    //          적어두면 그 다음부터 문을 눌렀을 때 선택지 없이 바로 그 화면으로 이동한다.
     //        - 특수 키 IntroText : 조사를 시작할 때 대화창에 띄울 안내문 (Text 칸)
     // 두 파일은 InvestigationId + HotspotKey로 짝을 맞춘다.
     //
@@ -94,9 +108,10 @@ public class InvestigationController : MonoBehaviour
     private const string InvestigationStageCsv = "Stage/InvestigationStage";
     private const string InvestigationDataCsv = "Dialogues/InvestigationData";
 
-    // ===== Talk 타입 오브젝트의 선택지 =====
-    // 대부분의 Talk 오브젝트는 대사 한 줄 보여주고 끝이지만, 몇몇은 "누가 시켰냐" 같은
-    // 질문에 선택지로 답해야 한다. 그 선택지 데이터만 따로 여기 담는다(InvestigationId +
+    // ===== 조사 오브젝트의 선택지 =====
+    // 대부분의 Talk/Description 오브젝트는 문장 한 줄 보여주고 끝이지만, 몇몇은 "누가
+    // 시켰냐"(Talk, 예: OBJ_07_Manager) 또는 "알릴까 말까"(Description, 예: 자료실 문)
+    // 처럼 선택지로 답해야 한다. 그 선택지 데이터만 따로 여기 담는다(InvestigationId +
     // HotspotKey로 InvestigationData.csv와 짝을 맞춘다). 컬럼:
     //   InvestigationId,HotspotKey,ChoiceText,ResponseSpeaker,ResponseText,ItemId,TargetEnding
     //   - ChoiceText     : 선택지 버튼 문구
@@ -116,6 +131,10 @@ public class InvestigationController : MonoBehaviour
         public string itemId;
         public string spriteName;
         public List<InvestigationTalkChoice> talkChoices;
+        public string requiredItemId;
+        public string requiredItemMissingText;
+        public string afterItemId;
+        public string afterTargetScreenId;
     }
 
     // 조사 화면 하나에 대한 정보
@@ -131,6 +150,52 @@ public class InvestigationController : MonoBehaviour
         // 비어 있으면(연결이 없으면) 해당 방향 화살표를 만들지 않는다.
         public string nextScreenId;
         public string prevScreenId;
+
+        // ===== 이 화면에 들어갈 때 거는 미니게임 =====
+        // CSV에 HotspotKey="Minigame" 특수 줄로 적는다(IntroText와 같은 자리, 즉 대사 파일
+        // InvestigationData.csv 쪽이다). Text 칸에 미니게임 안내 문구, ItemId 칸에 이
+        // 화면에 들어가기 전 이미 가지고 있어야 할 아이템(비워두면 조건 없이 항상 뜬다,
+        // 여러 개면 "|"로 구분)을 적는다. 예) 자료실 열쇠(archive_key)를 얻기 전에도
+        // 화살표를 타고 "자료실 앞" 화면에 먼저 도착할 수 있으므로, 열쇠를 이미 가지고
+        // 있을 때만 미니게임이 뜨게 하려면 ItemId 칸에 archive_key를 적어둔다.
+        // 한 번 성공하면 그 화면을 나중에 다시 들어와도 다시 뜨지 않는다(InventoryManager에
+        // 통과 표시를 남겨둔다 - EnterScreen() 참고). 실패 시 어떤 엔딩으로 보낼지는 아직
+        // 정해지지 않았다 - 지금 MinigameController는 항상 성공하는 스텁이라 실패 경로
+        // 자체가 없다. 나중에 진짜 실패 조건이 생기면 그때 컬럼을 추가하면 된다.
+        public string minigameLabel;
+        public List<string> minigameRequiredItemIds;
+
+        // ===== 특정 아이템을 다 모으면 자동으로 다른 화면으로 돌아간다 =====
+        // CSV에 HotspotKey="AutoExit" 특수 줄로 적는다. ItemId 칸에 필요한 아이템들을 "|"로
+        // 구분해 적고, AfterTargetScreenId 칸에 돌아갈 화면을 적는다. 이 화면에서 아이템을
+        // 얻을 때마다(Inspect() 참고) 검사해서, 전부 모인 순간 자동으로 이동한다.
+        // 예) 자료실(_05)에서 단서 세 개를 전부 읽으면 자료실 앞(_04)으로 자동으로 돌아간다.
+        public List<string> autoExitRequiredItemIds;
+        public string autoExitTargetScreenId;
+
+        // ===== NextScreen 화살표가 보이는 조건 =====
+        // CSV에 HotspotKey="NextScreenRequires" 특수 줄로 적는다. ItemId 칸에 "|"로 구분해
+        // 적은 아이템을 전부 가지고 있어야만 nextScreenId로 가는 화살표가 보인다(비어있으면
+        // 기존과 같이 조건 없이 항상 보인다). 예) 자료실 단서 세 개를 다 모으기 전에는
+        // 자료실 앞(_04)에 사장실 앞(_06)으로 가는 화살표가 보이지 않는다.
+        public List<string> nextScreenRequiredItemIds;
+
+        // ===== 이 화면에 "도착하는 것" 자체가 지금 조사를 끝내는 신호일 때 =====
+        // CSV에 HotspotKey="AutoFinish" 특수 줄로 적는다. ItemId 칸에 "|"로 구분해 적은
+        // 아이템을 이미 전부 가지고 있는 채로 이 화면에 도착하면(화살표/AfterTargetScreenId
+        // 등 화면 안에서의 이동으로 도착한 경우만 - NavigateToLinkedScreen() 참고), 이
+        // 화면을 보여주지 않고 곧장 조사를 끝낸다(Exit()). CSV가 Investigate로 이 화면을
+        // 새로 열 때(Enter())는 검사하지 않는다 - 그래야 그 화면 자체의 미니게임 등이
+        // 정상적으로 뜬다.
+        // 예) 자료실 열쇠(archive_key)를 가진 채로 자료실 앞(_04)에 도착하면, #01/#02에서
+        // 이어지던 조사가 거기서 끝나고 CSV가 새로 Investigate(_04)를 걸어 본격적인
+        // "자료실에 들키지 않고 진입하라" 흐름을 시작한다.
+        // hasAutoFinish : "AutoFinish" 특수 줄이 이 화면에 있는지. ItemId 칸을 비워두면
+        //   (autoFinishRequiredItemIds가 null이면) 조건 없이 도착하는 즉시 끝난다 - 예)
+        //   사장실 문을 통해서만 올 수 있는 사장실(_07)처럼, 도착 경로 자체가 이미 조건인 화면.
+        public bool hasAutoFinish;
+        public List<string> autoFinishRequiredItemIds;
+
         public readonly List<HotspotData> hotspots = new List<HotspotData>();
     }
 
@@ -210,6 +275,46 @@ public class InvestigationController : MonoBehaviour
                     continue;
                 }
 
+                // ===== 특수 줄 3종: Minigame / AutoExit / NextScreenRequires =====
+                // ScreenData 필드 선언부의 설명 참고. 전부 IntroText와 같이 대사 파일에만
+                // 있고, 배치 도구가 만지는 InvestigationStage.csv에는 없다.
+                if (key == "Minigame")
+                {
+                    if (screen != null)
+                    {
+                        screen.minigameLabel = GetField(row, "Text");
+                        screen.minigameRequiredItemIds = ParseItemList(GetField(row, "ItemId"));
+                    }
+                    else orphans.Add($"{id}/{key}");
+                    continue;
+                }
+                if (key == "AutoExit")
+                {
+                    if (screen != null)
+                    {
+                        screen.autoExitRequiredItemIds = ParseItemList(GetField(row, "ItemId"));
+                        screen.autoExitTargetScreenId = GetField(row, "AfterTargetScreenId").Trim();
+                    }
+                    else orphans.Add($"{id}/{key}");
+                    continue;
+                }
+                if (key == "NextScreenRequires")
+                {
+                    if (screen != null) screen.nextScreenRequiredItemIds = ParseItemList(GetField(row, "ItemId"));
+                    else orphans.Add($"{id}/{key}");
+                    continue;
+                }
+                if (key == "AutoFinish")
+                {
+                    if (screen != null)
+                    {
+                        screen.hasAutoFinish = true;
+                        screen.autoFinishRequiredItemIds = ParseItemList(GetField(row, "ItemId"));
+                    }
+                    else orphans.Add($"{id}/{key}");
+                    continue;
+                }
+
                 // 예전 형식 파일이 드라이브에 남아 있으면 이런 구성 줄이 섞여 있을 수 있다. 구성 파일이 우선이므로 무시한다.
                 if (key == "Background" || key == "NextScreen" || key == "PrevScreen") continue;
 
@@ -282,6 +387,31 @@ public class InvestigationController : MonoBehaviour
                 continue;
             }
 
+            // 특수 키 5-7: Minigame / AutoExit / NextScreenRequires (예전 형식 - 이 줄 자신에서 읽는다)
+            if (key == "Minigame")
+            {
+                screen.minigameLabel = GetField(row, "Text");
+                screen.minigameRequiredItemIds = ParseItemList(GetField(row, "ItemId"));
+                continue;
+            }
+            if (key == "AutoExit")
+            {
+                screen.autoExitRequiredItemIds = ParseItemList(GetField(row, "ItemId"));
+                screen.autoExitTargetScreenId = GetField(row, "AfterTargetScreenId").Trim();
+                continue;
+            }
+            if (key == "NextScreenRequires")
+            {
+                screen.nextScreenRequiredItemIds = ParseItemList(GetField(row, "ItemId"));
+                continue;
+            }
+            if (key == "AutoFinish")
+            {
+                screen.hasAutoFinish = true;
+                screen.autoFinishRequiredItemIds = ParseItemList(GetField(row, "ItemId"));
+                continue;
+            }
+
             // 일반 조사 오브젝트
             // Standing/Prop은 "보이기만 하고 조사는 안 되는" 장식이다 (HotspotType 주석 참고).
             if (!Enum.TryParse(GetField(row, "Type"), true, out HotspotType type))
@@ -322,7 +452,11 @@ public class InvestigationController : MonoBehaviour
                 text = GetField(textRow, "Text"),
                 itemId = GetField(textRow, "ItemId"),
                 spriteName = spriteName,
-                talkChoices = talkChoices
+                talkChoices = talkChoices,
+                requiredItemId = GetField(textRow, "RequiredItemId"),
+                requiredItemMissingText = GetField(textRow, "RequiredItemMissingText"),
+                afterItemId = GetField(textRow, "AfterItemId"),
+                afterTargetScreenId = GetField(textRow, "AfterTargetScreenId")
             });
         }
     }
@@ -374,6 +508,64 @@ public class InvestigationController : MonoBehaviour
         return row != null && row.TryGetValue(column, out var value) ? value.ToString() : "";
     }
 
+    // "resource_clue_1|resource_clue_2" 처럼 "|"로 구분해 적은 아이템 목록을 나눈다.
+    // 빈 칸이면 null을 돌려준다(= 조건 없음, HasAllItems()가 이걸 "항상 통과"로 취급한다).
+    private static List<string> ParseItemList(string raw)
+    {
+        if (string.IsNullOrWhiteSpace(raw)) return null;
+
+        var result = new List<string>();
+        foreach (var part in raw.Split('|'))
+        {
+            string trimmed = part.Trim();
+            if (!string.IsNullOrEmpty(trimmed)) result.Add(trimmed);
+        }
+        return result.Count > 0 ? result : null;
+    }
+
+    // itemIds에 적힌 아이템을 전부 가지고 있는지. itemIds가 비어있으면(조건이 없으면) 항상 true.
+    private static bool HasAllItems(List<string> itemIds)
+    {
+        if (itemIds == null || itemIds.Count == 0) return true;
+        if (InventoryManager.Instance == null) return false;
+
+        foreach (var itemId in itemIds)
+        {
+            if (!InventoryManager.Instance.HasItem(itemId)) return false;
+        }
+        return true;
+    }
+
+    // 화면 하나의 미니게임을 통과했다는 표시로 쓰는 가짜 아이템 id.
+    // 인벤토리 슬롯 UI에는 대응하는 슬롯이 없어 화면에 보이지 않는다(resource_room_entered와
+    // 같은 용도 - ScreenData.minigameLabel 주석 참고).
+    private static string ScreenMinigamePassedFlag(string screenId) => "mg_passed_" + screenId;
+
+    // AutoFinish가 이 화면에서 이미 한 번 조사를 끝냈다는 표시. 이게 없으면, 예를 들어
+    // 열쇠를 든 채 자료실 앞(_04)에서 PrevScreen으로 되돌아갔다가 NextScreen으로 다시
+    // 들어올 때마다("자료실 앞"을 여러 번 왔다갔다) 매번 조사가 끝나버린다 - 열쇠를 계속
+    // 가지고 있으니 조건은 늘 참이기 때문이다. 한 번 쓰이면 다시는 발동하지 않게 막는다.
+    private static string AutoFinishUsedFlag(string screenId) => "af_used_" + screenId;
+
+    // ===== "조사 그만하기" 버튼을 만들지 않는 화면들 =====
+    // #07(회사 잠입 조사)은 전부 화살표/자동이동/미니게임으로 쭉 이어지는 하나의 흐름이라,
+    // 중간에 버튼으로 마음대로 빠져나갈 수 있으면 안 된다. 그래서 버튼을 아예 만들지 않고,
+    // 대신 각 구간마다 정해둔 "도착/완료 조건"이 되면 자동으로 끝난다:
+    //   - #01(내 책상)/#02(사무실)/#03(자료실 앞 복도): 자료실 열쇠(archive_key)를 든 채
+    //     자료실 앞(_04)에 도착하는 순간 자동으로 끝난다 (ScreenData.autoFinishRequiredItemIds).
+    //   - #04(자료실 앞)~#07(사장실): 사장실 트로피(AfterTargetScreenId=EXIT)를 눌러야
+    //     끝난다 (Inspect() 참고).
+    private static readonly HashSet<string> ScreensWithoutExitButton = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+    {
+        "BG_07_InvestigationSite_01",
+        "BG_07_InvestigationSite_02",
+        "BG_07_InvestigationSite_03",
+        "BG_07_InvestigationSite_04",
+        "BG_07_InvestigationSite_05",
+        "BG_07_InvestigationSite_06",
+        "BG_07_InvestigationSite_07",
+    };
+
     // ---------------------------------------------------------------------------------
     // 조사 시작 / 종료
     // ---------------------------------------------------------------------------------
@@ -423,6 +615,42 @@ public class InvestigationController : MonoBehaviour
         visitedScreenIds.Clear();
         visitedScreenIds.Add(activeScreenId);
 
+        EnterScreen(activeScreenId, screen);
+    }
+
+    // ===== 화면 하나를 실제로 연다 (Enter()/NavigateToLinkedScreen() 공용) =====
+    // 배경/오브젝트를 먼저 평소처럼 띄운 뒤(ShowScreenContent), 그 화면에 미니게임이
+    // 걸려 있으면(screen.minigameLabel) 그 위에 미니게임 패널을 겹쳐 띄운다. 즉 "화살표를
+    // 누르는 순간"이 아니라 "새 배경이 실제로 화면에 나타난 뒤"에 미니게임이 뜬다.
+    // 조건 아이템(minigameRequiredItemIds)을 아직 안 가지고 있으면(예: 자료실 열쇠를 얻기
+    // 전에 화살표로 자료실 앞에 먼저 온 경우) 미니게임 없이 화면만 연다 - 문을 눌러보면
+    // RequiredItemId 안내문으로 자연스럽게 막힌다.
+    private void EnterScreen(string screenId, ScreenData screen)
+    {
+        ShowScreenContent(screen);
+
+        if (string.IsNullOrEmpty(screen.minigameLabel) || !HasAllItems(screen.minigameRequiredItemIds)) return;
+
+        string passedFlag = ScreenMinigamePassedFlag(screenId);
+        bool alreadyPassed = InventoryManager.Instance != null && InventoryManager.Instance.HasItem(passedFlag);
+        if (alreadyPassed) return;
+
+        if (MinigameController.Instance == null)
+        {
+            Debug.LogWarning($"[InvestigationController] MinigameController가 없어 '{screen.minigameLabel}' 미니게임을 건너뜁니다.");
+            return;
+        }
+
+        MinigameController.Instance.StartMinigame(
+            screen.minigameLabel,
+            onSuccessCallback: () => InventoryManager.Instance?.AddItem(passedFlag),
+            // 지금은 항상 성공하는 스텁이라 실패 경로가 없다 (MinigameController.cs 상단 주석 참고).
+            onFailCallback: null);
+    }
+
+    // 배경을 깔고 조사 오브젝트를 올리고 안내문을 띄운다. (Enter()에 있던 원래 로직)
+    private void ShowScreenContent(ScreenData screen)
+    {
         // 1) 배경을 깐다. 대사 장면과 같은 배경 시스템을 그대로 쓰므로,
         //    조사 중에도 캐릭터 스탠딩이 필요하면 그대로 남길 수 있다.
         if (StageController.Instance != null)
@@ -521,20 +749,30 @@ public class InvestigationController : MonoBehaviour
         hotspotRoot.transform.SetParent(targetCanvas.transform, false);
         StretchFull(hotspotRoot.GetComponent<RectTransform>());
 
-        // 그리는 순서: 배경/스탠딩보다는 앞, 대화창보다는 뒤.
-        // 대화창 바로 앞자리에 끼워 넣으면 이 조건이 자동으로 맞는다.
-        PlaceBehindDialogue(hotspotRoot.transform);
+        // 그리는 순서: 배경/스탠딩보다는 앞, 암전 판(FadeOverlay)·대화창보다는 뒤.
+        PlaceAboveStage(hotspotRoot.transform);
 
         foreach (var data in screen.hotspots)
         {
             CreateHotspot(data);
         }
 
-        CreateExitButton();
+        // ===== "조사 그만하기" 버튼을 만들지 않는 화면 =====
+        // #07의 자료실 앞(_03)부터 사장실(_07)까지는 화살표/자동이동/미니게임으로 쭉 이어지는
+        // 하나의 흐름이라, 중간에 버튼으로 마음대로 빠져나갈 수 있으면 안 된다. 이 구간은
+        // 사장실 트로피(EXIT 오브젝트)를 눌러야만 조사가 끝난다 (Inspect() 참고).
+        // #01(내 책상)/#02(사무실)처럼 자유롭게 둘러보는 화면은 그대로 버튼을 만든다.
+        if (!ScreensWithoutExitButton.Contains(activeScreenId ?? ""))
+        {
+            CreateExitButton();
+        }
 
         // 옆 화면(재훈의 책상 ↔ 회의실 같은 연결)으로 이동하는 화살표.
         // CSV에 NextScreen/PrevScreen이 적혀 있는 화면에서만 만들어진다.
-        if (!string.IsNullOrEmpty(screen.nextScreenId))
+        // nextScreenRequiredItemIds가 적혀 있으면(NextScreenRequires 특수 줄), 그 아이템을
+        // 전부 가지고 있을 때만 "다음" 화살표가 보인다 - 예) 자료실 단서를 다 모으기 전에는
+        // 자료실 앞에 사장실 앞으로 가는 화살표가 보이지 않는다.
+        if (!string.IsNullOrEmpty(screen.nextScreenId) && HasAllItems(screen.nextScreenRequiredItemIds))
         {
             CreateNavArrow(screen.nextScreenId, isNext: true);
         }
@@ -566,28 +804,42 @@ public class InvestigationController : MonoBehaviour
             return;
         }
 
-        activeScreenId = targetId;
-        visitedScreenIds.Add(activeScreenId);
-
-        if (StageController.Instance != null)
+        // 이 화면에 도착하는 것 자체가 "지금까지의 조사는 끝났다"는 신호일 수 있다
+        // (ScreenData.autoFinishRequiredItemIds 주석 참고). 화면을 보여주지도 않고 곧장
+        // 조사를 끝낸다 - Enter()로 새로 시작하는 조사는 이 검사를 거치지 않는다.
+        // 딱 한 번만 발동해야 한다 - 열쇠를 계속 들고 있으므로, 그냥 두면 이 화면을
+        // 화살표로 다시 들어올 때마다(예: 자료실에 들어가려다 PrevScreen으로 되돌아간 뒤
+        // 다시 NextScreen을 누르는 경우) 매번 조사가 끝나버린다.
+        if (targetScreen.hasAutoFinish && HasAllItems(targetScreen.autoFinishRequiredItemIds))
         {
-            StageController.Instance.ClearProps();
-            if (!string.IsNullOrEmpty(targetScreen.backgroundName))
+            string usedFlag = AutoFinishUsedFlag(targetId);
+            bool alreadyUsed = InventoryManager.Instance != null && InventoryManager.Instance.HasItem(usedFlag);
+            if (!alreadyUsed)
             {
-                StageController.Instance.ApplyBackground(targetScreen.backgroundName);
+                InventoryManager.Instance?.AddItem(usedFlag);
+                Exit();
+                return;
             }
         }
 
-        BuildHotspots(targetScreen);
+        activeScreenId = targetId;
+        visitedScreenIds.Add(activeScreenId);
 
-        if (!string.IsNullOrWhiteSpace(targetScreen.introText))
-        {
-            ShowLineInDialogue("", targetScreen.introText);
-        }
-        else
-        {
-            SetDialogueVisible(false);
-        }
+        EnterScreen(activeScreenId, targetScreen);
+    }
+
+    // 지금 화면에 AutoExit 조건(ScreenData.autoExitRequiredItemIds)이 걸려 있고, 그 아이템을
+    // 전부 모았으면 autoExitTargetScreenId로 자동으로 돌아간다. Inspect()가 Item 타입 오브젝트를
+    // 얻을 때마다 부른다 - 예) 자료실(_05)에서 단서 세 개를 전부 읽으면 자료실 앞(_04)으로.
+    private void CheckAutoExit()
+    {
+        if (string.IsNullOrEmpty(activeScreenId)) return;
+        if (!screenData.TryGetValue(activeScreenId, out ScreenData screen)) return;
+        if (screen.autoExitRequiredItemIds == null || screen.autoExitRequiredItemIds.Count == 0) return;
+        if (string.IsNullOrEmpty(screen.autoExitTargetScreenId)) return;
+        if (!HasAllItems(screen.autoExitRequiredItemIds)) return;
+
+        NavigateToLinkedScreen(screen.autoExitTargetScreenId);
     }
 
     // 옆 화면으로 이동하는 화살표 버튼을 만든다.
@@ -651,6 +903,10 @@ public class InvestigationController : MonoBehaviour
         io.talkSpeaker = string.IsNullOrEmpty(data.speaker) ? data.objectName : data.speaker;
         io.talkSentence = data.text;
         io.talkChoices = data.talkChoices;
+        io.requiredItemId = data.requiredItemId;
+        io.requiredItemMissingText = data.requiredItemMissingText;
+        io.afterItemId = data.afterItemId;
+        io.afterTargetScreenId = data.afterTargetScreenId;
 
         // 이 오브젝트가 속한 조사 화면 이름. 배치표에서 "이 화면 전용 좌표"를 찾는 데 쓴다
         // (IllustLayout.cs의 [화면별 좌표] 주석 참고).
@@ -787,6 +1043,62 @@ public class InvestigationController : MonoBehaviour
     // InvestigatableObject.OnClickInspect()가 호출한다.
     public void Inspect(InvestigatableObject obj)
     {
+        // ===== 이미 한 번 통과했는지 확인 (선택지를 매번 다시 묻지 않게) =====
+        // AfterItemId가 적혀 있고 그 아이템을 이미 얻었다면 - 즉 이 오브젝트의 선택지를
+        // 이전에 이미 한 번 골랐다면 - 평소 반응(선택지 포함)을 다시 보여주지 않는다. 아래
+        // RequiredItemId 확인보다 먼저 해야 한다: 이 상태에 도달했다는 것 자체가
+        // RequiredItemId 조건도 이미 통과했다는 뜻이므로 다시 검사할 필요가 없고, 여기서
+        // 먼저 걸러야 안내문이 다시 뜨는 일이 없다.
+        //   AfterTargetScreenId까지 적혀 있으면 그 화면으로 곧장 넘어간다 (자료실 문처럼
+        //   "통과하면 다음 방으로 이동"하는 오브젝트 - 기존과 동일하게 동작한다).
+        //   AfterTargetScreenId가 비어 있으면 넘어갈 화면이 없다는 뜻이니, 대화창도 띄우지
+        //   않고 그냥 조용히 무시한다 - "이미 한 번 이야기를 끝낸 사람"처럼, 더 볼 내용이
+        //   없는 Talk/Description 오브젝트에 쓴다 (예: 회의실 사용 대장을 이미 넘겨준 서기).
+        if (!string.IsNullOrEmpty(obj.afterItemId) &&
+            InventoryManager.Instance != null && InventoryManager.Instance.HasItem(obj.afterItemId.Trim()))
+        {
+            if (!string.IsNullOrEmpty(obj.afterTargetScreenId))
+            {
+                NavigateToLinkedScreen(obj.afterTargetScreenId.Trim());
+            }
+            return;
+        }
+
+        // ===== 선행 아이템 확인 =====
+        // RequiredItemId가 적혀 있는데 아직 그 아이템을 못 얻었으면, 평소 반응(설명/대사) 대신
+        // 안내문 한 줄만 보여주고 끝낸다. 아이템 획득/수첩 기록/자료 뷰어까지 전부 건너뛰어야
+        // "아직 조사하지 않은 것"과 동일하게 남아, 나중에 열쇠를 얻고 다시 눌렀을 때
+        // 정상적으로 처음 조사한 것처럼 동작한다.
+        if (!string.IsNullOrEmpty(obj.requiredItemId) &&
+            (InventoryManager.Instance == null || !InventoryManager.Instance.HasItem(obj.requiredItemId.Trim())))
+        {
+            ShowLineInDialogue("", obj.requiredItemMissingText);
+            return;
+        }
+
+        // ===== 조건 없이 곧장 다음 화면으로 넘어가는 오브젝트 =====
+        // afterTargetScreenId만 적혀 있고 afterItemId가 비어 있으면(= 선택지로 얻는 "통과
+        // 표시" 없이 바로 이동), 누를 때마다 조건 없이 곧장 그 화면으로 이동한다. 문을 열고
+        // 닫는 선택지 없이 "문 = 다음 방으로 가는 통로"인 경우에 쓴다 (예: 사장실 문 -
+        // RequiredItemId 게이트는 위에서 이미 통과했다).
+        // AfterTargetScreenId 칸에 "EXIT"라고 적으면 다른 조사 화면이 아니라 조사 자체를
+        // 끝낸다(Exit() - "조사 그만하기"를 누른 것과 똑같다). 예) 사장실 트로피를 눌러
+        // 금고를 발견하면, 다른 조사 화면으로 넘어가는 게 아니라 조사를 마치고 금고를
+        // 여는 대사 장면으로 이어간다.
+        if (string.IsNullOrEmpty(obj.afterItemId) && !string.IsNullOrEmpty(obj.afterTargetScreenId))
+        {
+            string target = obj.afterTargetScreenId.Trim();
+            if (string.Equals(target, "EXIT", StringComparison.OrdinalIgnoreCase))
+            {
+                Exit();
+            }
+            else
+            {
+                NavigateToLinkedScreen(target);
+            }
+            return;
+        }
+
         // ===== 무엇을 살펴봤는지 조사기록(수첩)에 남긴다 =====
         // 이 게임의 수첩은 주인공이 조사하면서 실시간으로 적어나가는 것이므로,
         // 조사한 것은 무엇이든 기록에 남아야 한다.
@@ -798,13 +1110,15 @@ public class InvestigationController : MonoBehaviour
         {
             bool hasWrittenNote = NoteManager.Instance.OnHotspotInspected(activeScreenId, obj.gameObject.name);
 
-            // 선택지가 달린 Talk 오브젝트(예: OBJ_07_Officer2)는 질문 문장만으로는 아직
+            // 선택지가 달린 오브젝트(예: OBJ_07_Manager, 자료실 문)는 질문 문장만으로는 아직
             // 확정된 사실이 아니다 - 플레이어가 무엇을 고르느냐에 따라 결과가 갈리므로,
             // 질문 자체를 수첩에 자동으로 옮겨 적지 않는다. (꼭 남겨야 하면 NoteEntries.csv에
             // 직접 써두면 위의 hasWrittenNote로 잡혀 그대로 적힌다.)
-            bool isChoiceTalk = obj.type == HotspotType.Talk && obj.talkChoices != null && obj.talkChoices.Count > 0;
+            // Talk(대사)뿐 아니라 Description(지문 - 화자 없는 혼잣말/선택 상황)에도 선택지가
+            // 붙을 수 있으므로 타입은 보지 않고 talkChoices 존재 여부만 본다.
+            bool hasChoices = obj.talkChoices != null && obj.talkChoices.Count > 0;
 
-            if (!hasWrittenNote && !isChoiceTalk)
+            if (!hasWrittenNote && !hasChoices)
             {
                 // Talk 타입은 대사이므로 "누가 이렇게 말했다" 형태로, 나머지는 조사 설명 그대로 적는다.
                 string noteBody = obj.type == HotspotType.Talk ? obj.talkSentence : obj.description;
@@ -819,20 +1133,25 @@ public class InvestigationController : MonoBehaviour
         if (obj.type == HotspotType.Item && InventoryManager.Instance != null)
         {
             InventoryManager.Instance.AddItem(obj.itemId);
+
+            // 이 화면에 AutoExit 조건이 걸려 있다면(예: 자료실 단서 세 개), 지금 얻은
+            // 아이템으로 조건이 다 채워졌는지 확인해서 다 채워졌으면 자동으로 돌아간다.
+            CheckAutoExit();
         }
 
         // 서류/사진처럼 자료 자체를 읽어야 하는 것만 전체화면 뷰어로 펼친다.
         // 그 외에는 전부 대화창에 출력한다.
         if (TryOpenDocumentViewer(obj.itemId)) return;
 
+        // 이 문장 끝에 선택지가 있으면 기억해뒀다가, 문장을 다 읽고 닫는 시점에
+        // DismissTalkLine()에서 곧바로 이어서 보여준다 (ShowTalkChoices 참고).
+        // Talk든 Description이든 상관없이 talkChoices만 있으면 선택지가 붙는다
+        // (예: 자료실 문 - 화자 없는 지문인데도 "알릴까 말까" 선택지가 필요한 경우).
+        pendingTalkChoices = (obj.talkChoices != null && obj.talkChoices.Count > 0) ? obj.talkChoices : null;
+
         if (obj.type == HotspotType.Talk)
         {
             string speaker = string.IsNullOrEmpty(obj.talkSpeaker) ? obj.objectName : obj.talkSpeaker;
-
-            // 이 대사 끝에 선택지가 있으면 기억해뒀다가, 대사를 다 읽고 닫는 시점에
-            // DismissTalkLine()에서 곧바로 이어서 보여준다 (ShowTalkChoices 참고).
-            pendingTalkChoices = (obj.talkChoices != null && obj.talkChoices.Count > 0) ? obj.talkChoices : null;
-
             ShowLineInDialogue(speaker, obj.talkSentence);
         }
         else
@@ -989,6 +1308,31 @@ public class InvestigationController : MonoBehaviour
     {
         var panel = GetDialoguePanel();
         if (panel != null) panel.SetActive(visible);
+    }
+
+    // ===== 조사 오브젝트를 배경 바로 위, 암전 판(FadeOverlay)보다는 아래에 둔다 =====
+    // 예전에는 대화창 바로 앞자리(암전 판보다도 앞)에 두었다. 그런데 조사 직전 줄이
+    // IsFadeOut=TRUE인 암전 연출인데, 화면이 아직 다 밝아지기 전에(예: 세이브 창을 닫으며
+    // SaveSlotDialog.Close()가 곧장 다음 줄로 넘기는 경우) 조사가 시작되면, 암전 판을
+    // 뚫고 오브젝트만 먼저 보이고 배경은 판 뒤에 가려진 채로 남아 "오브젝트는 바로
+    // 보이는데 배경만 몇 초 늦게 나타나는" 것처럼 보였다.
+    // 오브젝트를 배경·스탠딩과 똑같이 암전 판보다 뒤(=무대 바로 위)에 두면, 암전이 아직
+    // 안 걷혔을 땐 오브젝트도 배경과 함께 가려지고, 암전이 걷히는 순간 항상 같이 나타난다.
+    private void PlaceAboveStage(Transform target)
+    {
+        var stage = StageController.Instance;
+        if (stage != null)
+        {
+            int stageTop = stage.GetTopStageSiblingIndex();
+            if (stageTop >= 0)
+            {
+                target.SetSiblingIndex(stageTop + 1);
+                return;
+            }
+        }
+
+        // 무대(배경/스탠딩)를 못 찾으면 예전 방식(대화창 바로 앞자리)으로 대신한다.
+        PlaceBehindDialogue(target);
     }
 
     // 조사 오브젝트들이 대화창보다 뒤에 그려지도록 계층 순서를 잡는다.

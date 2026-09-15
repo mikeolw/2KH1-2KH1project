@@ -624,7 +624,7 @@ public class DialogueSystem : MonoBehaviour
             // ===== 미니게임 2: 진행형 타임어택 시작 =====
             // 이 행에 MinigameTimeLimit(초)이 적혀 있으면, 실제 미니게임 패널을 띄우기 전에
             // 배경 타이머부터 켠다. 이 타이머는 지금 이 미니게임 하나의 성공/실패와는 무관하게
-            // "MinigameTimerStopId 세이브포인트에 도달할 때까지" 대사/조사/다른 미니게임을
+            // "MinigameTimerStop이 TRUE인 행에 도달할 때까지" 대사/조사/다른 미니게임을
             // 넘나들며 계속 흐른다 (TimeAttackController.cs 참고). 0(또는 빈 칸)이면 그냥
             // 넘어간다 - 아래의 일반 미니게임 스텁 흐름만 그대로 탄다.
             if (line.minigameTimeLimitSeconds > 0f)
@@ -635,10 +635,7 @@ public class DialogueSystem : MonoBehaviour
                 }
                 else
                 {
-                    TimeAttackController.Instance.StartTimer(
-                        line.minigameTimeLimitSeconds,
-                        line.minigameTimerStopSavePointId,
-                        line.minigameFailEnding);
+                    TimeAttackController.Instance.StartTimer(line.minigameTimeLimitSeconds, line.minigameFailEnding);
                 }
             }
 
@@ -812,6 +809,14 @@ public class DialogueSystem : MonoBehaviour
         if (line.isSavePoint && SavePointManager.Instance != null)
         {
             SavePointManager.Instance.ReachSavePoint(line.savePointId, currentScenarioCsv, lineIndex);
+        }
+
+        // ===== 3-1) 진행형 타임어택 목표 지점 =====
+        // 세이브포인트와 달리 "저장할까요?" 창 없이 조용히 타이머만 끈다
+        // (TimeAttackController.StopIfRunning() 참고).
+        if (line.minigameTimerStop)
+        {
+            TimeAttackController.Instance?.StopIfRunning();
         }
 
         // ===== 4-1) 대화 로그(아래 화살표) 기록 =====
@@ -1578,8 +1583,6 @@ public class DialogueSystem : MonoBehaviour
                         Debug.LogWarning($"[DialogueSystem] Minigame 행의 MinigameTimeLimit '{timeLimitStr}'이 숫자가 아닙니다. (CSV: {csvFileName}, 행: {i + 2})");
                     }
                 }
-                minigameLine.minigameTimerStopSavePointId = GetField(data[i], "MinigameTimerStopId");
-
                 // 이 줄의 BGM/SFX 칸도 읽어둔다 (ApplySoundColumns() 상단 주석 참고 - 원래
                 // 여기가 빠져 있어서 미니게임 줄에서 세이브를 불러오면 BGM이 안 나오는 버그가 있었다).
                 ApplySoundColumns(minigameLine, data[i]);
@@ -1654,6 +1657,10 @@ public class DialogueSystem : MonoBehaviour
             // (SavePointManager.cs 참고).
             line.isSavePoint = GetField(data[i], "IsSavePoint").ToLower() == "true";
             line.savePointId = GetField(data[i], "SavePointId");
+
+            // 진행형 타임어택(미니게임 2)의 목표 지점. TRUE면 이 줄에 도달하는 순간
+            // TimeAttackController.StopIfRunning()이 타이머를 끈다 (DialogueLine.cs 주석 참고).
+            line.minigameTimerStop = GetField(data[i], "MinigameTimerStop").Trim().ToLower() == "true";
 
             // 조사기록 실시간 갱신 켜기/끄기 (#07 타임어택 구간에서 끈다)
             line.noteRealtime = GetField(data[i], "NoteRealtime");
