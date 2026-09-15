@@ -21,18 +21,17 @@ using TMPro;
 //      넘어간다. 조사 화면이나 미니게임 패널이 열려 있었다면 그것부터 강제로 정리한다
 //      (GameFlowManager.TriggerEnding() 참고 - 여기서 InvestigationController/MinigameController를
 //      ForceExit() 해준다).
-//   4) 시간이 끝나기 전에 MinigameTimerStopId 칸에 적힌 SavePointId에 도달하면(=플레이어가
-//      제시간에 목표 지점까지 왔다는 뜻), 타이머는 조용히 사라지고 아무 일도 일어나지 않는다.
-//      (SavePointManager.OnSavePointReached 이벤트를 구독해서 판정한다.)
+//   4) 시간이 끝나기 전에 MinigameTimerStop 칸이 TRUE인 행에 도달하면(=플레이어가 제시간에
+//      목표 지점까지 왔다는 뜻), 타이머는 조용히 사라지고 아무 일도 일어나지 않는다
+//      (DialogueSystem.DisplayLine()이 StopIfRunning()을 불러준다 - 세이브 창은 뜨지 않는다).
 //
-// ===== CSV 사용법 (Minigame 행에서만) =====
-//   MinigameTimeLimit   : 제한시간(초). 예) 300 = 5분. 비워두면 이 행은 타이머를 켜지 않고
-//                         기존 미니게임 스텁("버튼 하나 누르면 성공")으로만 동작한다.
-//   MinigameTimerStopId : 도달하면 타이머가 꺼지는 세이브포인트의 SavePointId. 어떤 Narration/
-//                         대사 행이든 IsSavePoint=TRUE, SavePointId=이 값 으로 적어둔 행과
-//                         철자가 정확히 같아야 한다.
-//   TargetEnding        : (기존 컬럼 재사용) 시간 초과 시 갈 엔딩. Minigame 행이 이미
-//                         "실패 시 엔딩"으로 쓰고 있는 칸을 그대로 쓴다.
+// ===== CSV 사용법 =====
+//   MinigameTimeLimit : (Minigame 행에서만) 제한시간(초). 예) 300 = 5분. 비워두면 이
+//                       행은 타이머를 켜지 않고 기존 미니게임 스텁으로만 동작한다.
+//   MinigameTimerStop : (아무 LineType에나) TRUE로 적어두면 이 행에 도달하는 순간
+//                       진행 중인 타이머를 끈다. 보통 목표 지점의 대사/나레이션 한 줄에 적는다.
+//   TargetEnding      : (Minigame 행에서, 기존 컬럼 재사용) 시간 초과 시 갈 엔딩. Minigame
+//                       행이 이미 "실패 시 엔딩"으로 쓰고 있는 칸을 그대로 쓴다.
 //
 // ===== 씬 배치 =====
 // 인스펙터에서 아무것도 연결하지 않아도 된다. GameBootstrap이 씬에 없으면 자동으로 만들고,
@@ -116,10 +115,11 @@ public class TimeAttackController : MonoBehaviour
     // ---------------------------------------------------------------------------------
 
     // DialogueSystem.ShowNextSentence()가 MinigameTimeLimit이 적힌 Minigame 행을 만났을 때 부른다.
-    //   seconds    : 제한시간(초)
-    //   stopSavePointId : 이 세이브포인트에 도달하면 성공으로 보고 조용히 꺼진다.
-    //   onFailEnding    : 시간 초과 시 이동할 엔딩.
-    public void StartTimer(float seconds, string stopSavePointId, EndingType onFailEnding)
+    //   seconds     : 제한시간(초)
+    //   onFailEnding : 시간 초과 시 이동할 엔딩.
+    // 목표 지점은 여기서 정하지 않는다 - 시간이 끝나기 전에 MinigameTimerStop이 TRUE인
+    // 행(대사든 조사 오브젝트든)에 닿으면 StopIfRunning()이 알아서 꺼준다.
+    public void StartTimer(float seconds, EndingType onFailEnding)
     {
         if (seconds <= 0f)
         {
@@ -127,8 +127,8 @@ public class TimeAttackController : MonoBehaviour
             return;
         }
 
-        BeginRunning(seconds, stopSavePointId, onFailEnding);
-        Debug.Log($"[TimeAttackController] 타임어택 시작: {seconds}초, 목표 세이브포인트='{stopAtSavePointId}'");
+        BeginRunning(seconds, null, onFailEnding);
+        Debug.Log($"[TimeAttackController] 타임어택 시작: {seconds}초");
     }
 
     // ===== 세이브 불러오기 전용 =====
@@ -148,16 +148,11 @@ public class TimeAttackController : MonoBehaviour
     {
         remainingSeconds = seconds;
         failEnding = onFailEnding;
+        // 세이브에서 이어하는 경우에만 stopSavePointId가 채워질 수 있다(RestoreTimer 참고) -
+        // 새로 시작하는 타이머(StartTimer)는 이 값을 아예 넘기지 않는다. 이제 목표 지점은
+        // MinigameTimerStop이 TRUE인 행에 도달하는 것(StopIfRunning())으로 판정하기 때문이다.
         stopAtSavePointId = string.IsNullOrWhiteSpace(stopSavePointId) ? null : stopSavePointId.Trim();
         IsRunning = true;
-
-        if (stopAtSavePointId == null)
-        {
-            // 목표 지점이 안 적혀 있으면 시간이 다 될 때까지 절대 안 꺼진다 - CSV 실수를
-            // 바로 알아챌 수 있게 경고만 남기고 그대로 진행한다(게임을 막지는 않는다).
-            Debug.LogWarning("[TimeAttackController] MinigameTimerStopId가 비어 있어 이 타이머는 " +
-                              "세이브포인트로는 멈추지 않고 시간 초과로만 끝납니다. CSV를 확인하세요.");
-        }
 
         EnsureTimerUI();
         // Canvas를 못 찾아 UI를 못 만들었더라도(EnsureTimerUI 안의 에러 로그 참고) 타이머
@@ -184,6 +179,22 @@ public class TimeAttackController : MonoBehaviour
         if (savePointId != stopAtSavePointId) return;
 
         Debug.Log($"[TimeAttackController] 목표 세이브포인트('{stopAtSavePointId}') 도달 - 타임어택 성공, 타이머를 끕니다.");
+        StopTimer();
+    }
+
+    // ===== 저장 창 없이 조용히 끄기 =====
+    // 세이브포인트(위 HandleSavePointReached)를 거치지 않는 대신, "어느 슬롯에
+    // 저장할까요?" 창도 같이 뜨지 않는다(SavePointManager.ReachSavePoint() 참고) -
+    // 조사 오브젝트를 눌러서 타이머를 끄고 싶은데 그 자리가 세이브포인트는 아닐 때 쓴다
+    // (예: 사장실 트로피를 눌러 금고를 찾은 순간). 목표 지점을 굳이 문자열로 맞출 필요
+    // 없이, 이 함수가 불리는 시점 자체가 곧 "목표 지점에 도달했다"는 뜻이다.
+    // InvestigationController.Inspect()가 HotspotData.stopMinigameTimer가 켜진
+    // 오브젝트를 눌렀을 때 호출한다 (InvestigationData.csv의 MinigameTimerStop 칸 참고).
+    public void StopIfRunning()
+    {
+        if (!IsRunning) return;
+
+        Debug.Log("[TimeAttackController] 목표 지점 도달(저장 창 없이) - 타임어택 성공, 타이머를 끕니다.");
         StopTimer();
     }
 

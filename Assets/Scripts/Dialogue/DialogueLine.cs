@@ -130,15 +130,19 @@ public class DialogueLine
     // 도달해야 한다"는 배경 타이머를 하나 켜두는 용도다. CSV의 MinigameTimeLimit 칸에
     // 초 단위 숫자가 적혀 있는 Minigame 행에서만 채워진다(0이면 "이 행은 타이머를 켜지
     // 않는다"는 뜻 - 나머지 미니게임 행들처럼 그냥 스텁으로만 동작한다).
-    //   MinigameTimeLimit   : 제한시간(초). 예) 300 = 5분.
-    //   MinigameTimerStopId : 이 세이브포인트(SavePointId)에 도달하면 타이머가 조용히
-    //                         꺼진다(성공). CSV의 IsSavePoint=TRUE 행에 적어둔 SavePointId와
-    //                         철자가 정확히 같아야 한다.
+    //   MinigameTimeLimit : 제한시간(초). 예) 300 = 5분.
+    // 시간이 다 되기 전에, 아무 대사/조사/미니게임 행이든 MinigameTimerStop 칸이 TRUE인
+    // 행에 도달하면(=플레이어가 목표 지점까지 왔다는 뜻) 타이머가 조용히 꺼진다(성공,
+    // TimeAttackController.StopIfRunning() 참고 - 세이브 창은 뜨지 않는다).
     // 시간이 다 되면(도달 전) TimeAttackController가 곧바로 minigameFailEnding(=이 행의
     // TargetEnding 칸, 보통 Bad_D)으로 엔딩을 발동시킨다 - 지금 대사가 어디까지 진행됐든,
     // 조사 화면이나 다른 미니게임 패널이 열려 있든 상관없이 즉시 끼어든다.
     public float minigameTimeLimitSeconds;
-    public string minigameTimerStopSavePointId;
+
+    // 이 행에 도달하면 진행 중인 타임어택 타이머를 조용히 끈다(위 minigameTimeLimitSeconds
+    // 주석 참고). Minigame 행이 아니라 아무 LineType에나 적을 수 있다 - 목표 지점이 보통
+    // 평범한 대사/나레이션 한 줄이기 때문이다.
+    public bool minigameTimerStop;
 
     [Header("조사 모드 (선택)")]
     // CSV의 LineType이 "Investigate"인 행에서만 채워진다. isInvestigation이 true면
