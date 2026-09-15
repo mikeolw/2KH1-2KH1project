@@ -77,11 +77,25 @@ public class InvestigationController : MonoBehaviour
     //          InvestigationId (Sprite 칸에 적는다). 예) 재훈의 책상 화면에 NextScreen=회의실 ID,
     //          회의실 화면에 PrevScreen=책상 ID를 적으면 두 화면을 화살표로 오갈 수 있다.
     //   2) Assets/Resources/Dialogues/InvestigationData.csv       (드라이브로 공유 - 스토리, 작가가 고친다)
-    //        컬럼: InvestigationId,HotspotKey,ObjectName,Speaker,Text,ItemId
+    //        컬럼: InvestigationId,HotspotKey,ObjectName,Speaker,Text,ItemId,RequiredItemId,
+    //             RequiredItemMissingText,AfterItemId,AfterTargetScreenId
     //        - ObjectName : 플레이어에게 보이는 이름 (예: "메모장")
     //        - Speaker    : Talk일 때 말하는 사람
     //        - Text       : 조사했을 때 나오는 문구 / 대사
     //        - ItemId     : Type=Item일 때 얻는 아이템
+    //        - RequiredItemId          : 비워두면 항상 조사 가능. 적어두면 그 itemId를 가방에
+    //          먼저 얻어야만 평소 반응(Text/대사)이 나온다. 아직 못 얻었으면 아래
+    //          RequiredItemMissingText만 보여주고 아이템 획득/수첩 기록은 건너뛴다.
+    //          예) 자료실 문(OBJ_07_ResourceRoomdoor)에 RequiredItemId=archive_key를 적어두면,
+    //          자료실 열쇠를 얻기 전엔 문을 조사해도 열리지 않고 안내문만 나온다.
+    //        - RequiredItemMissingText : RequiredItemId를 아직 못 얻었을 때 보여줄 문구.
+    //        - AfterItemId/AfterTargetScreenId : 선택지를 통해 이 itemId를 이미 얻었으면,
+    //          평소 반응(설명/대사/선택지) 대신 곧바로 AfterTargetScreenId 화면으로 넘어간다.
+    //          "선택지 딸린 문을 한 번 통과하면 다음부턴 안 물어보고 바로 다음 방으로" 같은
+    //          용도. AfterItemId는 InventoryTalkChoices.csv의 ItemId 칸으로 얻게 해두면 된다.
+    //          예) 자료실 문에서 "알리지 않는다"를 고르면 resource_room_entered를 얻고,
+    //          AfterItemId=resource_room_entered / AfterTargetScreenId=BG_07_InvestigationSite_05로
+    //          적어두면 그 다음부터 문을 눌렀을 때 선택지 없이 바로 그 화면으로 이동한다.
     //        - 특수 키 IntroText : 조사를 시작할 때 대화창에 띄울 안내문 (Text 칸)
     // 두 파일은 InvestigationId + HotspotKey로 짝을 맞춘다.
     //
@@ -94,9 +108,10 @@ public class InvestigationController : MonoBehaviour
     private const string InvestigationStageCsv = "Stage/InvestigationStage";
     private const string InvestigationDataCsv = "Dialogues/InvestigationData";
 
-    // ===== Talk 타입 오브젝트의 선택지 =====
-    // 대부분의 Talk 오브젝트는 대사 한 줄 보여주고 끝이지만, 몇몇은 "누가 시켰냐" 같은
-    // 질문에 선택지로 답해야 한다. 그 선택지 데이터만 따로 여기 담는다(InvestigationId +
+    // ===== 조사 오브젝트의 선택지 =====
+    // 대부분의 Talk/Description 오브젝트는 문장 한 줄 보여주고 끝이지만, 몇몇은 "누가
+    // 시켰냐"(Talk, 예: OBJ_07_Manager) 또는 "알릴까 말까"(Description, 예: 자료실 문)
+    // 처럼 선택지로 답해야 한다. 그 선택지 데이터만 따로 여기 담는다(InvestigationId +
     // HotspotKey로 InvestigationData.csv와 짝을 맞춘다). 컬럼:
     //   InvestigationId,HotspotKey,ChoiceText,ResponseSpeaker,ResponseText,ItemId,TargetEnding
     //   - ChoiceText     : 선택지 버튼 문구
@@ -116,6 +131,10 @@ public class InvestigationController : MonoBehaviour
         public string itemId;
         public string spriteName;
         public List<InvestigationTalkChoice> talkChoices;
+        public string requiredItemId;
+        public string requiredItemMissingText;
+        public string afterItemId;
+        public string afterTargetScreenId;
     }
 
     // 조사 화면 하나에 대한 정보
@@ -322,7 +341,11 @@ public class InvestigationController : MonoBehaviour
                 text = GetField(textRow, "Text"),
                 itemId = GetField(textRow, "ItemId"),
                 spriteName = spriteName,
-                talkChoices = talkChoices
+                talkChoices = talkChoices,
+                requiredItemId = GetField(textRow, "RequiredItemId"),
+                requiredItemMissingText = GetField(textRow, "RequiredItemMissingText"),
+                afterItemId = GetField(textRow, "AfterItemId"),
+                afterTargetScreenId = GetField(textRow, "AfterTargetScreenId")
             });
         }
     }
@@ -650,6 +673,10 @@ public class InvestigationController : MonoBehaviour
         io.talkSpeaker = string.IsNullOrEmpty(data.speaker) ? data.objectName : data.speaker;
         io.talkSentence = data.text;
         io.talkChoices = data.talkChoices;
+        io.requiredItemId = data.requiredItemId;
+        io.requiredItemMissingText = data.requiredItemMissingText;
+        io.afterItemId = data.afterItemId;
+        io.afterTargetScreenId = data.afterTargetScreenId;
 
         // 이 오브젝트가 속한 조사 화면 이름. 배치표에서 "이 화면 전용 좌표"를 찾는 데 쓴다
         // (IllustLayout.cs의 [화면별 좌표] 주석 참고).
@@ -786,6 +813,31 @@ public class InvestigationController : MonoBehaviour
     // InvestigatableObject.OnClickInspect()가 호출한다.
     public void Inspect(InvestigatableObject obj)
     {
+        // ===== 이미 한 번 통과했는지 확인 (선택지를 매번 다시 묻지 않게) =====
+        // AfterItemId가 적혀 있고 그 아이템을 이미 얻었다면 - 즉 이 오브젝트의 선택지를
+        // 이전에 이미 한 번 골랐다면 - 평소 반응(선택지 포함)을 다시 보여주지 않고
+        // AfterTargetScreenId 화면으로 곧장 넘어간다. 아래 RequiredItemId 확인보다 먼저 해야
+        // 한다: 이 상태에 도달했다는 것 자체가 RequiredItemId 조건도 이미 통과했다는 뜻이므로
+        // 다시 검사할 필요가 없고, 여기서 먼저 걸러야 안내문이 다시 뜨는 일이 없다.
+        if (!string.IsNullOrEmpty(obj.afterItemId) && !string.IsNullOrEmpty(obj.afterTargetScreenId) &&
+            InventoryManager.Instance != null && InventoryManager.Instance.HasItem(obj.afterItemId.Trim()))
+        {
+            NavigateToLinkedScreen(obj.afterTargetScreenId.Trim());
+            return;
+        }
+
+        // ===== 선행 아이템 확인 =====
+        // RequiredItemId가 적혀 있는데 아직 그 아이템을 못 얻었으면, 평소 반응(설명/대사) 대신
+        // 안내문 한 줄만 보여주고 끝낸다. 아이템 획득/수첩 기록/자료 뷰어까지 전부 건너뛰어야
+        // "아직 조사하지 않은 것"과 동일하게 남아, 나중에 열쇠를 얻고 다시 눌렀을 때
+        // 정상적으로 처음 조사한 것처럼 동작한다.
+        if (!string.IsNullOrEmpty(obj.requiredItemId) &&
+            (InventoryManager.Instance == null || !InventoryManager.Instance.HasItem(obj.requiredItemId.Trim())))
+        {
+            ShowLineInDialogue("", obj.requiredItemMissingText);
+            return;
+        }
+
         // ===== 무엇을 살펴봤는지 조사기록(수첩)에 남긴다 =====
         // 이 게임의 수첩은 주인공이 조사하면서 실시간으로 적어나가는 것이므로,
         // 조사한 것은 무엇이든 기록에 남아야 한다.
@@ -797,13 +849,15 @@ public class InvestigationController : MonoBehaviour
         {
             bool hasWrittenNote = NoteManager.Instance.OnHotspotInspected(activeScreenId, obj.gameObject.name);
 
-            // 선택지가 달린 Talk 오브젝트(예: OBJ_07_Officer2)는 질문 문장만으로는 아직
+            // 선택지가 달린 오브젝트(예: OBJ_07_Manager, 자료실 문)는 질문 문장만으로는 아직
             // 확정된 사실이 아니다 - 플레이어가 무엇을 고르느냐에 따라 결과가 갈리므로,
             // 질문 자체를 수첩에 자동으로 옮겨 적지 않는다. (꼭 남겨야 하면 NoteEntries.csv에
             // 직접 써두면 위의 hasWrittenNote로 잡혀 그대로 적힌다.)
-            bool isChoiceTalk = obj.type == HotspotType.Talk && obj.talkChoices != null && obj.talkChoices.Count > 0;
+            // Talk(대사)뿐 아니라 Description(지문 - 화자 없는 혼잣말/선택 상황)에도 선택지가
+            // 붙을 수 있으므로 타입은 보지 않고 talkChoices 존재 여부만 본다.
+            bool hasChoices = obj.talkChoices != null && obj.talkChoices.Count > 0;
 
-            if (!hasWrittenNote && !isChoiceTalk)
+            if (!hasWrittenNote && !hasChoices)
             {
                 // Talk 타입은 대사이므로 "누가 이렇게 말했다" 형태로, 나머지는 조사 설명 그대로 적는다.
                 string noteBody = obj.type == HotspotType.Talk ? obj.talkSentence : obj.description;
@@ -824,14 +878,15 @@ public class InvestigationController : MonoBehaviour
         // 그 외에는 전부 대화창에 출력한다.
         if (TryOpenDocumentViewer(obj.itemId)) return;
 
+        // 이 문장 끝에 선택지가 있으면 기억해뒀다가, 문장을 다 읽고 닫는 시점에
+        // DismissTalkLine()에서 곧바로 이어서 보여준다 (ShowTalkChoices 참고).
+        // Talk든 Description이든 상관없이 talkChoices만 있으면 선택지가 붙는다
+        // (예: 자료실 문 - 화자 없는 지문인데도 "알릴까 말까" 선택지가 필요한 경우).
+        pendingTalkChoices = (obj.talkChoices != null && obj.talkChoices.Count > 0) ? obj.talkChoices : null;
+
         if (obj.type == HotspotType.Talk)
         {
             string speaker = string.IsNullOrEmpty(obj.talkSpeaker) ? obj.objectName : obj.talkSpeaker;
-
-            // 이 대사 끝에 선택지가 있으면 기억해뒀다가, 대사를 다 읽고 닫는 시점에
-            // DismissTalkLine()에서 곧바로 이어서 보여준다 (ShowTalkChoices 참고).
-            pendingTalkChoices = (obj.talkChoices != null && obj.talkChoices.Count > 0) ? obj.talkChoices : null;
-
             ShowLineInDialogue(speaker, obj.talkSentence);
         }
         else

@@ -103,6 +103,25 @@ public class InvestigatableObject : MonoBehaviour
     // InvestigationController.BuildScreens()가 InvestigationTalkChoices.csv를 읽어 채운다.
     public System.Collections.Generic.List<InvestigationTalkChoice> talkChoices;
 
+    [Header("선행 아이템 (비워두면 항상 조사 가능)")]
+    // 이 아이템을 아직 가방에 얻지 못했으면, 평소 반응(설명/대사) 대신
+    // requiredItemMissingText만 보여주고 끝낸다 (아이템 획득/수첩 기록/자료 뷰어 전부 건너뜀).
+    // 예: 자료실 열쇠(archive_key)를 얻기 전에 자료실 문을 조사하면
+    //     "자료실 열쇠부터 찾아야 할 것 같다." 라는 안내만 나오고 문은 열리지 않는다.
+    public string requiredItemId;
+    [TextArea(2, 5)]
+    public string requiredItemMissingText;
+
+    [Header("완료 표시 아이템 (비워두면 이 기능 사용 안 함)")]
+    // 선택지(InvestigationTalkChoices.csv)를 골라서 이 아이템을 이미 얻었으면, 평소 반응
+    // (설명/대사/선택지) 대신 곧바로 afterTargetScreenId 화면으로 넘어간다. "선택지가 달린
+    // 문 같은 걸 한 번 통과하면, 그 다음부터는 물어보지 않고 바로 다음 방으로 이동시키고
+    // 싶을 때" 쓴다. itemId 자체는 인벤토리 슬롯이 없어 화면에는 보이지 않는 "통과했다"
+    // 표식일 뿐이다. 예: 자료실 문에서 "알리지 않는다"를 고르면 resource_room_entered를
+    // 얻고, 그 다음부터 문을 누르면 매번 선택지 없이 바로 BG_07_InvestigationSite_05로 이동한다.
+    public string afterItemId;
+    public string afterTargetScreenId;
+
     // 이 오브젝트의 Button 컴포넌트 OnClick()에 연결해서 쓴다.
     public void OnClickInspect()
     {
