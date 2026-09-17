@@ -25,7 +25,7 @@ using UnityEngine.SceneManagement;
 //      - 한 번 만들어두면 씬이 바뀌어도 계속 살아 있다.
 //   2) 씬마다 하나씩 필요한 것
 //      - StageController, DocumentViewerController, NoteManager, DeductionController,
-//        InventoryManager, ItemModalController
+//        InventoryManager, ItemModalController, ToastNotificationManager
 //      - 화면(Canvas)에 붙어 동작하거나 씬 진행 상태를 다루므로 씬이 바뀌면 새로 필요하다.
 //        (단, 게임 진행 상태를 들고 있는 InventoryManager/NoteManager는 세이브를 통해
 //         복원되므로 씬이 바뀌어도 데이터가 사라지지 않는다.)
@@ -111,6 +111,10 @@ public static class GameBootstrap
             // 미니게임 2(진행형 타임어택)의 mm:ss 카운트다운 UI. StageController와 마찬가지로
             // 인스펙터 연결 없이 스스로 Canvas를 찾아 UI를 만들어내므로 자동 생성해도 안전하다.
             if (TimeAttackController.Instance == null) Create<TimeAttackController>("TimeAttackController");
+
+            // 아이템 획득/메모 추가 시 우상단에 잠깐 뜨는 알림(토스트). InventoryManager/NoteManager가
+            // 이미 만들어진 뒤라야 그 이벤트를 구독할 수 있으므로 Canvas 그룹 마지막에 만든다.
+            if (ToastNotificationManager.Instance == null) Create<ToastNotificationManager>("ToastNotificationManager");
         }
         else
         {

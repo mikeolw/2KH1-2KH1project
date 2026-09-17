@@ -61,6 +61,12 @@ public class NoteManager : MonoBehaviour
     // 수첩 내용이 바뀔 때마다 발생. 수첩 UI(NotePanelUI)가 구독해서 화면을 다시 그린다.
     public event System.Action OnNoteChanged;
 
+    // ToastNotificationManager가 구독해서 "새 메모가 추가되었습니다" 알림을 띄우는 데 쓴다.
+    // AddEntry()에서 실제로 새로 기록될 때만 발생한다 - 초기 메모(AddInitialEntries), 세이브
+    // 복원(RestoreEntries), #07 보류함 일괄 반영(FlushDeferredEntries)에서는 발생시키지 않는다.
+    // 그때 발생시키면 게임 시작/로드 직후나 #07 구간이 끝날 때 알림이 한꺼번에 쏟아지게 된다.
+    public event System.Action OnNoteAdded;
+
     private void Awake()
     {
         if (Instance == null) Instance = this;
@@ -251,6 +257,7 @@ public class NoteManager : MonoBehaviour
 
         recordedEntryIds.Add(entryId);
         OnNoteChanged?.Invoke();
+        OnNoteAdded?.Invoke();
     }
 
     // triggerType과 triggerKey가 모두 일치하는 메모를 전부 추가한다.

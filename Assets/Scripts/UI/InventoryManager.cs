@@ -23,6 +23,10 @@ public class InventoryManager : MonoBehaviour
     // InventorySlotUI들이 구독해서, 아이템이 새로 추가될 때마다 자기 표시 상태를 갱신한다.
     public event Action OnInventoryChanged;
 
+    // ToastNotificationManager가 구독해서 "OOO 획득" 알림을 띄우는 데 쓴다. RestoreItems/ClearAll
+    // (세이브 불러오기, 새 게임)에서는 발생시키지 않는다 - 그때 한꺼번에 알림이 쏟아지면 안 되기 때문이다.
+    public event Action<string> OnItemAdded;
+
     private void Awake()
     {
         if (Instance == null) Instance = this;
@@ -40,6 +44,9 @@ public class InventoryManager : MonoBehaviour
 
         if (acquiredItemIds.Add(itemId))
         {
+            // 아이템 획득 알림(토스트)이 관련 메모 알림보다 먼저 뜨도록, 수첩 연동보다 먼저 발생시킨다.
+            OnItemAdded?.Invoke(itemId);
+
             // 아이템을 새로 얻었을 때 조사기록(수첩)에도 관련 메모가 있으면 함께 추가한다.
             // NoteEntries.csv에서 TriggerType=Item, TriggerKey=이 itemId인 줄을 찾는다.
             if (NoteManager.Instance != null) NoteManager.Instance.OnItemAcquired(itemId);
