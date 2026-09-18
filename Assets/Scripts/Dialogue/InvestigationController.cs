@@ -80,6 +80,28 @@ public class InvestigationController : MonoBehaviour
     private const string ResourceRoomDoorScreenId = "BG_07_InvestigationSite_04";
     private const string ResourceRoomDoorHotspotKey = "Hotspot_ResourceRoomdoor";
 
+    // 지금 보여주고 있는 대사를 닫으면(DismissTalkLine) 실행할 일. pendingTalkChoices와
+    // 같은 자리에서 쓰이지만 선택지가 아니라 "그냥 할 일 하나"를 미뤄두는 용도다 - 예)
+    // 아이템을 얻어 자동 이동 조건이 채워졌을 때, 그 아이템을 보여주는 대사를 다 읽기도
+    // 전에 화면이 먼저 바뀌어버리는 것을 막기 위해 CheckAutoExit()를 여기로 미룬다
+    // (CheckAutoExit() 참고). 두 필드가 동시에 쓰일 일은 없다 - 있으면 pendingTalkChoices가 우선한다.
+    private Action pendingAfterDismiss;
+
+    // ===== 조사할 때 서류 뷰어를 열지 않고 대사+토스트로만 안내하는 오브젝트 =====
+    // (화면ID, HotspotKey) 쌍을 적어둔다. ItemData.csv의 ViewerType은 그대로
+    // Document/Photo로 둬야 한다 - 가방에서 "펼쳐보기"로 나중에 다시 읽을 수 있어야
+    // 하기 때문이다(InventoryPanelUI.cs가 이 값을 그대로 쓴다). 여기 적힌 오브젝트만
+    // "주울 때는" 뷰어를 건너뛰고 Inspect()의 대사(Text 칸) 표시로 대신한다.
+    // 자료실 단서 세 개가 전부 이 방식이라, 세 개를 다 읽고 닫아야 자동 이동
+    // 조건(CheckAutoExit)이 검사된다(대사 없이 뷰어만 열리면 그 순간 조용히 채워져버려
+    // 부자연스럽다).
+    private static readonly HashSet<string> ItemHotspotsSkipAutoViewer = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+    {
+        TextKey("BG_07_InvestigationSite_05", "Hotspot_Documents_F01R_Clue"),
+        TextKey("BG_07_InvestigationSite_05", "Hotspot_Documents_F02R_Clue1"),
+        TextKey("BG_07_InvestigationSite_05", "Hotspot_Documents_F02R_Clue2"),
+    };
+
     // ===== 조사 데이터는 두 파일로 나뉜다 =====
     //   1) Assets/StreamingAssets/Stage/InvestigationStage.csv  (git으로 공유 - 스토리 없음, 배치 도구가 고친다)
     //        컬럼: InvestigationId,HotspotKey,Type,Sprite
@@ -187,6 +209,12 @@ public class InvestigationController : MonoBehaviour
         // 예) 자료실(_05)에서 단서 세 개를 전부 읽으면 자료실 앞(_04)으로 자동으로 돌아간다.
         public List<string> autoExitRequiredItemIds;
         public string autoExitTargetScreenId;
+
+        // 조건을 다 채운 순간 곧바로 화면을 넘기지 않고, 먼저 보여줄 마무리 대사(Text 칸,
+        // AutoExit 특수 줄에서는 지금까지 쓰지 않던 칸이라 새 컬럼 없이 재사용한다). 비워두면
+        // 예전처럼 조건이 채워지자마자 곧장 이동한다. 예) 자료실 단서를 다 모으면
+        // "중요한 건 전부 찾은 것 같다. 얼른 빠져나가자." 대사를 먼저 보여준 뒤 이동한다.
+        public string autoExitText;
 
         // ===== NextScreen 화살표가 보이는 조건 =====
         // CSV에 HotspotKey="NextScreenRequires" 특수 줄로 적는다. ItemId 칸에 "|"로 구분해
@@ -309,6 +337,7 @@ public class InvestigationController : MonoBehaviour
                     {
                         screen.autoExitRequiredItemIds = ParseItemList(GetField(row, "ItemId"));
                         screen.autoExitTargetScreenId = GetField(row, "AfterTargetScreenId").Trim();
+                        screen.autoExitText = GetField(row, "Text");
                     }
                     else orphans.Add($"{id}/{key}");
                     continue;
@@ -413,6 +442,7 @@ public class InvestigationController : MonoBehaviour
             {
                 screen.autoExitRequiredItemIds = ParseItemList(GetField(row, "ItemId"));
                 screen.autoExitTargetScreenId = GetField(row, "AfterTargetScreenId").Trim();
+                screen.autoExitText = GetField(row, "Text");
                 continue;
             }
             if (key == "NextScreenRequires")
@@ -749,6 +779,7 @@ public class InvestigationController : MonoBehaviour
         onExitCallback = null;
         pendingTalkChoices = null;
         pendingTalkChoiceSource = null;
+        pendingAfterDismiss = null;
 
         SetDialogueVisible(true);
     }
@@ -855,7 +886,19 @@ public class InvestigationController : MonoBehaviour
         if (string.IsNullOrEmpty(screen.autoExitTargetScreenId)) return;
         if (!HasAllItems(screen.autoExitRequiredItemIds)) return;
 
-        NavigateToLinkedScreen(screen.autoExitTargetScreenId);
+        string targetScreenId = screen.autoExitTargetScreenId;
+
+        if (!string.IsNullOrWhiteSpace(screen.autoExitText))
+        {
+            // 조건을 다 채운 순간 곧장 화면부터 넘기지 않고, 마무리 대사를 먼저 보여준
+            // 뒤 그 대사를 닫을 때 이동한다 (DismissTalkLine()의 pendingAfterDismiss 참고).
+            pendingAfterDismiss = () => NavigateToLinkedScreen(targetScreenId);
+            ShowLineInDialogue("", screen.autoExitText);
+        }
+        else
+        {
+            NavigateToLinkedScreen(targetScreenId);
+        }
     }
 
     // 옆 화면으로 이동하는 화살표 버튼을 만든다.
@@ -1146,18 +1189,44 @@ public class InvestigationController : MonoBehaviour
             }
         }
 
-        if (obj.type == HotspotType.Item && InventoryManager.Instance != null)
-        {
-            InventoryManager.Instance.AddItem(obj.itemId);
+        // ===== 오브젝트 하나가 아이템 여러 개를 한 번에 주는 경우 =====
+        // ItemId 칸에 "이름1|이름2"처럼 세로줄로 여러 개를 적어두면 전부 가방에 넣는다
+        // (AutoExit 등 화면 단위 조건에서 이미 쓰던 "|" 구분 방식을 그대로 재사용한다 -
+        // ParseItemList 참고). 예) 자료실 문서 뭉치(OBJ_07_Documents_F01R_Clue) - 그림은
+        // 한 장이지만 그 안에 서로 다른 문서 네 개가 들어있다는 설정이라, 펼쳐볼 때 네
+        // 아이템을 동시에 준다. 아이템이 하나뿐인 오브젝트는 지금까지와 똑같이 동작한다.
+        List<string> grantedItemIds = ParseItemList(obj.itemId);
+        bool grantedAnyItem = false;
 
-            // 이 화면에 AutoExit 조건이 걸려 있다면(예: 자료실 단서 세 개), 지금 얻은
-            // 아이템으로 조건이 다 채워졌는지 확인해서 다 채워졌으면 자동으로 돌아간다.
-            CheckAutoExit();
+        if (obj.type == HotspotType.Item && InventoryManager.Instance != null && grantedItemIds != null)
+        {
+            foreach (string grantedId in grantedItemIds)
+            {
+                InventoryManager.Instance.AddItem(grantedId);
+            }
+            grantedAnyItem = true;
         }
 
-        // 서류/사진처럼 자료 자체를 읽어야 하는 것만 전체화면 뷰어로 펼친다.
-        // 그 외에는 전부 대화창에 출력한다.
-        if (TryOpenDocumentViewer(obj.itemId)) return;
+        // ===== 뷰어를 열지 않고 대사+토스트로만 안내하는 오브젝트 =====
+        // 아이템을 여러 개 한 번에 줄 때(그림이 한 장뿐이라 뷰어로는 그 중 하나의
+        // 제목/설명만 보여줄 수 있다)와, ItemHotspotsSkipAutoViewer에 직접 적어둔
+        // 오브젝트(자료실 단서들 - 나중에 가방에서는 펼쳐볼 수 있어야 하니 ViewerType은
+        // 그대로 두고, "주울 때"만 건너뛴다)는 뷰어 대신 아래 대사(Text 칸)를 보여주고,
+        // 아이템을 얻었다는 사실은 토스트 알림으로만 따로 안내한다.
+        bool isMultiItemGrant = grantedItemIds != null && grantedItemIds.Count > 1;
+        bool skipAutoViewer = isMultiItemGrant ||
+            (activeScreenId != null && ItemHotspotsSkipAutoViewer.Contains(TextKey(activeScreenId, obj.gameObject.name)));
+        if (!skipAutoViewer)
+        {
+            string viewerItemId = grantedItemIds != null && grantedItemIds.Count > 0 ? grantedItemIds[0] : obj.itemId;
+            if (TryOpenDocumentViewer(viewerItemId))
+            {
+                // 뷰어는 화면 전환과 무관하게 항상 볼 수 있으므로, 자동 이동 조건을
+                // 곧바로 검사해도 된다(예전과 동일한 순서).
+                if (grantedAnyItem) CheckAutoExit();
+                return;
+            }
+        }
 
         // 이 문장 끝에 선택지가 있으면 기억해뒀다가, 문장을 다 읽고 닫는 시점에
         // DismissTalkLine()에서 곧바로 이어서 보여준다 (ShowTalkChoices 참고).
@@ -1165,6 +1234,16 @@ public class InvestigationController : MonoBehaviour
         // (예: 자료실 문 - 화자 없는 지문인데도 "알릴까 말까" 선택지가 필요한 경우).
         pendingTalkChoices = (obj.talkChoices != null && obj.talkChoices.Count > 0) ? obj.talkChoices : null;
         pendingTalkChoiceSource = pendingTalkChoices != null ? obj : null;
+
+        // ===== 지금 얻은 아이템으로 자동 이동 조건이 채워졌는지는, 이 대사를 다 읽고
+        // 닫은 뒤에 검사한다 =====
+        // 지금 바로 검사하면, 마지막 아이템을 이 클릭으로 막 얻어서 조건이 채워졌을 때
+        // 이 대사가 화면에 뜨기도 전에(또는 뜬 직후 곧바로) 화면이 먼저 넘어가버려서,
+        // 정작 이 오브젝트 자신의 대사는 이미 다음 화면 배경 위에서 나오는 것처럼
+        // 보이는 문제가 있었다. 선택지가 달린 오브젝트라면(pendingTalkChoices) 그쪽이
+        // 우선이라 이 값은 쓰이지 않는다 - 지금 CSV에는 아이템 지급과 선택지가 동시에
+        // 걸린 오브젝트가 없어 문제되지 않는다.
+        if (grantedAnyItem) pendingAfterDismiss = CheckAutoExit;
 
         if (obj.type == HotspotType.Talk)
         {
@@ -1204,6 +1283,17 @@ public class InvestigationController : MonoBehaviour
             var choices = pendingTalkChoices;
             pendingTalkChoices = null;
             ShowTalkChoices(choices);
+            return;
+        }
+
+        // 방금 닫은 대사 뒤에 미뤄둔 일이 있으면(예: 자동 이동 조건 검사 - CheckAutoExit()
+        // 선언부 주석 참고) 대화창을 닫기 전에 먼저 실행한다. 그 일이 새 대사를 또
+        // 띄울 수도 있으므로(예: 마무리 대사) 아래 SetDialogueVisible(false)보다 먼저다.
+        if (pendingAfterDismiss != null)
+        {
+            Action action = pendingAfterDismiss;
+            pendingAfterDismiss = null;
+            action.Invoke();
             return;
         }
 
