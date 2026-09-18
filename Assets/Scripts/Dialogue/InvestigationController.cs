@@ -65,6 +65,21 @@ public class InvestigationController : MonoBehaviour
     // Inspect()가 Talk 오브젝트에 선택지가 달려 있을 때 채워둔다 (ShowTalkChoices 참고).
     private List<InvestigationTalkChoice> pendingTalkChoices;
 
+    // pendingTalkChoices를 채운 조사 오브젝트 그 자체. 선택지를 골랐을 때(OnTalkChoiceSelected)
+    // "이 선택지가 어느 오브젝트에서 나왔는지" 알아야 하는 경우에 쓴다 - 예) 자료실 문의
+    // "알리지 않는다" 선택지는 곧바로 타이밍 클릭 미니게임을 걸어야 하는데, 성공했을 때
+    // 이동할 화면은 이 오브젝트의 afterTargetScreenId(=BG_07_InvestigationSite_05, 문을
+    // 다시 눌렀을 때 자동 이동하는 화면과 같은 값)를 그대로 재사용한다.
+    private InvestigatableObject pendingTalkChoiceSource;
+
+    // ===== 자료실 문: 선택지를 고르는 즉시 타이밍 클릭 미니게임으로 이어지는 유일한 지점 =====
+    // 새 CSV 컬럼을 추가하지 않고(팀 규칙) 이 한 곳만을 위한 예외 분기이므로, 다른
+    // ScreensWithoutExitButton처럼 화면/오브젝트 이름을 코드에 직접 적어 식별한다.
+    // 나중에 다른 곳에도 같은 방식(선택지 -> 타이밍 미니게임)이 필요해지면, 이 두 상수를
+    // 목록(배열/HashSet)으로 바꾸고 OnTalkChoiceSelected()의 판정도 그에 맞게 넓히면 된다.
+    private const string ResourceRoomDoorScreenId = "BG_07_InvestigationSite_04";
+    private const string ResourceRoomDoorHotspotKey = "Hotspot_ResourceRoomdoor";
+
     // ===== 조사 데이터는 두 파일로 나뉜다 =====
     //   1) Assets/StreamingAssets/Stage/InvestigationStage.csv  (git으로 공유 - 스토리 없음, 배치 도구가 고친다)
     //        컬럼: InvestigationId,HotspotKey,Type,Sprite
@@ -733,6 +748,7 @@ public class InvestigationController : MonoBehaviour
         visitedScreenIds.Clear();
         onExitCallback = null;
         pendingTalkChoices = null;
+        pendingTalkChoiceSource = null;
 
         SetDialogueVisible(true);
     }
@@ -1148,6 +1164,7 @@ public class InvestigationController : MonoBehaviour
         // Talk든 Description이든 상관없이 talkChoices만 있으면 선택지가 붙는다
         // (예: 자료실 문 - 화자 없는 지문인데도 "알릴까 말까" 선택지가 필요한 경우).
         pendingTalkChoices = (obj.talkChoices != null && obj.talkChoices.Count > 0) ? obj.talkChoices : null;
+        pendingTalkChoiceSource = pendingTalkChoices != null ? obj : null;
 
         if (obj.type == HotspotType.Talk)
         {
@@ -1240,6 +1257,11 @@ public class InvestigationController : MonoBehaviour
             DialogueSystem.Instance.choicePanel.SetActive(false);
         }
 
+        // 이 선택지를 내놓은 오브젝트를 지역 변수로 옮겨두고 필드는 비운다 - 이 함수 밖에서
+        // 또 참조할 일이 없고, 다음 조사에 낡은 값이 남아있지 않게 하기 위함이다.
+        InvestigatableObject sourceObj = pendingTalkChoiceSource;
+        pendingTalkChoiceSource = null;
+
         // 엔딩으로 직행하는 보기라면 대답/아이템은 볼 것도 없이 바로 엔딩으로 넘어간다
         // (Exit()의 자료실 열쇠 미획득 처리와 같은 방식 - InvestigationController.Exit() 참고).
         if (choice.targetEnding != EndingType.None)
@@ -1249,6 +1271,18 @@ public class InvestigationController : MonoBehaviour
             {
                 GameFlowManager.Instance.TriggerEnding(choice.targetEnding);
             }
+            return;
+        }
+
+        // ===== 자료실 문: "알리지 않는다"를 고르는 즉시 타이밍 클릭 미니게임 =====
+        // 평소처럼 아이템을 주고 대답 대사를 보여주는 대신, 그 자리에서 곧바로 미니게임을
+        // 띄운다. 성공하면 그때 아이템(통과 표시)을 주고 문을 다시 누른 것처럼 자료실로
+        // 곧장 이동하고, 실패하면 Bad_C 엔딩으로 보낸다 (ResourceRoomDoorScreenId/
+        // ResourceRoomDoorHotspotKey 선언부 주석 참고).
+        if (activeScreenId == ResourceRoomDoorScreenId &&
+            sourceObj != null && sourceObj.gameObject.name == ResourceRoomDoorHotspotKey)
+        {
+            StartResourceRoomSneakMinigame(choice, sourceObj);
             return;
         }
 
@@ -1266,6 +1300,54 @@ public class InvestigationController : MonoBehaviour
         {
             SetDialogueVisible(false);
         }
+    }
+
+    // 자료실 문에서 "알리지 않는다"를 골랐을 때 실행하는 타이밍 클릭 미니게임.
+    //   성공 -> choice.itemId(통과 표시)를 주고 sourceObj.afterTargetScreenId(=자료실)로 이동.
+    //   실패 -> Bad_C 엔딩 (담당 직원에게 알린다를 골랐을 때와 같은 엔딩).
+    private void StartResourceRoomSneakMinigame(InvestigationTalkChoice choice, InvestigatableObject sourceObj)
+    {
+        if (TimingClickMinigameController.Instance == null)
+        {
+            // 미니게임 컨트롤러가 없으면(예: 씬에 Canvas가 없는 테스트 환경) 게임을 막는
+            // 대신 예전처럼 아이템만 주고 곧장 이동시킨다 - MinigameController.EnterScreen()
+            // 쪽의 안전장치와 같은 방침.
+            Debug.LogWarning("[InvestigationController] TimingClickMinigameController가 없어 자료실 잠입 미니게임을 건너뜁니다.");
+            if (!string.IsNullOrWhiteSpace(choice.itemId) && InventoryManager.Instance != null)
+            {
+                InventoryManager.Instance.AddItem(choice.itemId.Trim());
+            }
+            if (!string.IsNullOrEmpty(sourceObj.afterTargetScreenId))
+            {
+                NavigateToLinkedScreen(sourceObj.afterTargetScreenId.Trim());
+            }
+            else
+            {
+                SetDialogueVisible(false);
+            }
+            return;
+        }
+
+        // 대사창을 닫아 미니게임 화면을 가리지 않게 한다 (선택지 창은 이미 위에서 닫았다).
+        SetDialogueVisible(false);
+
+        TimingClickMinigameController.Instance.StartGame(
+            onSuccessCallback: () =>
+            {
+                if (!string.IsNullOrWhiteSpace(choice.itemId) && InventoryManager.Instance != null)
+                {
+                    InventoryManager.Instance.AddItem(choice.itemId.Trim());
+                }
+                if (!string.IsNullOrEmpty(sourceObj.afterTargetScreenId))
+                {
+                    NavigateToLinkedScreen(sourceObj.afterTargetScreenId.Trim());
+                }
+            },
+            onFailCallback: () =>
+            {
+                ForceExit();
+                GameFlowManager.Instance?.TriggerEnding(EndingType.Bad_C);
+            });
     }
 
     private bool TryOpenDocumentViewer(string itemId)
