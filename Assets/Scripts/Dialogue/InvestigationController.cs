@@ -102,6 +102,27 @@ public class InvestigationController : MonoBehaviour
         TextKey("BG_07_InvestigationSite_05", "Hotspot_Documents_F02R_Clue2"),
     };
 
+    // ===== "엉뚱한 곳"을 조사하면 타임어택 시간이 깎이는 오브젝트들 =====
+    // 자료실(_05)의 진짜 단서(Hotspot_..._Clue)가 아닌 옆의 가짜 서류 더미, 사장실(_07)의
+    // 커튼/책장/사장 책상처럼 "뒤져볼 법하지만 정답은 아닌" 자리를 조사하면 시간을 낭비했다는
+    // 뜻으로 페널티(TimeAttackController.ApplyPenalty)를 준다. 새 CSV 컬럼을 추가하지 않고
+    // (팀 규칙, CSV_가이드.md 참고) 자료실 문의 예외 분기(ResourceRoomDoorScreenId 등)와 같은
+    // 방식으로 화면/오브젝트 이름을 코드에 직접 적어 식별한다. 타임어택이 돌아가는 중이
+    // 아니면(TimeAttackController.IsRunning == false) ApplyPenalty()가 알아서 조용히
+    // 무시하므로 여기서 따로 검사할 필요는 없다.
+    private const float WrongHotspotPenaltySeconds = 5f;
+    private static readonly HashSet<string> WrongHotspots = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+    {
+        TextKey("BG_07_InvestigationSite_05", "Hotspot_Documents_F01L"),
+        TextKey("BG_07_InvestigationSite_05", "Hotspot_Documents_F01R"),
+        TextKey("BG_07_InvestigationSite_05", "Hotspot_Documents_F02L"),
+        TextKey("BG_07_InvestigationSite_05", "Hotspot_Documents_F02R"),
+        TextKey("BG_07_InvestigationSite_07", "Hotspot_Curtain"),
+        TextKey("BG_07_InvestigationSite_07", "Hotspot_BookCase"),
+        TextKey("BG_07_InvestigationSite_07", "Hotspot_CEODesk"),
+        TextKey("BG_07_InvestigationSite_07", "Hotspot_Sofa"),
+    };
+
     // ===== 조사 데이터는 두 파일로 나뉜다 =====
     //   1) Assets/StreamingAssets/Stage/InvestigationStage.csv  (git으로 공유 - 스토리 없음, 배치 도구가 고친다)
     //        컬럼: InvestigationId,HotspotKey,Type,Sprite
@@ -878,27 +899,43 @@ public class InvestigationController : MonoBehaviour
     // 지금 화면에 AutoExit 조건(ScreenData.autoExitRequiredItemIds)이 걸려 있고, 그 아이템을
     // 전부 모았으면 autoExitTargetScreenId로 자동으로 돌아간다. Inspect()가 Item 타입 오브젝트를
     // 얻을 때마다 부른다 - 예) 자료실(_05)에서 단서 세 개를 전부 읽으면 자료실 앞(_04)으로.
+    //
+    // ===== 왜 마지막에 SetDialogueVisible(false)가 있나 =====
+    // 이 함수는 DismissTalkLine()이 pendingAfterDismiss로 미뤄뒀던 일을 대신 실행하는
+    // 자리다(방금 아이템을 얻고 뜬 안내문을 막 닫은 시점). DismissTalkLine()은 "이 함수가
+    // 알아서 화면을 처리하겠거니" 하고 대화창을 닫지 않은 채 넘겨준다. 그런데 조건이 아직
+    // 다 안 채워졌을 때(단서를 세 개 중 하나만 읽었을 때 등) 예전엔 여기서 조용히 return만
+    // 해버려서, 방금 닫혔어야 할 안내문("자료실 열쇠를 얻었다" / "서류 뭉치를 발견했다" 등)이
+    // 화면에 그대로 남아 클릭해도 다시는 안 닫히는 버그가 있었다. 화면을 옮기거나
+    // (NavigateToLinkedScreen) 새 마무리 대사를 띄우는(ShowLineInDialogue) 경우가 아니라면,
+    // 여기서 직접 대화창을 닫아줘야 한다.
     private void CheckAutoExit()
     {
-        if (string.IsNullOrEmpty(activeScreenId)) return;
-        if (!screenData.TryGetValue(activeScreenId, out ScreenData screen)) return;
-        if (screen.autoExitRequiredItemIds == null || screen.autoExitRequiredItemIds.Count == 0) return;
-        if (string.IsNullOrEmpty(screen.autoExitTargetScreenId)) return;
-        if (!HasAllItems(screen.autoExitRequiredItemIds)) return;
-
-        string targetScreenId = screen.autoExitTargetScreenId;
-
-        if (!string.IsNullOrWhiteSpace(screen.autoExitText))
+        if (!string.IsNullOrEmpty(activeScreenId) &&
+            screenData.TryGetValue(activeScreenId, out ScreenData screen) &&
+            screen.autoExitRequiredItemIds != null && screen.autoExitRequiredItemIds.Count > 0 &&
+            !string.IsNullOrEmpty(screen.autoExitTargetScreenId) &&
+            HasAllItems(screen.autoExitRequiredItemIds))
         {
-            // 조건을 다 채운 순간 곧장 화면부터 넘기지 않고, 마무리 대사를 먼저 보여준
-            // 뒤 그 대사를 닫을 때 이동한다 (DismissTalkLine()의 pendingAfterDismiss 참고).
-            pendingAfterDismiss = () => NavigateToLinkedScreen(targetScreenId);
-            ShowLineInDialogue("", screen.autoExitText);
+            string targetScreenId = screen.autoExitTargetScreenId;
+
+            if (!string.IsNullOrWhiteSpace(screen.autoExitText))
+            {
+                // 조건을 다 채운 순간 곧장 화면부터 넘기지 않고, 마무리 대사를 먼저 보여준
+                // 뒤 그 대사를 닫을 때 이동한다 (DismissTalkLine()의 pendingAfterDismiss 참고).
+                pendingAfterDismiss = () => NavigateToLinkedScreen(targetScreenId);
+                ShowLineInDialogue("", screen.autoExitText);
+            }
+            else
+            {
+                NavigateToLinkedScreen(targetScreenId);
+            }
+            return;
         }
-        else
-        {
-            NavigateToLinkedScreen(targetScreenId);
-        }
+
+        // 자동 이동 조건이 아직 안 채워졌거나(단서를 다 못 모았거나) 이 화면에 AutoExit
+        // 자체가 없으면, 방금 아이템을 얻고 떴던 안내문을 평소처럼 닫아 조사 화면으로 돌아간다.
+        SetDialogueVisible(false);
     }
 
     // 옆 화면으로 이동하는 화살표 버튼을 만든다.
@@ -1102,6 +1139,15 @@ public class InvestigationController : MonoBehaviour
     // InvestigatableObject.OnClickInspect()가 호출한다.
     public void Inspect(InvestigatableObject obj)
     {
+        // ===== "엉뚱한 곳" 페널티 =====
+        // 다른 처리(아이템 지급, 선택지 등)와는 완전히 별개로, 눌린 오브젝트가 WrongHotspots에
+        // 있으면 매번(다시 눌러도 그때마다) 시간을 깎는다. 이 오브젝트들엔 RequiredItemId나
+        // afterTargetScreenId가 없으므로 아래 분기들과 부딪히지 않는다.
+        if (activeScreenId != null && WrongHotspots.Contains(TextKey(activeScreenId, obj.gameObject.name)))
+        {
+            TimeAttackController.Instance?.ApplyPenalty(WrongHotspotPenaltySeconds);
+        }
+
         // ===== 이미 한 번 통과했는지 확인 (선택지를 매번 다시 묻지 않게) =====
         // AfterItemId가 적혀 있고 그 아이템을 이미 얻었다면 - 즉 이 오브젝트의 선택지를
         // 이전에 이미 한 번 골랐다면 - 평소 반응(선택지 포함)을 다시 보여주지 않는다. 아래
