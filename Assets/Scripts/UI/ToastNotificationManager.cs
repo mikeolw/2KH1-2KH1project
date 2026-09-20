@@ -74,9 +74,16 @@ public class ToastNotificationManager : MonoBehaviour
 
     private void OnItemAdded(string itemId)
     {
-        string displayName = ItemDatabase.GetDisplayName(itemId);
-        Sprite icon = ItemDatabase.Get(itemId)?.GetIcon();
-        Enqueue($"{displayName} 획득", icon);
+        // mg_passed_화면ID, af_used_화면ID, resource_room_entered 같은 "내부 기록용 가짜
+        // 아이템"은 ItemData.csv에 등록되어 있지 않다(InvestigationController.cs의
+        // ScreenMinigamePassedFlag/AutoFinishUsedFlag 주석 참고 - 인벤토리 슬롯 UI에도
+        // 대응하는 슬롯이 없어 원래 화면에 보이면 안 된다). 등록 안 된 아이템이면 진짜
+        // 아이템이 아니므로 알림도 띄우지 않는다. 이렇게 하면 이름을 하나하나 몰라도
+        // 앞으로 생길 비슷한 내부 플래그까지 자동으로 걸러진다.
+        ItemDatabase.ItemInfo info = ItemDatabase.Get(itemId);
+        if (info == null) return;
+
+        Enqueue($"{info.displayName} 획득", info.GetIcon());
     }
 
     private void OnNoteAdded()

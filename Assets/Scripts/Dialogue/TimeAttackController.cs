@@ -1,3 +1,4 @@
+using System.Collections;
 using UnityEngine;
 using UnityEngine.UI;
 using TMPro;
@@ -51,6 +52,14 @@ public class TimeAttackController : MonoBehaviour
     public Color normalColor = new Color(1f, 0.86f, 0.45f); // 대화창 화자 이름과 같은 옅은 금색
     public Color warningColor = new Color(1f, 0.3f, 0.3f);
 
+    // ===== 시간 페널티(ApplyPenalty) 연출 설정 =====
+    // "엉뚱한 곳"을 조사했을 때(InvestigationController의 WrongHotspots 참고) 시간이
+    // 깎이는 순간 플레이어가 확실히 알아챌 수 있도록 타이머 글자를 잠깐 빨갛게 물들이고,
+    // 그 아래에 "-5s" 같은 문구를 띄워 위로 떠오르며 사라지게 한다.
+    [Header("페널티(시간 감소) 연출")]
+    public Color penaltyFlashColor = new Color(1f, 0.15f, 0.15f);
+    public float penaltyFlashDuration = 0.4f;
+
     // 지금 타이머가 돌아가는 중인지. DialogueSystem 등 다른 곳에서 참고할 수 있게 열어둔다.
     public bool IsRunning { get; private set; }
 
@@ -72,6 +81,14 @@ public class TimeAttackController : MonoBehaviour
     // 코드로 만든 카운트다운 UI. 평소엔 꺼져 있다가 StartTimer()가 불릴 때만 켜진다.
     private GameObject timerRoot;
     private TMP_Text timerText;
+
+    // ===== 페널티 연출 상태 =====
+    // penaltyFlashCoroutine : 지금 재생 중인 "빨갛게 물들었다 돌아오기" 코루틴. 짧은 시간에
+    //   페널티가 두 번 겹치면(엉뚱한 곳을 연달아 클릭) 이전 연출을 멈추고 새로 처음부터 재생한다.
+    // isPenaltyFlashActive : 이 동안은 Update()의 UpdateTimerText()가 평소 색(normal/warning)으로
+    //   되돌리지 않는다 - 안 그러면 매 프레임 색이 이 코루틴과 서로 덮어쓰며 다툰다.
+    private Coroutine penaltyFlashCoroutine;
+    private bool isPenaltyFlashActive;
 
     // ===== Awake란? =====
     // 유니티가 이 오브젝트를 만든 직후 게임 시작 전에 딱 한 번 불러주는 함수다.
@@ -196,6 +213,108 @@ public class TimeAttackController : MonoBehaviour
 
         Debug.Log("[TimeAttackController] 목표 지점 도달(저장 창 없이) - 타임어택 성공, 타이머를 끕니다.");
         StopTimer();
+    }
+
+    // ===== 시간 페널티 =====
+    // "엉뚱한 곳"을 조사했을 때 InvestigationController.Inspect()가 부른다. 타임어택이
+    // 돌아가는 중이 아니면(IsRunning == false) 조용히 무시한다 - 페널티 오브젝트가 있는
+    // 화면에 타이머 없이 들어오는 경우(예: 테스트, 나중에 순서가 바뀌는 경우)를 대비한 것이다.
+    // 시간이 0 밑으로 깎여도 여기서 따로 처리하지 않는다 - 다음 프레임의 Update()가
+    // remainingSeconds <= 0f를 그대로 보고 평소처럼 시간 초과 엔딩으로 넘어간다.
+    public void ApplyPenalty(float seconds)
+    {
+        if (!IsRunning || seconds <= 0f) return;
+
+        remainingSeconds = Mathf.Max(0f, remainingSeconds - seconds);
+        UpdateTimerText();
+
+        if (timerRoot == null) return;   // Canvas를 못 찾아 UI가 없는 경우 - 시간만 깎고 연출은 건너뛴다.
+
+        if (penaltyFlashCoroutine != null) StopCoroutine(penaltyFlashCoroutine);
+        penaltyFlashCoroutine = StartCoroutine(PlayPenaltyColorFlash());
+        StartCoroutine(PlayPenaltyPopup(seconds));
+    }
+
+    // ===== 1) 메인 타이머 글자 색 반짝임 연출 (Color Flash) =====
+    // 글자색이 순간적으로 빨개졌다가, 부드럽게 원래 색으로 돌아온다. "원래 색"은 지금 남은
+    // 시간이 경고 구간(warningThresholdSeconds 이하)인지에 따라 normalColor/warningColor
+    // 중 하나로 정한다 - 그래야 페널티로 경고 구간에 막 진입한 경우에도 자연스럽게
+    // 경고색으로 안착한다.
+    private IEnumerator PlayPenaltyColorFlash()
+    {
+        isPenaltyFlashActive = true;
+
+        Color baseColor = remainingSeconds <= warningThresholdSeconds ? warningColor : normalColor;
+        if (timerText != null) timerText.color = penaltyFlashColor;
+
+        float t = 0f;
+        while (t < penaltyFlashDuration)
+        {
+            t += Time.deltaTime;
+            float ratio = Mathf.Clamp01(t / penaltyFlashDuration);
+            if (timerText != null) timerText.color = Color.Lerp(penaltyFlashColor, baseColor, ratio);
+            yield return null;
+        }
+
+        if (timerText != null) timerText.color = baseColor;
+
+        isPenaltyFlashActive = false;
+        penaltyFlashCoroutine = null;
+    }
+
+    // ===== 2) 패널티 텍스트 팝업 (-5s) =====
+    // 타이머 상자 바로 아래에 "-5s"를 띄우고, 위로 떠오르며(Y축 이동) 서서히 투명해지다
+    // 사라진다. timerRoot의 자식이 아니라 targetCanvas에 직접 붙인다 - 자식으로 두면 이
+    // 팝업의 생애주기(뜨고 떠오르고 사라지는 것)가 타이머 UI 자체의 갱신(LateUpdate의
+    // SetAsLastSibling 등)과 뒤섞이지 않고 독립적으로 관리된다.
+    private IEnumerator PlayPenaltyPopup(float seconds)
+    {
+        if (targetCanvas == null) yield break;
+
+        var timerRt = timerRoot.GetComponent<RectTransform>();
+
+        var go = new GameObject("TimeAttackPenaltyPopup", typeof(RectTransform));
+        go.transform.SetParent(targetCanvas.transform, false);
+
+        var rt = go.GetComponent<RectTransform>();
+        rt.anchorMin = timerRt.anchorMin;
+        rt.anchorMax = timerRt.anchorMax;
+        rt.pivot = new Vector2(0.5f, 1f);
+        // 타이머 상자(timerRt) 바로 아래 자리: 상자의 아래쪽 끝(anchoredPosition.y - 세로 크기)에서 8픽셀 더 내려간다.
+        float timerBottomY = timerRt.anchoredPosition.y - timerRt.sizeDelta.y;
+        Vector2 startPos = new Vector2(timerRt.anchoredPosition.x, timerBottomY - 8f);
+        rt.anchoredPosition = startPos;
+        rt.sizeDelta = new Vector2(140f, 40f);
+
+        var tmp = go.AddComponent<TextMeshProUGUI>();
+        tmp.text = $"-{Mathf.RoundToInt(seconds)}s";
+        tmp.fontSize = 28;
+        tmp.fontStyle = TMPro.FontStyles.Bold;
+        tmp.alignment = TMPro.TextAlignmentOptions.Center;
+        tmp.color = penaltyFlashColor;
+        tmp.raycastTarget = false;
+
+        // 코드로 만든 글자는 기본 글꼴에 한글이 없어 깨져 보인다 (다른 코드 생성 UI와 같은 이유,
+        // 지금은 숫자/기호뿐이라 실제 영향은 없지만 통일해서 물려둔다).
+        UIFontHelper.ApplyToChildren(go);
+
+        const float floatUpDistance = 28f;
+        float duration = penaltyFlashDuration + 0.5f;
+        Vector2 endPos = startPos + new Vector2(0f, floatUpDistance);
+        Color startColor = tmp.color;
+        Color endColor = new Color(startColor.r, startColor.g, startColor.b, 0f);
+
+        float t = 0f;
+        while (t < duration)
+        {
+            t += Time.deltaTime;
+            float ratio = Mathf.Clamp01(t / duration);
+            rt.anchoredPosition = Vector2.Lerp(startPos, endPos, ratio);
+            tmp.color = Color.Lerp(startColor, endColor, ratio);
+            yield return null;
+        }
+
+        Destroy(go);
     }
 
     // ===== Update란? =====
@@ -324,6 +443,13 @@ public class TimeAttackController : MonoBehaviour
         int minutes = totalSeconds / 60;
         int seconds = totalSeconds % 60;
         timerText.text = $"{minutes:00}:{seconds:00}";
-        timerText.color = remainingSeconds <= warningThresholdSeconds ? warningColor : normalColor;
+
+        // 페널티 플래시(PlayPenaltyColorFlash)가 재생 중일 땐 그 코루틴이 색을 직접 다루므로
+        // 여기서 평소 색으로 덮어쓰지 않는다 - 안 그러면 매 프레임 서로 색을 다시 씌워써서
+        // 빨갛게 물드는 연출이 보이지 않게 된다.
+        if (!isPenaltyFlashActive)
+        {
+            timerText.color = remainingSeconds <= warningThresholdSeconds ? warningColor : normalColor;
+        }
     }
 }

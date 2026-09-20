@@ -65,6 +65,64 @@ public class InvestigationController : MonoBehaviour
     // Inspect()가 Talk 오브젝트에 선택지가 달려 있을 때 채워둔다 (ShowTalkChoices 참고).
     private List<InvestigationTalkChoice> pendingTalkChoices;
 
+    // pendingTalkChoices를 채운 조사 오브젝트 그 자체. 선택지를 골랐을 때(OnTalkChoiceSelected)
+    // "이 선택지가 어느 오브젝트에서 나왔는지" 알아야 하는 경우에 쓴다 - 예) 자료실 문의
+    // "알리지 않는다" 선택지는 곧바로 타이밍 클릭 미니게임을 걸어야 하는데, 성공했을 때
+    // 이동할 화면은 이 오브젝트의 afterTargetScreenId(=BG_07_InvestigationSite_05, 문을
+    // 다시 눌렀을 때 자동 이동하는 화면과 같은 값)를 그대로 재사용한다.
+    private InvestigatableObject pendingTalkChoiceSource;
+
+    // ===== 자료실 문: 선택지를 고르는 즉시 타이밍 클릭 미니게임으로 이어지는 유일한 지점 =====
+    // 새 CSV 컬럼을 추가하지 않고(팀 규칙) 이 한 곳만을 위한 예외 분기이므로, 다른
+    // ScreensWithoutExitButton처럼 화면/오브젝트 이름을 코드에 직접 적어 식별한다.
+    // 나중에 다른 곳에도 같은 방식(선택지 -> 타이밍 미니게임)이 필요해지면, 이 두 상수를
+    // 목록(배열/HashSet)으로 바꾸고 OnTalkChoiceSelected()의 판정도 그에 맞게 넓히면 된다.
+    private const string ResourceRoomDoorScreenId = "BG_07_InvestigationSite_04";
+    private const string ResourceRoomDoorHotspotKey = "Hotspot_ResourceRoomdoor";
+
+    // 지금 보여주고 있는 대사를 닫으면(DismissTalkLine) 실행할 일. pendingTalkChoices와
+    // 같은 자리에서 쓰이지만 선택지가 아니라 "그냥 할 일 하나"를 미뤄두는 용도다 - 예)
+    // 아이템을 얻어 자동 이동 조건이 채워졌을 때, 그 아이템을 보여주는 대사를 다 읽기도
+    // 전에 화면이 먼저 바뀌어버리는 것을 막기 위해 CheckAutoExit()를 여기로 미룬다
+    // (CheckAutoExit() 참고). 두 필드가 동시에 쓰일 일은 없다 - 있으면 pendingTalkChoices가 우선한다.
+    private Action pendingAfterDismiss;
+
+    // ===== 조사할 때 서류 뷰어를 열지 않고 대사+토스트로만 안내하는 오브젝트 =====
+    // (화면ID, HotspotKey) 쌍을 적어둔다. ItemData.csv의 ViewerType은 그대로
+    // Document/Photo로 둬야 한다 - 가방에서 "펼쳐보기"로 나중에 다시 읽을 수 있어야
+    // 하기 때문이다(InventoryPanelUI.cs가 이 값을 그대로 쓴다). 여기 적힌 오브젝트만
+    // "주울 때는" 뷰어를 건너뛰고 Inspect()의 대사(Text 칸) 표시로 대신한다.
+    // 자료실 단서 세 개가 전부 이 방식이라, 세 개를 다 읽고 닫아야 자동 이동
+    // 조건(CheckAutoExit)이 검사된다(대사 없이 뷰어만 열리면 그 순간 조용히 채워져버려
+    // 부자연스럽다).
+    private static readonly HashSet<string> ItemHotspotsSkipAutoViewer = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+    {
+        TextKey("BG_07_InvestigationSite_05", "Hotspot_Documents_F01R_Clue"),
+        TextKey("BG_07_InvestigationSite_05", "Hotspot_Documents_F02R_Clue1"),
+        TextKey("BG_07_InvestigationSite_05", "Hotspot_Documents_F02R_Clue2"),
+    };
+
+    // ===== "엉뚱한 곳"을 조사하면 타임어택 시간이 깎이는 오브젝트들 =====
+    // 자료실(_05)의 진짜 단서(Hotspot_..._Clue)가 아닌 옆의 가짜 서류 더미, 사장실(_07)의
+    // 커튼/책장/사장 책상처럼 "뒤져볼 법하지만 정답은 아닌" 자리를 조사하면 시간을 낭비했다는
+    // 뜻으로 페널티(TimeAttackController.ApplyPenalty)를 준다. 새 CSV 컬럼을 추가하지 않고
+    // (팀 규칙, CSV_가이드.md 참고) 자료실 문의 예외 분기(ResourceRoomDoorScreenId 등)와 같은
+    // 방식으로 화면/오브젝트 이름을 코드에 직접 적어 식별한다. 타임어택이 돌아가는 중이
+    // 아니면(TimeAttackController.IsRunning == false) ApplyPenalty()가 알아서 조용히
+    // 무시하므로 여기서 따로 검사할 필요는 없다.
+    private const float WrongHotspotPenaltySeconds = 5f;
+    private static readonly HashSet<string> WrongHotspots = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+    {
+        TextKey("BG_07_InvestigationSite_05", "Hotspot_Documents_F01L"),
+        TextKey("BG_07_InvestigationSite_05", "Hotspot_Documents_F01R"),
+        TextKey("BG_07_InvestigationSite_05", "Hotspot_Documents_F02L"),
+        TextKey("BG_07_InvestigationSite_05", "Hotspot_Documents_F02R"),
+        TextKey("BG_07_InvestigationSite_07", "Hotspot_Curtain"),
+        TextKey("BG_07_InvestigationSite_07", "Hotspot_BookCase"),
+        TextKey("BG_07_InvestigationSite_07", "Hotspot_CEODesk"),
+        TextKey("BG_07_InvestigationSite_07", "Hotspot_Sofa"),
+    };
+
     // ===== 조사 데이터는 두 파일로 나뉜다 =====
     //   1) Assets/StreamingAssets/Stage/InvestigationStage.csv  (git으로 공유 - 스토리 없음, 배치 도구가 고친다)
     //        컬럼: InvestigationId,HotspotKey,Type,Sprite
@@ -172,6 +230,12 @@ public class InvestigationController : MonoBehaviour
         // 예) 자료실(_05)에서 단서 세 개를 전부 읽으면 자료실 앞(_04)으로 자동으로 돌아간다.
         public List<string> autoExitRequiredItemIds;
         public string autoExitTargetScreenId;
+
+        // 조건을 다 채운 순간 곧바로 화면을 넘기지 않고, 먼저 보여줄 마무리 대사(Text 칸,
+        // AutoExit 특수 줄에서는 지금까지 쓰지 않던 칸이라 새 컬럼 없이 재사용한다). 비워두면
+        // 예전처럼 조건이 채워지자마자 곧장 이동한다. 예) 자료실 단서를 다 모으면
+        // "중요한 건 전부 찾은 것 같다. 얼른 빠져나가자." 대사를 먼저 보여준 뒤 이동한다.
+        public string autoExitText;
 
         // ===== NextScreen 화살표가 보이는 조건 =====
         // CSV에 HotspotKey="NextScreenRequires" 특수 줄로 적는다. ItemId 칸에 "|"로 구분해
@@ -294,6 +358,7 @@ public class InvestigationController : MonoBehaviour
                     {
                         screen.autoExitRequiredItemIds = ParseItemList(GetField(row, "ItemId"));
                         screen.autoExitTargetScreenId = GetField(row, "AfterTargetScreenId").Trim();
+                        screen.autoExitText = GetField(row, "Text");
                     }
                     else orphans.Add($"{id}/{key}");
                     continue;
@@ -398,6 +463,7 @@ public class InvestigationController : MonoBehaviour
             {
                 screen.autoExitRequiredItemIds = ParseItemList(GetField(row, "ItemId"));
                 screen.autoExitTargetScreenId = GetField(row, "AfterTargetScreenId").Trim();
+                screen.autoExitText = GetField(row, "Text");
                 continue;
             }
             if (key == "NextScreenRequires")
@@ -733,6 +799,8 @@ public class InvestigationController : MonoBehaviour
         visitedScreenIds.Clear();
         onExitCallback = null;
         pendingTalkChoices = null;
+        pendingTalkChoiceSource = null;
+        pendingAfterDismiss = null;
 
         SetDialogueVisible(true);
     }
@@ -831,15 +899,43 @@ public class InvestigationController : MonoBehaviour
     // 지금 화면에 AutoExit 조건(ScreenData.autoExitRequiredItemIds)이 걸려 있고, 그 아이템을
     // 전부 모았으면 autoExitTargetScreenId로 자동으로 돌아간다. Inspect()가 Item 타입 오브젝트를
     // 얻을 때마다 부른다 - 예) 자료실(_05)에서 단서 세 개를 전부 읽으면 자료실 앞(_04)으로.
+    //
+    // ===== 왜 마지막에 SetDialogueVisible(false)가 있나 =====
+    // 이 함수는 DismissTalkLine()이 pendingAfterDismiss로 미뤄뒀던 일을 대신 실행하는
+    // 자리다(방금 아이템을 얻고 뜬 안내문을 막 닫은 시점). DismissTalkLine()은 "이 함수가
+    // 알아서 화면을 처리하겠거니" 하고 대화창을 닫지 않은 채 넘겨준다. 그런데 조건이 아직
+    // 다 안 채워졌을 때(단서를 세 개 중 하나만 읽었을 때 등) 예전엔 여기서 조용히 return만
+    // 해버려서, 방금 닫혔어야 할 안내문("자료실 열쇠를 얻었다" / "서류 뭉치를 발견했다" 등)이
+    // 화면에 그대로 남아 클릭해도 다시는 안 닫히는 버그가 있었다. 화면을 옮기거나
+    // (NavigateToLinkedScreen) 새 마무리 대사를 띄우는(ShowLineInDialogue) 경우가 아니라면,
+    // 여기서 직접 대화창을 닫아줘야 한다.
     private void CheckAutoExit()
     {
-        if (string.IsNullOrEmpty(activeScreenId)) return;
-        if (!screenData.TryGetValue(activeScreenId, out ScreenData screen)) return;
-        if (screen.autoExitRequiredItemIds == null || screen.autoExitRequiredItemIds.Count == 0) return;
-        if (string.IsNullOrEmpty(screen.autoExitTargetScreenId)) return;
-        if (!HasAllItems(screen.autoExitRequiredItemIds)) return;
+        if (!string.IsNullOrEmpty(activeScreenId) &&
+            screenData.TryGetValue(activeScreenId, out ScreenData screen) &&
+            screen.autoExitRequiredItemIds != null && screen.autoExitRequiredItemIds.Count > 0 &&
+            !string.IsNullOrEmpty(screen.autoExitTargetScreenId) &&
+            HasAllItems(screen.autoExitRequiredItemIds))
+        {
+            string targetScreenId = screen.autoExitTargetScreenId;
 
-        NavigateToLinkedScreen(screen.autoExitTargetScreenId);
+            if (!string.IsNullOrWhiteSpace(screen.autoExitText))
+            {
+                // 조건을 다 채운 순간 곧장 화면부터 넘기지 않고, 마무리 대사를 먼저 보여준
+                // 뒤 그 대사를 닫을 때 이동한다 (DismissTalkLine()의 pendingAfterDismiss 참고).
+                pendingAfterDismiss = () => NavigateToLinkedScreen(targetScreenId);
+                ShowLineInDialogue("", screen.autoExitText);
+            }
+            else
+            {
+                NavigateToLinkedScreen(targetScreenId);
+            }
+            return;
+        }
+
+        // 자동 이동 조건이 아직 안 채워졌거나(단서를 다 못 모았거나) 이 화면에 AutoExit
+        // 자체가 없으면, 방금 아이템을 얻고 떴던 안내문을 평소처럼 닫아 조사 화면으로 돌아간다.
+        SetDialogueVisible(false);
     }
 
     // 옆 화면으로 이동하는 화살표 버튼을 만든다.
@@ -1043,6 +1139,15 @@ public class InvestigationController : MonoBehaviour
     // InvestigatableObject.OnClickInspect()가 호출한다.
     public void Inspect(InvestigatableObject obj)
     {
+        // ===== "엉뚱한 곳" 페널티 =====
+        // 다른 처리(아이템 지급, 선택지 등)와는 완전히 별개로, 눌린 오브젝트가 WrongHotspots에
+        // 있으면 매번(다시 눌러도 그때마다) 시간을 깎는다. 이 오브젝트들엔 RequiredItemId나
+        // afterTargetScreenId가 없으므로 아래 분기들과 부딪히지 않는다.
+        if (activeScreenId != null && WrongHotspots.Contains(TextKey(activeScreenId, obj.gameObject.name)))
+        {
+            TimeAttackController.Instance?.ApplyPenalty(WrongHotspotPenaltySeconds);
+        }
+
         // ===== 이미 한 번 통과했는지 확인 (선택지를 매번 다시 묻지 않게) =====
         // AfterItemId가 적혀 있고 그 아이템을 이미 얻었다면 - 즉 이 오브젝트의 선택지를
         // 이전에 이미 한 번 골랐다면 - 평소 반응(선택지 포함)을 다시 보여주지 않는다. 아래
@@ -1130,24 +1235,61 @@ public class InvestigationController : MonoBehaviour
             }
         }
 
-        if (obj.type == HotspotType.Item && InventoryManager.Instance != null)
-        {
-            InventoryManager.Instance.AddItem(obj.itemId);
+        // ===== 오브젝트 하나가 아이템 여러 개를 한 번에 주는 경우 =====
+        // ItemId 칸에 "이름1|이름2"처럼 세로줄로 여러 개를 적어두면 전부 가방에 넣는다
+        // (AutoExit 등 화면 단위 조건에서 이미 쓰던 "|" 구분 방식을 그대로 재사용한다 -
+        // ParseItemList 참고). 예) 자료실 문서 뭉치(OBJ_07_Documents_F01R_Clue) - 그림은
+        // 한 장이지만 그 안에 서로 다른 문서 네 개가 들어있다는 설정이라, 펼쳐볼 때 네
+        // 아이템을 동시에 준다. 아이템이 하나뿐인 오브젝트는 지금까지와 똑같이 동작한다.
+        List<string> grantedItemIds = ParseItemList(obj.itemId);
+        bool grantedAnyItem = false;
 
-            // 이 화면에 AutoExit 조건이 걸려 있다면(예: 자료실 단서 세 개), 지금 얻은
-            // 아이템으로 조건이 다 채워졌는지 확인해서 다 채워졌으면 자동으로 돌아간다.
-            CheckAutoExit();
+        if (obj.type == HotspotType.Item && InventoryManager.Instance != null && grantedItemIds != null)
+        {
+            foreach (string grantedId in grantedItemIds)
+            {
+                InventoryManager.Instance.AddItem(grantedId);
+            }
+            grantedAnyItem = true;
         }
 
-        // 서류/사진처럼 자료 자체를 읽어야 하는 것만 전체화면 뷰어로 펼친다.
-        // 그 외에는 전부 대화창에 출력한다.
-        if (TryOpenDocumentViewer(obj.itemId)) return;
+        // ===== 뷰어를 열지 않고 대사+토스트로만 안내하는 오브젝트 =====
+        // 아이템을 여러 개 한 번에 줄 때(그림이 한 장뿐이라 뷰어로는 그 중 하나의
+        // 제목/설명만 보여줄 수 있다)와, ItemHotspotsSkipAutoViewer에 직접 적어둔
+        // 오브젝트(자료실 단서들 - 나중에 가방에서는 펼쳐볼 수 있어야 하니 ViewerType은
+        // 그대로 두고, "주울 때"만 건너뛴다)는 뷰어 대신 아래 대사(Text 칸)를 보여주고,
+        // 아이템을 얻었다는 사실은 토스트 알림으로만 따로 안내한다.
+        bool isMultiItemGrant = grantedItemIds != null && grantedItemIds.Count > 1;
+        bool skipAutoViewer = isMultiItemGrant ||
+            (activeScreenId != null && ItemHotspotsSkipAutoViewer.Contains(TextKey(activeScreenId, obj.gameObject.name)));
+        if (!skipAutoViewer)
+        {
+            string viewerItemId = grantedItemIds != null && grantedItemIds.Count > 0 ? grantedItemIds[0] : obj.itemId;
+            if (TryOpenDocumentViewer(viewerItemId))
+            {
+                // 뷰어는 화면 전환과 무관하게 항상 볼 수 있으므로, 자동 이동 조건을
+                // 곧바로 검사해도 된다(예전과 동일한 순서).
+                if (grantedAnyItem) CheckAutoExit();
+                return;
+            }
+        }
 
         // 이 문장 끝에 선택지가 있으면 기억해뒀다가, 문장을 다 읽고 닫는 시점에
         // DismissTalkLine()에서 곧바로 이어서 보여준다 (ShowTalkChoices 참고).
         // Talk든 Description이든 상관없이 talkChoices만 있으면 선택지가 붙는다
         // (예: 자료실 문 - 화자 없는 지문인데도 "알릴까 말까" 선택지가 필요한 경우).
         pendingTalkChoices = (obj.talkChoices != null && obj.talkChoices.Count > 0) ? obj.talkChoices : null;
+        pendingTalkChoiceSource = pendingTalkChoices != null ? obj : null;
+
+        // ===== 지금 얻은 아이템으로 자동 이동 조건이 채워졌는지는, 이 대사를 다 읽고
+        // 닫은 뒤에 검사한다 =====
+        // 지금 바로 검사하면, 마지막 아이템을 이 클릭으로 막 얻어서 조건이 채워졌을 때
+        // 이 대사가 화면에 뜨기도 전에(또는 뜬 직후 곧바로) 화면이 먼저 넘어가버려서,
+        // 정작 이 오브젝트 자신의 대사는 이미 다음 화면 배경 위에서 나오는 것처럼
+        // 보이는 문제가 있었다. 선택지가 달린 오브젝트라면(pendingTalkChoices) 그쪽이
+        // 우선이라 이 값은 쓰이지 않는다 - 지금 CSV에는 아이템 지급과 선택지가 동시에
+        // 걸린 오브젝트가 없어 문제되지 않는다.
+        if (grantedAnyItem) pendingAfterDismiss = CheckAutoExit;
 
         if (obj.type == HotspotType.Talk)
         {
@@ -1187,6 +1329,17 @@ public class InvestigationController : MonoBehaviour
             var choices = pendingTalkChoices;
             pendingTalkChoices = null;
             ShowTalkChoices(choices);
+            return;
+        }
+
+        // 방금 닫은 대사 뒤에 미뤄둔 일이 있으면(예: 자동 이동 조건 검사 - CheckAutoExit()
+        // 선언부 주석 참고) 대화창을 닫기 전에 먼저 실행한다. 그 일이 새 대사를 또
+        // 띄울 수도 있으므로(예: 마무리 대사) 아래 SetDialogueVisible(false)보다 먼저다.
+        if (pendingAfterDismiss != null)
+        {
+            Action action = pendingAfterDismiss;
+            pendingAfterDismiss = null;
+            action.Invoke();
             return;
         }
 
@@ -1240,6 +1393,11 @@ public class InvestigationController : MonoBehaviour
             DialogueSystem.Instance.choicePanel.SetActive(false);
         }
 
+        // 이 선택지를 내놓은 오브젝트를 지역 변수로 옮겨두고 필드는 비운다 - 이 함수 밖에서
+        // 또 참조할 일이 없고, 다음 조사에 낡은 값이 남아있지 않게 하기 위함이다.
+        InvestigatableObject sourceObj = pendingTalkChoiceSource;
+        pendingTalkChoiceSource = null;
+
         // 엔딩으로 직행하는 보기라면 대답/아이템은 볼 것도 없이 바로 엔딩으로 넘어간다
         // (Exit()의 자료실 열쇠 미획득 처리와 같은 방식 - InvestigationController.Exit() 참고).
         if (choice.targetEnding != EndingType.None)
@@ -1249,6 +1407,18 @@ public class InvestigationController : MonoBehaviour
             {
                 GameFlowManager.Instance.TriggerEnding(choice.targetEnding);
             }
+            return;
+        }
+
+        // ===== 자료실 문: "알리지 않는다"를 고르는 즉시 타이밍 클릭 미니게임 =====
+        // 평소처럼 아이템을 주고 대답 대사를 보여주는 대신, 그 자리에서 곧바로 미니게임을
+        // 띄운다. 성공하면 그때 아이템(통과 표시)을 주고 문을 다시 누른 것처럼 자료실로
+        // 곧장 이동하고, 실패하면 Bad_C 엔딩으로 보낸다 (ResourceRoomDoorScreenId/
+        // ResourceRoomDoorHotspotKey 선언부 주석 참고).
+        if (activeScreenId == ResourceRoomDoorScreenId &&
+            sourceObj != null && sourceObj.gameObject.name == ResourceRoomDoorHotspotKey)
+        {
+            StartResourceRoomSneakMinigame(choice, sourceObj);
             return;
         }
 
@@ -1266,6 +1436,54 @@ public class InvestigationController : MonoBehaviour
         {
             SetDialogueVisible(false);
         }
+    }
+
+    // 자료실 문에서 "알리지 않는다"를 골랐을 때 실행하는 타이밍 클릭 미니게임.
+    //   성공 -> choice.itemId(통과 표시)를 주고 sourceObj.afterTargetScreenId(=자료실)로 이동.
+    //   실패 -> Bad_C 엔딩 (담당 직원에게 알린다를 골랐을 때와 같은 엔딩).
+    private void StartResourceRoomSneakMinigame(InvestigationTalkChoice choice, InvestigatableObject sourceObj)
+    {
+        if (TimingClickMinigameController.Instance == null)
+        {
+            // 미니게임 컨트롤러가 없으면(예: 씬에 Canvas가 없는 테스트 환경) 게임을 막는
+            // 대신 예전처럼 아이템만 주고 곧장 이동시킨다 - MinigameController.EnterScreen()
+            // 쪽의 안전장치와 같은 방침.
+            Debug.LogWarning("[InvestigationController] TimingClickMinigameController가 없어 자료실 잠입 미니게임을 건너뜁니다.");
+            if (!string.IsNullOrWhiteSpace(choice.itemId) && InventoryManager.Instance != null)
+            {
+                InventoryManager.Instance.AddItem(choice.itemId.Trim());
+            }
+            if (!string.IsNullOrEmpty(sourceObj.afterTargetScreenId))
+            {
+                NavigateToLinkedScreen(sourceObj.afterTargetScreenId.Trim());
+            }
+            else
+            {
+                SetDialogueVisible(false);
+            }
+            return;
+        }
+
+        // 대사창을 닫아 미니게임 화면을 가리지 않게 한다 (선택지 창은 이미 위에서 닫았다).
+        SetDialogueVisible(false);
+
+        TimingClickMinigameController.Instance.StartGame(
+            onSuccessCallback: () =>
+            {
+                if (!string.IsNullOrWhiteSpace(choice.itemId) && InventoryManager.Instance != null)
+                {
+                    InventoryManager.Instance.AddItem(choice.itemId.Trim());
+                }
+                if (!string.IsNullOrEmpty(sourceObj.afterTargetScreenId))
+                {
+                    NavigateToLinkedScreen(sourceObj.afterTargetScreenId.Trim());
+                }
+            },
+            onFailCallback: () =>
+            {
+                ForceExit();
+                GameFlowManager.Instance?.TriggerEnding(EndingType.Bad_C);
+            });
     }
 
     private bool TryOpenDocumentViewer(string itemId)

@@ -112,6 +112,10 @@ public static class GameBootstrap
             // 인스펙터 연결 없이 스스로 Canvas를 찾아 UI를 만들어내므로 자동 생성해도 안전하다.
             if (TimeAttackController.Instance == null) Create<TimeAttackController>("TimeAttackController");
 
+            // 자료실 문 잠입에 쓰는 타이밍 클릭 미니게임. 위 TimeAttackController와 같은
+            // 이유로 인스펙터 연결 없이 자동 생성해도 안전하다 (TimingClickMinigameController.cs 참고).
+            if (TimingClickMinigameController.Instance == null) Create<TimingClickMinigameController>("TimingClickMinigameController");
+
             // 아이템 획득/메모 추가 시 우상단에 잠깐 뜨는 알림(토스트). InventoryManager/NoteManager가
             // 이미 만들어진 뒤라야 그 이벤트를 구독할 수 있으므로 Canvas 그룹 마지막에 만든다.
             if (ToastNotificationManager.Instance == null) Create<ToastNotificationManager>("ToastNotificationManager");

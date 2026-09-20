@@ -128,6 +128,10 @@ public class GameFlowManager : MonoBehaviour
         {
             MinigameController.Instance.ForceExit();
         }
+        if (TimingClickMinigameController.Instance != null && TimingClickMinigameController.Instance.IsActive)
+        {
+            TimingClickMinigameController.Instance.ForceExit();
+        }
 
         if (DialogueSystem.Instance == null)
         {
