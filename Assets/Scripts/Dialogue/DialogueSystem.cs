@@ -83,6 +83,12 @@ public class DialogueSystem : MonoBehaviour
     public CanvasGroup fadeCanvasGroup;
     public float fadeDuration = 0.5f;   // 암전/복귀 각각에 걸리는 시간(초)
     public float blackHoldDuration = 1f; // 완전히 검게 된 채로 유지되는 시간(초)
+    // 조사가 끝난 직후의 암전에 쓰는 검은 화면 유지 시간(초). 모든 조사는 끝나면 (다음 줄의
+    // IsFadeOut 칸과 상관없이) 이 시간만큼 어둠을 유지한 뒤 다음 장면으로 넘어간다.
+    public float postInvestigationBlackHoldDuration = 4f;
+
+    // 조사 종료 콜백에서 켜고, 다음 줄을 보여줄 때 한 번 읽고 바로 끈다(ShowNextSentence 참고).
+    private bool nextLineFollowsInvestigation;
 
     // 암전 코루틴이 도는 동안 스페이스/클릭으로 대사를 건너뛰지 못하게 막는 플래그.
     private bool isFading;
@@ -594,6 +600,9 @@ public class DialogueSystem : MonoBehaviour
             return;
         }
 
+        bool followsInvestigation = nextLineFollowsInvestigation;
+        nextLineFollowsInvestigation = false;
+
         var line = currentDialogue.lines[lineIndex];
         int shownIndex = lineIndex; // 증가 전 값 = 지금 보여줄 줄의 인덱스 (ReadProgressManager 키로 씀)
         lineIndex++;
@@ -670,7 +679,11 @@ public class DialogueSystem : MonoBehaviour
 
             InvestigationController.Instance.Enter(
                 line.investigationId,
-                onExit: () => ShowNextSentence()
+                onExit: () =>
+                {
+                    nextLineFollowsInvestigation = true;
+                    ShowNextSentence();
+                }
             );
             return;
         }
@@ -695,9 +708,11 @@ public class DialogueSystem : MonoBehaviour
         }
 
         // isFadeOut 줄은 화면을 암전시킨 뒤에 대사/사운드를 바꾸고 다시 밝게 복귀한다.
-        if (line.isFadeOut)
+        // 조사가 막 끝난 뒤의 첫 줄은 CSV의 IsFadeOut 칸과 상관없이 항상 암전으로 넘어간다
+        // (모든 조사 화면이 같은 방식으로 끝나도록 - 유지 시간은 ShowLineWithFade 참고).
+        if (line.isFadeOut || followsInvestigation)
         {
-            StartCoroutine(ShowLineWithFade(line));
+            StartCoroutine(ShowLineWithFade(line, followsInvestigation));
         }
         else
         {
@@ -708,14 +723,14 @@ public class DialogueSystem : MonoBehaviour
     // 화면을 검게 암전(alpha 0->1) -> 그 상태에서 대사/사운드 교체 -> blackHoldDuration만큼 검은
     // 화면 유지 -> 다시 밝게 복귀(alpha 1->0). 시간 경과/장소 전환처럼 급격한 전환을 부드럽게
     // 가리는 용도 (DialogueLine.isFadeOut 참고).
-    private IEnumerator ShowLineWithFade(DialogueLine line)
+    private IEnumerator ShowLineWithFade(DialogueLine line, bool followsInvestigation)
     {
         isFading = true;
         if (fadeCanvasGroup != null) fadeCanvasGroup.blocksRaycasts = true;
 
         yield return StartCoroutine(Fade(1f));
         DisplayLine(line);
-        yield return new WaitForSeconds(blackHoldDuration);
+        yield return new WaitForSeconds(followsInvestigation ? postInvestigationBlackHoldDuration : blackHoldDuration);
 
         // ===== 세이브 창이 열려 있으면 닫힐 때까지 암전을 유지한다 =====
         // 이 줄이 세이브포인트(IsSavePoint=TRUE)이기도 하면 DisplayLine() 안에서
