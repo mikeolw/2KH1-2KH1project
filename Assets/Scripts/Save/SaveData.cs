@@ -44,6 +44,15 @@ public class SaveData
     // 지금까지 조사기록(메모장)에 추가된 항목의 EntryId 목록.
     public List<string> noteEntryIds = new List<string>();
 
+    // ===== 자동으로 만들어진 메모(auto_...)의 정의 =====
+    // 조사하다 즉석에서 만들어지는 메모는 NoteEntries.csv에 정의가 없고 실행 중 메모리에만
+    // 있다. 그래서 EntryId만 저장하면, 게임을 껐다 켜고 이어하기 할 때 본문을 찾지 못해
+    // 그 메모들이 통째로 사라졌다. 정의 자체를 같이 저장해 되살린다.
+    //
+    // JsonUtility는 Dictionary를 직렬화하지 못하므로 [Serializable] 클래스의 List로 담는다
+    // (acquiredItemIds가 HashSet 대신 List를 쓰는 것과 같은 이유).
+    public List<SavedAutoNote> noteAutoEntries = new List<SavedAutoNote>();
+
     // ===== 미니게임 2(진행형 타임어택) 상태 =====
     // 타이머는 CSV의 특정 줄(제한시간이 적힌 Minigame 행)을 실제로 지나갈 때만 켜진다.
     // 그런데 저장은 그보다 뒤에 있는 세이브포인트에서도 가능해서, 그 지점에서 저장한 걸
@@ -55,4 +64,18 @@ public class SaveData
     public float timeAttackRemainingSeconds;
     public string timeAttackStopSavePointId;
     public EndingType timeAttackFailEnding;
+}
+
+// 자동으로 만들어진 수첩 메모 한 줄의 정의. SaveData.noteAutoEntries에 담긴다.
+// 필드 구성은 NoteManager.NoteEntry에서 "저장해야 되살릴 수 있는 것"만 추린 것이다.
+// (category/title은 CSV에서만 오는 값이라 자동 메모에는 항상 비어 있으므로 저장하지 않는다.)
+[Serializable]
+public class SavedAutoNote
+{
+    public string entryId;
+    public string chapter;
+    public string text;
+    public string speaker;
+    public string itemId;
+    public int order;
 }

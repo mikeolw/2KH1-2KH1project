@@ -36,11 +36,23 @@ public class NoteManager : MonoBehaviour
     public class NoteEntry
     {
         public string entryId;
-        public string triggerType;   // Item / Investigate / Hotspot / Manual
+        public string triggerType;   // Item / Investigate / Hotspot / Manual / Initial / Auto
         public string triggerKey;
         public string chapter;
         public string text;
         public int order;
+
+        // ===== 아래 넷은 "어느 탭에 넣을지 / 목록에 뭐라고 띄울지"를 정하는 데 쓴다 =====
+        // (판정 규칙 자체는 NoteCatalog.cs에 있다.)
+        //   category : CSV의 Category 칸. 비어 있으면 NoteCatalog가 자동으로 정한다.
+        //   title    : CSV의 Title 칸. 비어 있으면 NoteCatalog가 본문에서 뽑아낸다.
+        //   speaker  : 이 메모가 "누구에게 들은 말"인지. 자동 메모(AddAutoEntry)만 채운다.
+        //   itemId   : 이 메모가 "어떤 물건에서 나온 것"인지. 자동 메모만 채운다.
+        // CSV로 적어둔 메모는 speaker/itemId가 항상 비어 있고, 대신 TriggerType으로 판정한다.
+        public string category;
+        public string title;
+        public string speaker;
+        public string itemId;
     }
 
     private const string NoteCsv = "Dialogues/NoteEntries";
@@ -107,34 +119,56 @@ public class NoteManager : MonoBehaviour
     {
         allEntries = new Dictionary<string, NoteEntry>();
 
-        var rows = CSVReader.Read(NoteCsv);
-        if (rows == null || rows.Count == 0)
+        foreach (var entry in ParseEntriesFromCsv())
         {
-            Debug.LogWarning(
-                $"[NoteManager] {NoteCsv}.csv를 읽지 못했습니다. 조사기록(메모장)이 비어 있게 됩니다.");
-            return;
+            allEntries[entry.entryId] = entry;
         }
 
-        foreach (var row in rows)
+        if (allEntries.Count == 0)
         {
-            string id = GetField(row, "EntryId").Trim();
-            if (string.IsNullOrEmpty(id)) continue;
-
-            int.TryParse(GetField(row, "Order").Trim(), out int order);
-
-            allEntries[id] = new NoteEntry
-            {
-                entryId = id,
-                triggerType = GetField(row, "TriggerType").Trim(),
-                triggerKey = GetField(row, "TriggerKey").Trim(),
-                chapter = GetField(row, "Chapter").Trim(),
-                text = GetField(row, "Text"),
-                order = order
-            };
+            Debug.LogWarning(
+                $"[NoteManager] {NoteCsv}.csv에서 읽어들인 메모가 하나도 없습니다" +
+                "(파일이 없거나 EntryId가 빈 줄뿐). 조사기록(메모장)이 비어 있게 됩니다.");
         }
     }
 
-    private string GetField(Dictionary<string, object> row, string column)
+    // NoteEntries.csv를 읽어 메모 정의 목록으로 돌려준다.
+    // static으로 둔 이유: 에디터 점검 도구(Assets/Editor/NoteCategoryReport.cs)가 게임을
+    // 실행하지 않은 상태에서도 "지금 CSV가 어떻게 분류되는지"를 확인할 수 있어야 하기 때문이다.
+    public static List<NoteEntry> ParseEntriesFromCsv()
+    {
+        var result = new List<NoteEntry>();
+
+        var rows = CSVReader.Read(NoteCsv);
+        if (rows == null || rows.Count == 0) return result;
+
+        foreach (var row in rows)
+        {
+            string id = GetFieldOf(row, "EntryId").Trim();
+            if (string.IsNullOrEmpty(id)) continue;
+
+            int.TryParse(GetFieldOf(row, "Order").Trim(), out int order);
+
+            result.Add(new NoteEntry
+            {
+                entryId = id,
+                triggerType = GetFieldOf(row, "TriggerType").Trim(),
+                triggerKey = GetFieldOf(row, "TriggerKey").Trim(),
+                chapter = GetFieldOf(row, "Chapter").Trim(),
+                text = GetFieldOf(row, "Text"),
+                order = order,
+                category = GetFieldOf(row, "Category").Trim(),
+                title = GetFieldOf(row, "Title").Trim(),
+                speaker = "",
+                itemId = ""
+            });
+        }
+
+        return result;
+    }
+
+    // CSVReader가 만든 행에서 값을 안전하게 꺼낸다. 칸 자체가 없으면(예전 CSV처럼) 빈 문자열.
+    private static string GetFieldOf(Dictionary<string, object> row, string column)
     {
         return row != null && row.TryGetValue(column, out var v) ? v.ToString() : "";
     }
@@ -187,7 +221,12 @@ public class NoteManager : MonoBehaviour
     //   hotspotKey      : 어떤 오브젝트였는지 (같은 것을 두 번 적지 않기 위한 구분용)
     //   objectName      : 화면에 표시된 이름 (예: 메모장)
     //   text            : 조사했을 때 나온 문장
-    public void AddAutoEntry(string investigationId, string hotspotKey, string objectName, string text)
+    //   speaker         : 사람에게 들은 말이면 그 사람 이름. 아니면 빈 문자열.
+    //   itemId          : 이 조사로 물건을 얻었으면 그 ItemId. 아니면 빈 문자열.
+    //
+    // speaker/itemId는 수첩의 탭을 가르는 데만 쓴다(NoteCatalog.cs 참고). 본문에는 영향이 없다.
+    public void AddAutoEntry(string investigationId, string hotspotKey, string objectName, string text,
+                             string speaker = "", string itemId = "")
     {
         if (allEntries == null) return;
         if (string.IsNullOrWhiteSpace(text)) return;
@@ -207,7 +246,11 @@ public class NoteManager : MonoBehaviour
             triggerKey = "",
             chapter = ChapterLabelOf(investigationId),
             text = body,
-            order = autoEntryOrder++
+            order = autoEntryOrder++,
+            category = "",
+            title = "",
+            speaker = speaker ?? "",
+            itemId = itemId ?? ""
         };
 
         AddEntry(entryId);
@@ -343,6 +386,62 @@ public class NoteManager : MonoBehaviour
 
     // 세이브용: 지금까지 적힌 메모의 EntryId 목록.
     public List<string> GetRecordedEntryList() => new List<string>(recordedEntryIds);
+
+    // 세이브용: 지금까지 적힌 메모 중 자동으로 만들어진 것들의 정의를 내보낸다.
+    // 이것을 저장해두지 않으면 게임을 껐다 켰을 때 되살릴 수 없다(SaveData.cs 참고).
+    public List<SavedAutoNote> GetAutoEntryDefinitions()
+    {
+        var result = new List<SavedAutoNote>();
+        if (allEntries == null) return result;
+
+        foreach (string id in recordedEntryIds)
+        {
+            if (!allEntries.TryGetValue(id, out var entry)) continue;
+            if (!string.Equals(entry.triggerType, "Auto", System.StringComparison.OrdinalIgnoreCase)) continue;
+
+            result.Add(new SavedAutoNote
+            {
+                entryId = entry.entryId,
+                chapter = entry.chapter,
+                text = entry.text,
+                speaker = entry.speaker,
+                itemId = entry.itemId,
+                order = entry.order
+            });
+        }
+
+        return result;
+    }
+
+    // 로드용: 세이브에 담아둔 자동 메모 정의를 다시 등록한다.
+    // RestoreEntries()보다 반드시 먼저 불러야 한다. 그러지 않으면 EntryId만 복원되고
+    // 정의가 없어서 GetRecordedEntriesSorted()가 그 메모들을 버린다.
+    public void RestoreAutoEntryDefinitions(List<SavedAutoNote> saved)
+    {
+        if (allEntries == null || saved == null) return;
+
+        foreach (var item in saved)
+        {
+            if (item == null || string.IsNullOrEmpty(item.entryId)) continue;
+
+            allEntries[item.entryId] = new NoteEntry
+            {
+                entryId = item.entryId,
+                triggerType = "Auto",
+                triggerKey = "",
+                chapter = item.chapter,
+                text = item.text,
+                order = item.order,
+                category = "",
+                title = "",
+                speaker = item.speaker,
+                itemId = item.itemId
+            };
+
+            // 이어서 만들어질 자동 메모가 되살린 것보다 뒤에 오도록 번호를 밀어둔다.
+            if (item.order >= autoEntryOrder) autoEntryOrder = item.order + 1;
+        }
+    }
 
     // 로드용: 세이브에서 읽어온 목록으로 되돌린다.
     // entryIds에 null을 넘기면 "새 게임"이라는 뜻으로, 처음부터 적혀 있어야 할
