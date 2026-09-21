@@ -1,19 +1,19 @@
-using System.Text;
+using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.UI;
 using TMPro;
 
 // =====================================================================================
-// 조사기록(수첩) 화면 - 재훈이 조사하면서 적어나가는 메모를 보여준다
+// 조사기록(수첩) 화면 - 재훈이 조사하면서 적어나가는 메모를 양면 다이어리로 보여준다
 // =====================================================================================
 // 퀵바의 Note 버튼을 누르면 열리는 탭이다.
 //
-// ===== 내용은 어디서 오나 =====
-// 메모는 NoteManager가 관리한다. 이 스크립트는 그것을 화면에 그리기만 한다.
-//   - 게임을 시작하면 회사 관련 기본 메모가 이미 적혀 있다(NoteEntries.csv의 Initial 항목).
-//   - 조사를 하거나 아이템을 얻을 때마다 실시간으로 한 줄씩 추가된다.
-//     CSV에 따로 써둔 문장이 있으면 그것을, 없으면 조사할 때 나온 내용을 그대로 적는다.
-//   - #07(회사 잠입) 구간에서는 실시간 추가가 멈추고 구간이 끝날 때 한꺼번에 반영된다.
+// ===== 화면 구성 =====
+//   왼쪽 바깥 : 성격별 세로 탭 4개 (사건경과 / 증거 / 증언 / 업무수첩)
+//   왼쪽 페이지 : 그 탭에 속한 메모 목록. 챕터(예: #01)로 묶어서 보여준다.
+//   오른쪽 페이지 : 목록에서 고른 메모의 제목과 본문.
+//
+// 어느 탭에 넣을지와 목록에 띄울 제목은 NoteCatalog가 정한다. 이 스크립트는 그리기만 한다.
 //
 // ===== 왜 UI를 캔버스에 직접 만드나 (중요) =====
 // 처음에는 씬의 NotePanel 안에 메모 UI를 만들었다. 그런데 그 패널은 프로토타입 시절
@@ -29,10 +29,31 @@ public class NotePanelUI : MonoBehaviour
     // 캔버스 아래에 만드는 메모 화면의 이름.
     private const string OverlayName = "__NoteOverlay";
 
-    private GameObject overlay;      // 메모 화면 전체
-    private TMP_Text titleText;
-    private TMP_Text noteText;
-    private ScrollRect scrollRect;
+    // ----- 색 (아트 에셋이 없어서 색 도형으로만 그린다) -----
+    private static readonly Color PaperColor = new Color(0.95f, 0.92f, 0.84f, 1f);
+    private static readonly Color InkColor = new Color(0.16f, 0.13f, 0.09f);
+    private static readonly Color FadedInkColor = new Color(0.42f, 0.35f, 0.26f);
+    private static readonly Color LineColor = new Color(0.55f, 0.45f, 0.32f, 0.7f);
+    private static readonly Color SpineColor = new Color(0.28f, 0.21f, 0.13f, 1f);
+    private static readonly Color TabIdleColor = new Color(0.72f, 0.66f, 0.55f, 1f);
+    private static readonly Color TabActiveColor = PaperColor;
+    private static readonly Color RowSelectedColor = new Color(0.82f, 0.74f, 0.58f, 1f);
+
+    private GameObject overlay;
+
+    private readonly List<Button> tabButtons = new List<Button>();
+    private RectTransform listContent;      // 왼쪽 페이지에 줄을 쌓는 자리
+    private ScrollRect listScroll;
+    private ScrollRect detailScroll;
+    private TMP_Text detailTitleText;
+    private TMP_Text detailBodyText;
+
+    // 지금 보고 있는 탭과 고른 메모.
+    private string currentCategory = NoteCatalog.Tabs[0];
+    private string selectedEntryId;
+
+    // 목록에 만들어둔 줄 버튼들. 다시 그릴 때 지우려고 들고 있는다.
+    private readonly List<GameObject> listRows = new List<GameObject>();
 
     private void Awake()
     {
@@ -81,53 +102,156 @@ public class NotePanelUI : MonoBehaviour
     // ---------------------------------------------------------------------------------
     public void Refresh()
     {
-        if (noteText == null) return;
+        if (listContent == null) return;
 
-        if (NoteManager.Instance == null)
+        UpdateTabVisuals();
+        RebuildList();
+    }
+
+    // 지금 탭에 속한 메모를 챕터별로 묶어 왼쪽 페이지에 쌓는다.
+    private void RebuildList()
+    {
+        foreach (var row in listRows)
         {
-            noteText.text = "(조사기록을 불러올 수 없습니다.)";
-            return;
-        }
+            if (row == null) continue;
 
-        var entries = NoteManager.Instance.GetRecordedEntriesSorted();
+            // 부모에서 먼저 떼어낸 뒤에 지운다. Destroy()는 이번 프레임이 끝날 때 실제로
+            // 지워지기 때문에, 그냥 지우면 아래에서 새로 만든 줄과 옛 줄이 한 프레임 동안
+            // 같이 남아 VerticalLayoutGroup이 두 배 높이로 잡히며 목록이 덜컥거린다.
+            row.transform.SetParent(null, false);
+            Destroy(row);
+        }
+        listRows.Clear();
+
+        var all = NoteManager.Instance != null
+            ? NoteManager.Instance.GetRecordedEntriesSorted()
+            : new List<NoteManager.NoteEntry>();
+        var entries = NoteCatalog.EntriesIn(all, currentCategory);
 
         if (entries.Count == 0)
         {
-            noteText.text = "아직 적어둔 것이 없다.";
+            AddChapterHeading("아직 적어둔 것이 없다.");
+            ShowDetail(null);
             return;
         }
 
-        // StringBuilder를 쓰는 이유: 문자열을 += 로 수십 번 이어붙이면 그때마다 새 문자열이
-        // 통째로 만들어져 낭비가 크다. StringBuilder는 하나의 버퍼에 계속 덧붙인다.
-        var sb = new StringBuilder();
-        string lastChapter = null;
-
+        // 고른 메모가 이 탭에 없으면(탭을 막 바꿨을 때) 첫 줄을 대신 고른다.
+        bool selectionInThisTab = false;
         foreach (var entry in entries)
         {
-            // 챕터가 바뀔 때마다 소제목을 넣는다.
+            if (entry.entryId == selectedEntryId) { selectionInThisTab = true; break; }
+        }
+        if (!selectionInThisTab) selectedEntryId = entries[0].entryId;
+
+        string lastChapter = null;
+        foreach (var entry in entries)
+        {
             if (entry.chapter != lastChapter)
             {
-                if (lastChapter != null) sb.AppendLine();
-                sb.AppendLine($"<b>{entry.chapter}</b>");
+                AddChapterHeading(entry.chapter);
                 lastChapter = entry.chapter;
             }
 
-            sb.AppendLine($"  · {entry.text}");
-            sb.AppendLine();
+            AddEntryRow(entry);
+            if (entry.entryId == selectedEntryId) ShowDetail(entry);
         }
 
-        noteText.text = sb.ToString();
-
-        // 글꼴은 갱신할 때마다 다시 확인한다.
-        // (수첩이 대사창보다 먼저 만들어지면 처음에는 글꼴을 못 찾을 수 있다)
-        UIFontHelper.Apply(noteText);
-        UIFontHelper.Apply(titleText);
-
-        // 새 메모가 추가되면 맨 아래(최신)로 스크롤을 내려준다.
-        if (scrollRect != null)
+        // 줄을 새로 만들었으니 스크롤을 맨 위로 되돌린다.
+        if (listScroll != null)
         {
             Canvas.ForceUpdateCanvases();
-            scrollRect.verticalNormalizedPosition = 0f;
+            listScroll.verticalNormalizedPosition = 1f;
+        }
+    }
+
+    // 목록 사이에 들어가는 챕터 소제목 (CSV의 Chapter 칸).
+    private void AddChapterHeading(string chapter)
+    {
+        var go = new GameObject("Chapter", typeof(RectTransform), typeof(LayoutElement));
+        go.transform.SetParent(listContent, false);
+        go.GetComponent<LayoutElement>().preferredHeight = 44f;
+
+        var text = go.AddComponent<TextMeshProUGUI>();
+        text.text = chapter;
+        text.fontSize = 26;
+        text.fontStyle = FontStyles.Bold;
+        text.alignment = TextAlignmentOptions.BottomLeft;
+        text.color = FadedInkColor;
+        text.raycastTarget = false;
+        UIFontHelper.Apply(text);
+
+        listRows.Add(go);
+    }
+
+    // 목록의 한 줄. 누르면 오른쪽 페이지가 그 메모로 바뀐다.
+    private void AddEntryRow(NoteManager.NoteEntry entry)
+    {
+        var go = new GameObject("Row", typeof(RectTransform), typeof(Image),
+                                typeof(Button), typeof(LayoutElement));
+        go.transform.SetParent(listContent, false);
+        go.GetComponent<LayoutElement>().preferredHeight = 46f;
+
+        var bg = go.GetComponent<Image>();
+        bool selected = entry.entryId == selectedEntryId;
+        bg.color = selected ? RowSelectedColor : new Color(1f, 1f, 1f, 0.01f);
+        bg.raycastTarget = true;
+
+        var labelGo = new GameObject("Label", typeof(RectTransform));
+        labelGo.transform.SetParent(go.transform, false);
+        var labelRt = labelGo.GetComponent<RectTransform>();
+        labelRt.anchorMin = Vector2.zero;
+        labelRt.anchorMax = Vector2.one;
+        labelRt.offsetMin = new Vector2(24f, 0f);
+        labelRt.offsetMax = new Vector2(-12f, 0f);
+
+        var label = labelGo.AddComponent<TextMeshProUGUI>();
+        label.text = "· " + NoteCatalog.TitleOf(entry);
+        label.fontSize = 23;
+        label.alignment = TextAlignmentOptions.Left;
+        label.color = InkColor;
+        label.raycastTarget = false;
+        label.overflowMode = TextOverflowModes.Ellipsis;
+        UIFontHelper.Apply(label);
+
+        string id = entry.entryId;
+        var button = go.GetComponent<Button>();
+        button.targetGraphic = bg;
+        button.onClick.AddListener(() =>
+        {
+            selectedEntryId = id;
+            RebuildList();
+        });
+
+        listRows.Add(go);
+    }
+
+    // 오른쪽 페이지에 메모 하나를 펼친다. null이면 비운다.
+    private void ShowDetail(NoteManager.NoteEntry entry)
+    {
+        if (detailTitleText == null || detailBodyText == null) return;
+
+        detailTitleText.text = entry != null ? NoteCatalog.TitleOf(entry) : "";
+        detailBodyText.text = entry != null ? NoteCatalog.BodyOf(entry) : "";
+
+        UIFontHelper.Apply(detailTitleText);
+        UIFontHelper.Apply(detailBodyText);
+
+        if (detailScroll != null)
+        {
+            Canvas.ForceUpdateCanvases();
+            detailScroll.verticalNormalizedPosition = 1f;
+        }
+    }
+
+    private void UpdateTabVisuals()
+    {
+        for (int i = 0; i < tabButtons.Count && i < NoteCatalog.Tabs.Length; i++)
+        {
+            var image = tabButtons[i].GetComponent<Image>();
+            if (image != null)
+            {
+                image.color = NoteCatalog.Tabs[i] == currentCategory ? TabActiveColor : TabIdleColor;
+            }
         }
     }
 
@@ -138,7 +262,6 @@ public class NotePanelUI : MonoBehaviour
     // 다만 UIManager가 이 패널을 켜고 끄면서 여닫음을 관리하므로 오브젝트 자체는 남겨둔다.
     private void HideOriginalPanelVisuals()
     {
-        // 패널 배경을 투명하게 (클릭은 계속 막아서 뒤쪽 대사가 진행되지 않게 한다)
         var img = GetComponent<Image>();
         if (img != null)
         {
@@ -146,7 +269,6 @@ public class NotePanelUI : MonoBehaviour
             img.raycastTarget = false;
         }
 
-        // 프로토타입 시절 남아 있던 자식들(아이템 자리 등)을 꺼둔다.
         for (int i = transform.childCount - 1; i >= 0; i--)
         {
             transform.GetChild(i).gameObject.SetActive(false);
@@ -165,16 +287,18 @@ public class NotePanelUI : MonoBehaviour
             return;
         }
 
-        // 이미 만들어져 있으면 그것을 쓴다(패널을 여러 번 여닫아도 하나만 만든다).
+        // 이미 만들어져 있으면 지우고 새로 만든다. 예전 구조(글 덩어리 하나)가 남아 있으면
+        // 자리만 차지하고 쓸 수 없기 때문이다.
+        //
+        // Destroy()가 아니라 DestroyImmediate()를 쓰는 이유: Destroy()는 이번 프레임이
+        // 끝날 때 지워지므로, 바로 아래에서 같은 이름으로 새로 만들면 한 프레임 동안
+        // __NoteOverlay가 두 개 존재하게 되고 다음번 Find()가 옛것을 집을 수 있다.
+        // 여기는 Awake에서 한 번 도는 정리 코드라 즉시 지워도 안전하다.
         var existing = canvas.transform.Find(OverlayName);
-        if (existing != null)
-        {
-            overlay = existing.gameObject;
-            titleText = overlay.transform.Find("Box/Title")?.GetComponent<TMP_Text>();
-            noteText = overlay.transform.Find("Box/Viewport/Content")?.GetComponent<TMP_Text>();
-            scrollRect = overlay.GetComponentInChildren<ScrollRect>(true);
-            return;
-        }
+        if (existing != null) DestroyImmediate(existing.gameObject);
+
+        tabButtons.Clear();
+        listRows.Clear();
 
         // ----- 화면 전체를 덮는 막 -----
         overlay = new GameObject(OverlayName, typeof(RectTransform), typeof(Image));
@@ -184,124 +308,22 @@ public class NotePanelUI : MonoBehaviour
         dim.color = new Color(0f, 0f, 0f, 0.55f);
         dim.raycastTarget = true;   // 뒤쪽 게임 화면이 눌리지 않게 막는다
 
-        // ----- 가운데 수첩 상자 -----
-        var box = new GameObject("Box", typeof(RectTransform), typeof(Image));
-        box.transform.SetParent(overlay.transform, false);
-        var boxRt = box.GetComponent<RectTransform>();
-        boxRt.anchorMin = new Vector2(0.5f, 0.5f);
-        boxRt.anchorMax = new Vector2(0.5f, 0.5f);
-        boxRt.pivot = new Vector2(0.5f, 0.5f);
-        boxRt.sizeDelta = new Vector2(920f, 800f);
-        boxRt.anchoredPosition = Vector2.zero;
-        box.GetComponent<Image>().color = new Color(0.95f, 0.92f, 0.84f, 1f);   // 누런 종이
+        // ----- 펼친 책 -----
+        var book = new GameObject("Book", typeof(RectTransform), typeof(Image));
+        book.transform.SetParent(overlay.transform, false);
+        var bookRt = book.GetComponent<RectTransform>();
+        bookRt.anchorMin = new Vector2(0.5f, 0.5f);
+        bookRt.anchorMax = new Vector2(0.5f, 0.5f);
+        bookRt.pivot = new Vector2(0.5f, 0.5f);
+        bookRt.sizeDelta = new Vector2(1520f, 880f);
+        bookRt.anchoredPosition = Vector2.zero;
+        book.GetComponent<Image>().color = PaperColor;
 
-        // ----- 제목 -----
-        var titleGo = new GameObject("Title", typeof(RectTransform));
-        titleGo.transform.SetParent(box.transform, false);
-        var titleRt = titleGo.GetComponent<RectTransform>();
-        titleRt.anchorMin = new Vector2(0f, 1f);
-        titleRt.anchorMax = new Vector2(1f, 1f);
-        titleRt.pivot = new Vector2(0.5f, 1f);
-        titleRt.offsetMin = new Vector2(40f, 0f);
-        titleRt.offsetMax = new Vector2(-40f, 0f);
-        titleRt.sizeDelta = new Vector2(titleRt.sizeDelta.x, 64f);
-        titleRt.anchoredPosition = new Vector2(0f, -20f);
-
-        titleText = titleGo.AddComponent<TextMeshProUGUI>();
-        titleText.text = "조사기록";
-        titleText.fontSize = 36;
-        titleText.fontStyle = FontStyles.Bold;
-        titleText.alignment = TextAlignmentOptions.Left;
-        titleText.color = new Color(0.18f, 0.13f, 0.08f);
-        titleText.raycastTarget = false;
-
-        // 제목 아래 구분선
-        var line = new GameObject("Divider", typeof(RectTransform), typeof(Image));
-        line.transform.SetParent(box.transform, false);
-        var lineRt = line.GetComponent<RectTransform>();
-        lineRt.anchorMin = new Vector2(0f, 1f);
-        lineRt.anchorMax = new Vector2(1f, 1f);
-        lineRt.pivot = new Vector2(0.5f, 1f);
-        lineRt.offsetMin = new Vector2(40f, 0f);
-        lineRt.offsetMax = new Vector2(-40f, 0f);
-        lineRt.sizeDelta = new Vector2(lineRt.sizeDelta.x, 2f);
-        lineRt.anchoredPosition = new Vector2(0f, -88f);
-        var lineImg = line.GetComponent<Image>();
-        lineImg.color = new Color(0.55f, 0.45f, 0.32f, 0.7f);
-        lineImg.raycastTarget = false;
-
-        // ----- 글이 보이는 창(스크롤 영역) -----
-        var viewport = new GameObject("Viewport", typeof(RectTransform), typeof(Image), typeof(RectMask2D));
-        viewport.transform.SetParent(box.transform, false);
-        var viewportRt = viewport.GetComponent<RectTransform>();
-        viewportRt.anchorMin = new Vector2(0f, 0f);
-        viewportRt.anchorMax = new Vector2(1f, 1f);
-        viewportRt.offsetMin = new Vector2(40f, 90f);    // 아래는 닫기 버튼 자리
-        viewportRt.offsetMax = new Vector2(-40f, -100f); // 위는 제목 자리
-        var viewportImg = viewport.GetComponent<Image>();
-        viewportImg.color = new Color(1f, 1f, 1f, 0.01f);   // 거의 투명하지만 스크롤 입력을 받는다
-
-        // ----- 실제 글 -----
-        var content = new GameObject("Content", typeof(RectTransform), typeof(ContentSizeFitter));
-        content.transform.SetParent(viewport.transform, false);
-        var contentRt = content.GetComponent<RectTransform>();
-        contentRt.anchorMin = new Vector2(0f, 1f);
-        contentRt.anchorMax = new Vector2(1f, 1f);
-        contentRt.pivot = new Vector2(0.5f, 1f);
-        contentRt.anchoredPosition = Vector2.zero;
-        // 높이를 미리 잡아둔다. 0으로 두면 글이 들어가도 잘려서 안 보인다.
-        // 실제 높이는 아래 ContentSizeFitter가 글 길이에 맞춰 다시 계산한다.
-        contentRt.sizeDelta = new Vector2(0f, 500f);
-
-        content.GetComponent<ContentSizeFitter>().verticalFit = ContentSizeFitter.FitMode.PreferredSize;
-
-        noteText = content.AddComponent<TextMeshProUGUI>();
-        noteText.text = "아직 적어둔 것이 없다.";
-        noteText.fontSize = 24;
-        noteText.alignment = TextAlignmentOptions.TopLeft;
-        noteText.color = new Color(0.16f, 0.13f, 0.09f);
-        noteText.lineSpacing = 8f;
-        noteText.raycastTarget = false;
-        noteText.richText = true;
-        noteText.overflowMode = TextOverflowModes.Overflow;   // 길어지면 아래로 계속 이어진다
-
-        // ----- 스크롤 -----
-        scrollRect = box.AddComponent<ScrollRect>();
-        scrollRect.viewport = viewportRt;
-        scrollRect.content = contentRt;
-        scrollRect.horizontal = false;
-        scrollRect.vertical = true;
-        scrollRect.movementType = ScrollRect.MovementType.Clamped;
-        scrollRect.scrollSensitivity = 40f;
-
-        // ----- 닫기 버튼 -----
-        var closeGo = new GameObject("Btn_Close", typeof(RectTransform), typeof(Image), typeof(Button));
-        closeGo.transform.SetParent(box.transform, false);
-        var closeRt = closeGo.GetComponent<RectTransform>();
-        closeRt.anchorMin = new Vector2(0.5f, 0f);
-        closeRt.anchorMax = new Vector2(0.5f, 0f);
-        closeRt.pivot = new Vector2(0.5f, 0f);
-        closeRt.anchoredPosition = new Vector2(0f, 20f);
-        closeRt.sizeDelta = new Vector2(200f, 50f);
-
-        var closeBg = closeGo.GetComponent<Image>();
-        closeBg.color = new Color(0.35f, 0.28f, 0.18f, 0.85f);
-        closeBg.raycastTarget = true;
-
-        var closeTextGo = new GameObject("Text", typeof(RectTransform));
-        closeTextGo.transform.SetParent(closeGo.transform, false);
-        Stretch(closeTextGo.GetComponent<RectTransform>());
-        var closeLabel = closeTextGo.AddComponent<TextMeshProUGUI>();
-        closeLabel.text = "닫기";
-        closeLabel.fontSize = 24;
-        closeLabel.alignment = TextAlignmentOptions.Center;
-        closeLabel.color = new Color(0.96f, 0.94f, 0.88f);
-        closeLabel.raycastTarget = false;
-
-        var closeBtn = closeGo.GetComponent<Button>();
-        closeBtn.targetGraphic = closeBg;
-        // 수첩을 닫는다 = 씬의 NotePanel을 끄는 것(UIManager가 그 상태로 여닫음을 판단한다)
-        closeBtn.onClick.AddListener(() => gameObject.SetActive(false));
+        BuildTabs(book.transform);
+        BuildSpine(book.transform);
+        BuildLeftPage(book.transform);
+        BuildRightPage(book.transform);
+        BuildCloseButton(book.transform);
 
         // ----- 글꼴 -----
         // 코드로 만든 글자는 기본 글꼴에 한글 글자 모양이 없어 깨지므로,
@@ -309,6 +331,220 @@ public class NotePanelUI : MonoBehaviour
         UIFontHelper.ApplyToChildren(overlay);
 
         overlay.SetActive(false);
+    }
+
+    // 책 왼쪽 바깥에 세로로 붙는 탭 4개.
+    private void BuildTabs(Transform bookTransform)
+    {
+        const float tabWidth = 150f;
+        const float tabHeight = 56f;
+        const float gap = 8f;
+
+        for (int i = 0; i < NoteCatalog.Tabs.Length; i++)
+        {
+            string category = NoteCatalog.Tabs[i];
+
+            var go = new GameObject("Tab_" + category, typeof(RectTransform), typeof(Image), typeof(Button));
+            go.transform.SetParent(bookTransform, false);
+            // 책의 왼쪽 위 모서리를 기준으로 아래로 쌓는다.
+            var rt = go.GetComponent<RectTransform>();
+            rt.anchorMin = new Vector2(0f, 1f);
+            rt.anchorMax = new Vector2(0f, 1f);
+            rt.pivot = new Vector2(1f, 1f);   // 책 왼쪽 바깥으로 나가도록
+            rt.sizeDelta = new Vector2(tabWidth, tabHeight);
+            rt.anchoredPosition = new Vector2(0f, -60f - i * (tabHeight + gap));
+
+            var bg = go.GetComponent<Image>();
+            bg.color = TabIdleColor;
+            bg.raycastTarget = true;
+
+            var labelGo = new GameObject("Label", typeof(RectTransform));
+            labelGo.transform.SetParent(go.transform, false);
+            Stretch(labelGo.GetComponent<RectTransform>());
+            var label = labelGo.AddComponent<TextMeshProUGUI>();
+            label.text = category;
+            label.fontSize = 22;
+            label.alignment = TextAlignmentOptions.Center;
+            label.color = InkColor;
+            label.raycastTarget = false;
+
+            var button = go.GetComponent<Button>();
+            button.targetGraphic = bg;
+            button.onClick.AddListener(() =>
+            {
+                currentCategory = category;
+                // 탭을 바꾸면 고른 메모를 비운다. RebuildList()가 그 탭의 첫 줄을 골라준다.
+                selectedEntryId = null;
+                Refresh();
+            });
+
+            tabButtons.Add(button);
+        }
+    }
+
+    // 가운데 접힘선.
+    private void BuildSpine(Transform bookTransform)
+    {
+        var go = new GameObject("Spine", typeof(RectTransform), typeof(Image));
+        go.transform.SetParent(bookTransform, false);
+        var rt = go.GetComponent<RectTransform>();
+        rt.anchorMin = new Vector2(0.5f, 0f);
+        rt.anchorMax = new Vector2(0.5f, 1f);
+        rt.pivot = new Vector2(0.5f, 0.5f);
+        rt.sizeDelta = new Vector2(20f, 0f);
+        rt.offsetMin = new Vector2(rt.offsetMin.x, 40f);
+        rt.offsetMax = new Vector2(rt.offsetMax.x, -40f);
+
+        var img = go.GetComponent<Image>();
+        img.color = SpineColor;
+        img.raycastTarget = false;
+    }
+
+    // 왼쪽 페이지: 세로로 줄을 쌓는 스크롤 목록.
+    private void BuildLeftPage(Transform bookTransform)
+    {
+        var viewport = new GameObject("ListViewport", typeof(RectTransform), typeof(Image), typeof(RectMask2D));
+        viewport.transform.SetParent(bookTransform, false);
+        var viewportRt = viewport.GetComponent<RectTransform>();
+        viewportRt.anchorMin = new Vector2(0f, 0f);
+        viewportRt.anchorMax = new Vector2(0.5f, 1f);
+        viewportRt.offsetMin = new Vector2(40f, 90f);    // 아래는 닫기 버튼 자리
+        viewportRt.offsetMax = new Vector2(-20f, -40f);
+        viewport.GetComponent<Image>().color = new Color(1f, 1f, 1f, 0.01f);   // 스크롤 입력만 받는다
+
+        var content = new GameObject("ListContent", typeof(RectTransform),
+                                     typeof(VerticalLayoutGroup), typeof(ContentSizeFitter));
+        content.transform.SetParent(viewport.transform, false);
+        listContent = content.GetComponent<RectTransform>();
+        listContent.anchorMin = new Vector2(0f, 1f);
+        listContent.anchorMax = new Vector2(1f, 1f);
+        listContent.pivot = new Vector2(0.5f, 1f);
+        listContent.anchoredPosition = Vector2.zero;
+        listContent.sizeDelta = new Vector2(0f, 100f);
+
+        var layout = content.GetComponent<VerticalLayoutGroup>();
+        layout.childForceExpandHeight = false;
+        layout.childForceExpandWidth = true;
+        layout.childControlHeight = true;
+        layout.childControlWidth = true;
+        layout.spacing = 2f;
+
+        content.GetComponent<ContentSizeFitter>().verticalFit = ContentSizeFitter.FitMode.PreferredSize;
+
+        listScroll = viewport.AddComponent<ScrollRect>();
+        listScroll.viewport = viewportRt;
+        listScroll.content = listContent;
+        listScroll.horizontal = false;
+        listScroll.vertical = true;
+        listScroll.movementType = ScrollRect.MovementType.Clamped;
+        listScroll.scrollSensitivity = 40f;
+    }
+
+    // 오른쪽 페이지: 제목 + 구분선 + 본문(스크롤).
+    private void BuildRightPage(Transform bookTransform)
+    {
+        var titleGo = new GameObject("DetailTitle", typeof(RectTransform));
+        titleGo.transform.SetParent(bookTransform, false);
+        var titleRt = titleGo.GetComponent<RectTransform>();
+        titleRt.anchorMin = new Vector2(0.5f, 1f);
+        titleRt.anchorMax = new Vector2(1f, 1f);
+        titleRt.pivot = new Vector2(0.5f, 1f);
+        titleRt.offsetMin = new Vector2(20f, 0f);
+        titleRt.offsetMax = new Vector2(-40f, 0f);
+        titleRt.sizeDelta = new Vector2(titleRt.sizeDelta.x, 56f);
+        titleRt.anchoredPosition = new Vector2(0f, -40f);
+
+        detailTitleText = titleGo.AddComponent<TextMeshProUGUI>();
+        detailTitleText.text = "";
+        detailTitleText.fontSize = 32;
+        detailTitleText.fontStyle = FontStyles.Bold;
+        detailTitleText.alignment = TextAlignmentOptions.Left;
+        detailTitleText.color = InkColor;
+        detailTitleText.raycastTarget = false;
+
+        var line = new GameObject("DetailDivider", typeof(RectTransform), typeof(Image));
+        line.transform.SetParent(bookTransform, false);
+        var lineRt = line.GetComponent<RectTransform>();
+        lineRt.anchorMin = new Vector2(0.5f, 1f);
+        lineRt.anchorMax = new Vector2(1f, 1f);
+        lineRt.pivot = new Vector2(0.5f, 1f);
+        lineRt.offsetMin = new Vector2(20f, 0f);
+        lineRt.offsetMax = new Vector2(-40f, 0f);
+        lineRt.sizeDelta = new Vector2(lineRt.sizeDelta.x, 2f);
+        lineRt.anchoredPosition = new Vector2(0f, -100f);
+        var lineImg = line.GetComponent<Image>();
+        lineImg.color = LineColor;
+        lineImg.raycastTarget = false;
+
+        var viewport = new GameObject("DetailViewport", typeof(RectTransform), typeof(Image), typeof(RectMask2D));
+        viewport.transform.SetParent(bookTransform, false);
+        var viewportRt = viewport.GetComponent<RectTransform>();
+        viewportRt.anchorMin = new Vector2(0.5f, 0f);
+        viewportRt.anchorMax = new Vector2(1f, 1f);
+        viewportRt.offsetMin = new Vector2(20f, 90f);
+        viewportRt.offsetMax = new Vector2(-40f, -114f);   // 위는 제목과 구분선 자리
+        viewport.GetComponent<Image>().color = new Color(1f, 1f, 1f, 0.01f);
+
+        var content = new GameObject("DetailContent", typeof(RectTransform), typeof(ContentSizeFitter));
+        content.transform.SetParent(viewport.transform, false);
+        var contentRt = content.GetComponent<RectTransform>();
+        contentRt.anchorMin = new Vector2(0f, 1f);
+        contentRt.anchorMax = new Vector2(1f, 1f);
+        contentRt.pivot = new Vector2(0.5f, 1f);
+        contentRt.anchoredPosition = Vector2.zero;
+        // 높이를 미리 잡아둔다. 0으로 두면 글이 들어가도 잘려서 안 보인다.
+        // 실제 높이는 ContentSizeFitter가 글 길이에 맞춰 다시 계산한다.
+        contentRt.sizeDelta = new Vector2(0f, 400f);
+        content.GetComponent<ContentSizeFitter>().verticalFit = ContentSizeFitter.FitMode.PreferredSize;
+
+        detailBodyText = content.AddComponent<TextMeshProUGUI>();
+        detailBodyText.text = "";
+        detailBodyText.fontSize = 24;
+        detailBodyText.alignment = TextAlignmentOptions.TopLeft;
+        detailBodyText.color = InkColor;
+        detailBodyText.lineSpacing = 8f;
+        detailBodyText.raycastTarget = false;
+        detailBodyText.richText = true;
+        detailBodyText.overflowMode = TextOverflowModes.Overflow;   // 길어지면 아래로 이어진다
+
+        detailScroll = viewport.AddComponent<ScrollRect>();
+        detailScroll.viewport = viewportRt;
+        detailScroll.content = contentRt;
+        detailScroll.horizontal = false;
+        detailScroll.vertical = true;
+        detailScroll.movementType = ScrollRect.MovementType.Clamped;
+        detailScroll.scrollSensitivity = 40f;
+    }
+
+    private void BuildCloseButton(Transform bookTransform)
+    {
+        var go = new GameObject("Btn_Close", typeof(RectTransform), typeof(Image), typeof(Button));
+        go.transform.SetParent(bookTransform, false);
+        var rt = go.GetComponent<RectTransform>();
+        rt.anchorMin = new Vector2(0.5f, 0f);
+        rt.anchorMax = new Vector2(0.5f, 0f);
+        rt.pivot = new Vector2(0.5f, 0f);
+        rt.anchoredPosition = new Vector2(0f, 24f);
+        rt.sizeDelta = new Vector2(200f, 50f);
+
+        var bg = go.GetComponent<Image>();
+        bg.color = new Color(0.35f, 0.28f, 0.18f, 0.85f);
+        bg.raycastTarget = true;
+
+        var labelGo = new GameObject("Text", typeof(RectTransform));
+        labelGo.transform.SetParent(go.transform, false);
+        Stretch(labelGo.GetComponent<RectTransform>());
+        var label = labelGo.AddComponent<TextMeshProUGUI>();
+        label.text = "닫기";
+        label.fontSize = 24;
+        label.alignment = TextAlignmentOptions.Center;
+        label.color = new Color(0.96f, 0.94f, 0.88f);
+        label.raycastTarget = false;
+
+        var button = go.GetComponent<Button>();
+        button.targetGraphic = bg;
+        // 수첩을 닫는다 = 씬의 NotePanel을 끄는 것(UIManager가 그 상태로 여닫음을 판단한다)
+        button.onClick.AddListener(() => gameObject.SetActive(false));
     }
 
     private void Stretch(RectTransform rt)
