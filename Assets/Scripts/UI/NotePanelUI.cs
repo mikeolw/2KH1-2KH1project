@@ -377,7 +377,12 @@ public class NotePanelUI : MonoBehaviour
         bookRt.anchorMin = new Vector2(0.5f, 0.5f);
         bookRt.anchorMax = new Vector2(0.5f, 0.5f);
         bookRt.pivot = new Vector2(0.5f, 0.5f);
-        bookRt.sizeDelta = new Vector2(1520f, 880f);
+        // ===== 크기는 캔버스 기준 해상도(1440x1080, 4:3)에 맞춰 잡는다 =====
+        // 이 게임의 그림이 전부 4:3으로 그려져 있어 CanvasScaler 기준 해상도가 1440x1080이다
+        // (AspectRatioKeeper.cs 참고). 처음에는 1920 기준으로 1520x880을 잡았다가, 책이 캔버스보다
+        // 넓어져서 왼쪽 바깥에 붙는 탭이 통째로 화면 밖으로 밀려나 탭 전환이 아예 불가능했다.
+        // 책(1120) + 탭(130) = 1250이라 1440 안에 양옆 95씩 여백을 두고 들어간다.
+        bookRt.sizeDelta = new Vector2(1120f, 720f);
         bookRt.anchoredPosition = Vector2.zero;
         book.GetComponent<Image>().color = PaperColor;
 
@@ -398,8 +403,9 @@ public class NotePanelUI : MonoBehaviour
     // 책 왼쪽 바깥에 세로로 붙는 탭 4개.
     private void BuildTabs(Transform bookTransform)
     {
-        const float tabWidth = 150f;
-        const float tabHeight = 56f;
+        // 책 왼쪽 바깥으로 나가는 폭이라 책 크기와 같이 봐야 한다 (BuildOverlay의 책 크기 주석 참고).
+        const float tabWidth = 130f;
+        const float tabHeight = 52f;
         const float gap = 8f;
 
         for (int i = 0; i < NoteCatalog.Tabs.Length; i++)

@@ -13,7 +13,7 @@
 ## Global Constraints
 
 - **자동 테스트를 쓸 수 없다.** 이 프로젝트에는 Unity Test Framework 패키지도 `Assets/Tests`도 없다. 그래서 각 작업은 *테스트 코드* 대신 **에디터 컴파일 확인 + 명시된 수동 확인**으로 마무리한다. 임의로 테스트 프레임워크를 추가하지 않는다.
-- 기준 해상도 **1920×1080**.
+- 기준 해상도 **1440×1080 (4:3)** — 씬 `CanvasScaler`의 기준 해상도다. `ProjectSettings`의 기본 창 크기(1920×1080)가 아니라 이 값을 써야 한다. 그림이 전부 4:3이라 그렇게 맞춰져 있다(`AspectRatioKeeper.cs` 참고).
 - `NoteEntries.csv`의 **기존 32줄을 수정하지 않는다.** `CSVReader`가 헤더와 값 중 짧은 쪽에 맞춰 읽으므로(`CSVReader.cs:89`) 헤더에만 칸을 추가하면 된다.
 - 기존 세이브 파일이 계속 열려야 한다. `SaveData.noteEntryIds`는 **지우거나 이름을 바꾸지 않는다.**
 - 건드리지 않는 것: 퀵바 버튼, `UIManager.ToggleNote()`, 씬의 `NotePanel`(여닫힘 스위치 역할), 토스트 알림(`OnNoteAdded`).
