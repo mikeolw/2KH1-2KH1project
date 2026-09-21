@@ -220,7 +220,12 @@ public class NoteManager : MonoBehaviour
     //   hotspotKey      : 어떤 오브젝트였는지 (같은 것을 두 번 적지 않기 위한 구분용)
     //   objectName      : 화면에 표시된 이름 (예: 메모장)
     //   text            : 조사했을 때 나온 문장
-    public void AddAutoEntry(string investigationId, string hotspotKey, string objectName, string text)
+    //   speaker         : 사람에게 들은 말이면 그 사람 이름. 아니면 빈 문자열.
+    //   itemId          : 이 조사로 물건을 얻었으면 그 ItemId. 아니면 빈 문자열.
+    //
+    // speaker/itemId는 수첩의 탭을 가르는 데만 쓴다(NoteCatalog.cs 참고). 본문에는 영향이 없다.
+    public void AddAutoEntry(string investigationId, string hotspotKey, string objectName, string text,
+                             string speaker = "", string itemId = "")
     {
         if (allEntries == null) return;
         if (string.IsNullOrWhiteSpace(text)) return;
@@ -240,7 +245,11 @@ public class NoteManager : MonoBehaviour
             triggerKey = "",
             chapter = ChapterLabelOf(investigationId),
             text = body,
-            order = autoEntryOrder++
+            order = autoEntryOrder++,
+            category = "",
+            title = "",
+            speaker = speaker ?? "",
+            itemId = itemId ?? ""
         };
 
         AddEntry(entryId);

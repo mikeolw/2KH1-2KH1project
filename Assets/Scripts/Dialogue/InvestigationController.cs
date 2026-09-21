@@ -1231,7 +1231,16 @@ public class InvestigationController : MonoBehaviour
                     ? (string.IsNullOrEmpty(obj.talkSpeaker) ? obj.objectName : obj.talkSpeaker)
                     : obj.objectName;
 
-                NoteManager.Instance.AddAutoEntry(activeScreenId, obj.gameObject.name, noteName, noteBody);
+                // ===== talkSpeaker를 그대로 넘기면 안 된다 =====
+                // InvestigatableObject를 만들 때 talkSpeaker는 "비어 있으면 objectName으로
+                // 대신 채우는" 식으로 세팅된다(이 파일 999번째 줄). 그래서 말을 거는 대상이
+                // 아닌 물건도 talkSpeaker가 비어 있지 않다. 그대로 넘기면 말을 걸 수 없는 물건까지
+                // 전부 "증언" 탭으로 가버린다. Talk 타입일 때만 화자로 인정한다.
+                string noteSpeaker = obj.type == HotspotType.Talk ? obj.talkSpeaker : "";
+
+                NoteManager.Instance.AddAutoEntry(
+                    activeScreenId, obj.gameObject.name, noteName, noteBody,
+                    noteSpeaker, obj.itemId);
             }
         }
 
