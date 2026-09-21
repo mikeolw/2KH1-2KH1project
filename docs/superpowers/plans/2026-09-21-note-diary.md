@@ -392,8 +392,14 @@ Unity 에디터로 전환해 자동 컴파일이 끝나기를 기다린다.
 
 - [ ] **Step 8: 커밋**
 
+**`NoteEntries.csv`는 커밋하지 않는다.** `Assets/Resources/`는 통째로 `.gitignore` 대상이다 —
+이 저장소는 공개라서 시나리오·조사 대사가 올라가면 누구나 스토리를 미리 볼 수 있기 때문이고,
+그림·소리·CSV는 구글 드라이브로 따로 주고받는다(`.gitignore` 66줄, CLAUDE.md 참고).
+Step 1에서 고친 헤더는 **로컬에 남겨두고 드라이브로 팀원에게 전달한다.**
+`git add -f`로 강제로 올리지 않는다.
+
 ```bash
-git add Assets/Resources/Dialogues/NoteEntries.csv Assets/Scripts/UI/NoteManager.cs Assets/Scripts/UI/NoteCatalog.cs Assets/Editor/NoteCategoryReport.cs
+git add Assets/Scripts/UI/NoteManager.cs Assets/Scripts/UI/NoteCatalog.cs Assets/Editor/NoteCategoryReport.cs
 git commit -m "feat: 수첩 메모 분류/제목 규칙(NoteCatalog)과 점검 도구 추가
 
 Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>"

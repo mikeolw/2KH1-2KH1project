@@ -154,7 +154,15 @@
 | `Assets/Scripts/Save/SaveData.cs` | 자동 메모 목록 필드 추가 |
 | `Assets/Scripts/Save/SavePointManager.cs` | 저장/복원 시 자동 메모 함께 처리 |
 | `Assets/Scripts/Dialogue/InvestigationController.cs` | `AddAutoEntry()` 호출에 인자 2개 추가 (1줄) |
-| `Assets/Resources/Dialogues/NoteEntries.csv` | 헤더에 `Category`, `Title` 추가 (1줄) |
+| `Assets/Resources/Dialogues/NoteEntries.csv` | 헤더에 `Category`, `Title` 추가 (1줄). **git에 올리지 않는다** |
+
+`Assets/Resources/`는 통째로 `.gitignore` 대상이다. 이 저장소는 공개라서 시나리오·조사 대사가
+올라가면 누구나 스토리를 미리 볼 수 있기 때문이고, 그림·소리·CSV는 구글 드라이브로 따로
+주고받는다(`.gitignore` 66줄, CLAUDE.md 참고). 그래서 CSV 헤더 변경은 **커밋되지 않고 로컬에
+남으며, 팀원에게는 드라이브로 전달해야 한다.**
+
+팀원이 예전 CSV(칸이 없는 것)를 그대로 쓰고 있어도 깨지지 않는다. `CSVReader`가 없는 칸을
+빈 문자열로 돌려주고, `NoteCatalog`가 그때 자동 유추로 넘어가기 때문이다.
 
 ## 10. 검증 절차
 
