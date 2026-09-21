@@ -596,6 +596,11 @@ public class DialogueSystem : MonoBehaviour
         // 대사가 끝났을 때
         if (lineIndex >= currentDialogue.lines.Count)
         {
+            // 조사가 막 끝난 직후 이 대본에 남은 줄이 없어 곧장 ShowChoices()로 빠지는
+            // 경우에도 플래그를 꺼야 한다. 여기서 안 끄면 켜진 채로 다음 대본까지 남아서,
+            // 그 대본 첫 줄이 CSV의 IsFadeOut 설정과 무관하게 조사 직후 암전(4초)으로
+            // 잘못 뜬다.
+            nextLineFollowsInvestigation = false;
             ShowChoices();
             return;
         }
