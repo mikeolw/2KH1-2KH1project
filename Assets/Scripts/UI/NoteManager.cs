@@ -127,7 +127,8 @@ public class NoteManager : MonoBehaviour
         if (allEntries.Count == 0)
         {
             Debug.LogWarning(
-                $"[NoteManager] {NoteCsv}.csv를 읽지 못했습니다. 조사기록(메모장)이 비어 있게 됩니다.");
+                $"[NoteManager] {NoteCsv}.csv에서 읽어들인 메모가 하나도 없습니다" +
+                "(파일이 없거나 EntryId가 빈 줄뿐). 조사기록(메모장)이 비어 있게 됩니다.");
         }
     }
 
