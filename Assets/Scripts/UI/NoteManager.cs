@@ -386,6 +386,62 @@ public class NoteManager : MonoBehaviour
     // 세이브용: 지금까지 적힌 메모의 EntryId 목록.
     public List<string> GetRecordedEntryList() => new List<string>(recordedEntryIds);
 
+    // 세이브용: 지금까지 적힌 메모 중 자동으로 만들어진 것들의 정의를 내보낸다.
+    // 이것을 저장해두지 않으면 게임을 껐다 켰을 때 되살릴 수 없다(SaveData.cs 참고).
+    public List<SavedAutoNote> GetAutoEntryDefinitions()
+    {
+        var result = new List<SavedAutoNote>();
+        if (allEntries == null) return result;
+
+        foreach (string id in recordedEntryIds)
+        {
+            if (!allEntries.TryGetValue(id, out var entry)) continue;
+            if (!string.Equals(entry.triggerType, "Auto", System.StringComparison.OrdinalIgnoreCase)) continue;
+
+            result.Add(new SavedAutoNote
+            {
+                entryId = entry.entryId,
+                chapter = entry.chapter,
+                text = entry.text,
+                speaker = entry.speaker,
+                itemId = entry.itemId,
+                order = entry.order
+            });
+        }
+
+        return result;
+    }
+
+    // 로드용: 세이브에 담아둔 자동 메모 정의를 다시 등록한다.
+    // RestoreEntries()보다 반드시 먼저 불러야 한다. 그러지 않으면 EntryId만 복원되고
+    // 정의가 없어서 GetRecordedEntriesSorted()가 그 메모들을 버린다.
+    public void RestoreAutoEntryDefinitions(List<SavedAutoNote> saved)
+    {
+        if (allEntries == null || saved == null) return;
+
+        foreach (var item in saved)
+        {
+            if (item == null || string.IsNullOrEmpty(item.entryId)) continue;
+
+            allEntries[item.entryId] = new NoteEntry
+            {
+                entryId = item.entryId,
+                triggerType = "Auto",
+                triggerKey = "",
+                chapter = item.chapter,
+                text = item.text,
+                order = item.order,
+                category = "",
+                title = "",
+                speaker = item.speaker,
+                itemId = item.itemId
+            };
+
+            // 이어서 만들어질 자동 메모가 되살린 것보다 뒤에 오도록 번호를 밀어둔다.
+            if (item.order >= autoEntryOrder) autoEntryOrder = item.order + 1;
+        }
+    }
+
     // 로드용: 세이브에서 읽어온 목록으로 되돌린다.
     // entryIds에 null을 넘기면 "새 게임"이라는 뜻으로, 처음부터 적혀 있어야 할
     // 회사 메모(TriggerType=Initial)만 남기고 나머지를 비운다.

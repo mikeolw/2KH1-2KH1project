@@ -126,7 +126,10 @@ public class SavePointManager : MonoBehaviour
                 : new System.Collections.Generic.List<string>(),
             noteEntryIds = NoteManager.Instance != null
                 ? NoteManager.Instance.GetRecordedEntryList()
-                : new System.Collections.Generic.List<string>()
+                : new System.Collections.Generic.List<string>(),
+            noteAutoEntries = NoteManager.Instance != null
+                ? NoteManager.Instance.GetAutoEntryDefinitions()
+                : new System.Collections.Generic.List<SavedAutoNote>()
         };
 
         // 미니게임 2(진행형 타임어택)가 지금 돌아가는 중이면 남은 시간도 같이 저장해둔다.
@@ -167,6 +170,10 @@ public class SavePointManager : MonoBehaviour
         }
         if (NoteManager.Instance != null && data.noteEntryIds != null)
         {
+            // 자동 메모의 정의를 먼저 되살린 뒤에 목록을 복원해야 한다.
+            // 순서가 바뀌면 EntryId만 복원되고 본문이 없어서 그 메모들이 사라진다.
+            // (예전 세이브 파일에는 이 칸이 없어 null이 오는데, 그건 안에서 걸러낸다.)
+            NoteManager.Instance.RestoreAutoEntryDefinitions(data.noteAutoEntries);
             NoteManager.Instance.RestoreEntries(data.noteEntryIds);
         }
 
