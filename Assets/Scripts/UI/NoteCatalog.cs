@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using UnityEngine;
 
 // =====================================================================================
 // 수첩 메모를 "어느 탭에 넣을지 / 목록에 뭐라고 띄울지" 정하는 규칙 모음
@@ -31,6 +32,11 @@ public static class NoteCatalog
     // 제목을 만들 길이 없을 때 본문 앞을 잘라 쓰는 길이.
     private const int AutoTitleMaxLength = 12;
 
+    // Category 칸에 오타(예: "증거물")가 있다고 이미 경고한 (EntryId, 값) 조합.
+    // 같은 메모가 화면이 다시 그려질 때마다 매번 경고를 찍으면 Console이 도배되므로,
+    // 한 번 경고한 조합은 다시 찍지 않는다.
+    private static readonly HashSet<string> warnedInvalidCategories = new HashSet<string>();
+
     // ---------------------------------------------------------------------------------
     // 카테고리(탭) 판정
     // ---------------------------------------------------------------------------------
@@ -44,12 +50,38 @@ public static class NoteCatalog
     {
         if (entry == null) return CategoryProgress;
 
-        if (!string.IsNullOrWhiteSpace(entry.category)) return entry.category.Trim();
+        if (!string.IsNullOrWhiteSpace(entry.category))
+        {
+            string category = entry.category.Trim();
+            if (IsKnownTab(category)) return category;
+
+            // Category 칸에 네 탭 이름과 다른 값(오타 등)이 적혀 있으면, 그 메모를 조용히
+            // 사라지게 두는 대신 사건경과 탭으로 떨어뜨린다. 엉뚱한 탭에라도 보이는 편이
+            // 아예 안 보이는 것보다 낫다.
+            string warnKey = entry.entryId + "|" + category;
+            if (warnedInvalidCategories.Add(warnKey))
+            {
+                Debug.LogWarning(
+                    $"[NoteCatalog] EntryId '{entry.entryId}'의 Category 값 '{category}'이(가) " +
+                    $"탭 이름({string.Join(", ", Tabs)})과 일치하지 않습니다. '{CategoryProgress}' 탭으로 대신 분류합니다.");
+            }
+            return CategoryProgress;
+        }
+
         if (IsType(entry, "Initial")) return CategoryWorkNote;
         if (HasSpeaker(entry)) return CategoryTestimony;
         if (HasItem(entry)) return CategoryEvidence;
 
         return CategoryProgress;
+    }
+
+    private static bool IsKnownTab(string category)
+    {
+        foreach (string tab in Tabs)
+        {
+            if (tab == category) return true;
+        }
+        return false;
     }
 
     // "화자 정보가 있다"의 뜻이 메모 종류마다 다르다.
