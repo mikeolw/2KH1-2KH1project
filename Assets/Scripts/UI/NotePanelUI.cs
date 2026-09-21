@@ -55,6 +55,18 @@ public class NotePanelUI : MonoBehaviour
     // 목록에 만들어둔 줄 버튼들. 다시 그릴 때 지우려고 들고 있는다.
     private readonly List<GameObject> listRows = new List<GameObject>();
 
+    // 각 줄의 배경 Image를 entryId로 찾기 위한 사전. 선택만 바뀔 때(SelectEntry) 목록
+    // 전체를 다시 만들지 않고 배경색만 다시 칠하는 데 쓴다. RebuildList가 새로 채운다.
+    private readonly Dictionary<string, Image> listRowImages = new Dictionary<string, Image>();
+
+    // 지금 탭에 속한 메모 목록. SelectEntry가 선택된 entryId로 NoteEntry를 다시 찾을 때 쓴다.
+    private List<NoteManager.NoteEntry> currentEntries = new List<NoteManager.NoteEntry>();
+
+    // ShowDetail()이 스크롤을 되돌려야 하는지 판단하려고 마지막으로 보여준 메모의 id를
+    // 기억해둔다. 실제 존재할 수 없는 값으로 시작해서 "아직 한 번도 안 보여줌"을 구분한다.
+    private const string UnsetDetailId = "__unset_detail_id__";
+    private string lastShownDetailEntryId = UnsetDetailId;
+
     private void Awake()
     {
         HideOriginalPanelVisuals();
@@ -122,15 +134,17 @@ public class NotePanelUI : MonoBehaviour
             Destroy(row);
         }
         listRows.Clear();
+        listRowImages.Clear();
 
         var all = NoteManager.Instance != null
             ? NoteManager.Instance.GetRecordedEntriesSorted()
             : new List<NoteManager.NoteEntry>();
         var entries = NoteCatalog.EntriesIn(all, currentCategory);
+        currentEntries = entries;
 
         if (entries.Count == 0)
         {
-            AddChapterHeading("아직 적어둔 것이 없다.");
+            AddEmptyNotice("아직 적어둔 것이 없다.");
             ShowDetail(null);
             return;
         }
@@ -183,6 +197,26 @@ public class NotePanelUI : MonoBehaviour
         listRows.Add(go);
     }
 
+    // 항목이 하나도 없는 탭에 띄우는 안내문. 챕터 소제목(굵게, 흐린 잉크색)과 헷갈리지
+    // 않도록 굵지 않은 보통 글씨로 그린다.
+    private void AddEmptyNotice(string message)
+    {
+        var go = new GameObject("EmptyNotice", typeof(RectTransform), typeof(LayoutElement));
+        go.transform.SetParent(listContent, false);
+        go.GetComponent<LayoutElement>().preferredHeight = 44f;
+
+        var text = go.AddComponent<TextMeshProUGUI>();
+        text.text = message;
+        text.fontSize = 23;
+        text.fontStyle = FontStyles.Normal;
+        text.alignment = TextAlignmentOptions.TopLeft;
+        text.color = FadedInkColor;
+        text.raycastTarget = false;
+        UIFontHelper.Apply(text);
+
+        listRows.Add(go);
+    }
+
     // 목록의 한 줄. 누르면 오른쪽 페이지가 그 메모로 바뀐다.
     private void AddEntryRow(NoteManager.NoteEntry entry)
     {
@@ -216,13 +250,32 @@ public class NotePanelUI : MonoBehaviour
         string id = entry.entryId;
         var button = go.GetComponent<Button>();
         button.targetGraphic = bg;
-        button.onClick.AddListener(() =>
-        {
-            selectedEntryId = id;
-            RebuildList();
-        });
+        button.onClick.AddListener(() => SelectEntry(id));
 
+        listRowImages[id] = bg;
         listRows.Add(go);
+    }
+
+    // 행을 클릭했을 때 부른다. RebuildList()를 부르지 않고 선택 표시(배경색)와 오른쪽
+    // 페이지만 갱신한다. RebuildList()를 부르면 목록 스크롤이 맨 위로 되감겨서, 아래로
+    // 스크롤한 뒤 고른 항목이 화면 밖으로 사라지는 문제가 있었다.
+    private void SelectEntry(string id)
+    {
+        selectedEntryId = id;
+
+        foreach (var pair in listRowImages)
+        {
+            pair.Value.color = pair.Key == id ? RowSelectedColor : new Color(1f, 1f, 1f, 0.01f);
+        }
+
+        foreach (var entry in currentEntries)
+        {
+            if (entry.entryId == id)
+            {
+                ShowDetail(entry);
+                break;
+            }
+        }
     }
 
     // 오른쪽 페이지에 메모 하나를 펼친다. null이면 비운다.
@@ -236,7 +289,14 @@ public class NotePanelUI : MonoBehaviour
         UIFontHelper.Apply(detailTitleText);
         UIFontHelper.Apply(detailBodyText);
 
-        if (detailScroll != null)
+        // 고른 메모가 실제로 바뀌었을 때만 스크롤을 맨 위로 되돌린다. 그러지 않으면
+        // 수첩을 열어둔 채 새 메모가 추가돼 OnNoteChanged -> Refresh -> RebuildList ->
+        // ShowDetail(같은 항목)이 돌 때마다 읽던 위치를 잃는다.
+        string id = entry != null ? entry.entryId : null;
+        bool changed = id != lastShownDetailEntryId;
+        lastShownDetailEntryId = id;
+
+        if (changed && detailScroll != null)
         {
             Canvas.ForceUpdateCanvases();
             detailScroll.verticalNormalizedPosition = 1f;
@@ -299,6 +359,8 @@ public class NotePanelUI : MonoBehaviour
 
         tabButtons.Clear();
         listRows.Clear();
+        listRowImages.Clear();
+        lastShownDetailEntryId = UnsetDetailId;
 
         // ----- 화면 전체를 덮는 막 -----
         overlay = new GameObject(OverlayName, typeof(RectTransform), typeof(Image));
