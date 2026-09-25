@@ -54,8 +54,18 @@ public class SaveManager : MonoBehaviour
         }
     }
 
-    // 슬롯 번호(0~2)에 대응하는 세이브 파일의 실제 경로를 계산한다.
-    private string GetSlotPath(int slotIndex) => Path.Combine(Application.persistentDataPath, $"save_{slotIndex}.json");
+    // ===== 에디터와 빌드는 세이브 폴더를 따로 쓴다 =====
+    // 윈도우에서는 에디터와 빌드한 게임의 persistentDataPath가 같은 폴더라서, 에디터에서
+    // 테스트하며 만든 세이브가 빌드를 실행했을 때 그대로 보였다. 에디터는 하위 폴더를 쓴다.
+    // (스킵 기록/설정은 PlayerPrefs라서 에디터와 빌드가 원래부터 따로 저장된다.)
+#if UNITY_EDITOR
+    private static string SaveFolder => Path.Combine(Application.persistentDataPath, "EditorSaves");
+#else
+    private static string SaveFolder => Application.persistentDataPath;
+#endif
+
+    // 슬롯 번호에 대응하는 세이브 파일의 실제 경로를 계산한다.
+    private string GetSlotPath(int slotIndex) => Path.Combine(SaveFolder, $"save_{slotIndex}.json");
 
     // 해당 슬롯에 세이브 파일이 존재하는지 여부만 빠르게 확인할 때 사용.
     public bool HasSave(int slotIndex) => File.Exists(GetSlotPath(slotIndex));
@@ -75,6 +85,7 @@ public class SaveManager : MonoBehaviour
     {
         data.slotIndex = slotIndex;
         data.timestamp = DateTime.Now.ToString("yyyy/MM/dd HH:mm");
+        Directory.CreateDirectory(SaveFolder);
         File.WriteAllText(GetSlotPath(slotIndex), JsonUtility.ToJson(data, true));
     }
 
