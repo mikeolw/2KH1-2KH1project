@@ -1162,6 +1162,23 @@ public class InvestigationController : MonoBehaviour
         if (!string.IsNullOrEmpty(obj.afterItemId) &&
             InventoryManager.Instance != null && InventoryManager.Instance.HasItem(obj.afterItemId.Trim()))
         {
+            // ===== 예외: 자료실 문은 증거를 다 찾았으면 다시 들여보내지 않는다 =====
+            // resource_room_entered를 얻은 뒤로는 문을 누를 때마다 위 조건에 걸려 곧장
+            // 자료실(_05)로 재입장하는데, 이미 증거(clue_xxx)를 전부 모아 나온 뒤에도
+            // 똑같이 동작하면 다 주운 조사 오브젝트들이 또 클릭 가능한 채로 나타나
+            // "증거를 또 찾는" 것처럼 보인다. 새 CSV 컬럼을 추가하지 않기 위해(팀 규칙,
+            // CSV_가이드.md 참고), _04의 NextScreenRequires 줄이 사장실 앞 화살표를 보여줄
+            // 때 쓰는 것과 같은 아이템 목록(자료실 증거 전부)을 그대로 재사용해서
+            // "증거를 이미 다 모았는지"를 판단한다.
+            if (activeScreenId == ResourceRoomDoorScreenId &&
+                obj.gameObject.name == ResourceRoomDoorHotspotKey &&
+                screenData.TryGetValue(ResourceRoomDoorScreenId, out ScreenData doorScreen) &&
+                HasAllItems(doorScreen.nextScreenRequiredItemIds))
+            {
+                ShowLineInDialogue("", "다시 들어갈 필요는 없을 것 같다. 가져온 자료를 확인해 보자.");
+                return;
+            }
+
             if (!string.IsNullOrEmpty(obj.afterTargetScreenId))
             {
                 NavigateToLinkedScreen(obj.afterTargetScreenId.Trim());
