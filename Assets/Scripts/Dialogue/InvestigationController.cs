@@ -695,6 +695,20 @@ public class InvestigationController : MonoBehaviour
     {
         ShowScreenContent(screen);
 
+        // ===== 자료실 앞 복도 감시 =====
+        // 이 화면에 있는 동안만 복도에 직원들이 오간다. 범인과 친분이 있는 인물이 보일 때
+        // 문을 건드리면 들킨다 (Inspect()의 판정 참고). 다른 화면으로 옮기면 꺼진다.
+        if (CorridorWatchController.Instance != null)
+        {
+            if (screenId == ResourceRoomDoorScreenId) CorridorWatchController.Instance.Begin();
+            else CorridorWatchController.Instance.Stop();
+        }
+        else if (screenId == ResourceRoomDoorScreenId)
+        {
+            Debug.LogWarning("[InvestigationController] CorridorWatchController가 없어 자료실 앞 복도 감시가 동작하지 않습니다. " +
+                             "씬에 GameBootstrap이 있는지 확인하세요.");
+        }
+
         if (string.IsNullOrEmpty(screen.minigameLabel) || !HasAllItems(screen.minigameRequiredItemIds)) return;
 
         string passedFlag = ScreenMinigamePassedFlag(screenId);
@@ -754,6 +768,7 @@ public class InvestigationController : MonoBehaviour
         if (!inSession) return;
 
         ClearHotspots();
+        CorridorWatchController.Instance?.Stop();
 
         inSession = false;
         IsShowingTalkLine = false;
@@ -792,6 +807,7 @@ public class InvestigationController : MonoBehaviour
         if (!inSession) return;
 
         ClearHotspots();
+        CorridorWatchController.Instance?.Stop();
 
         inSession = false;
         IsShowingTalkLine = false;
@@ -1146,6 +1162,22 @@ public class InvestigationController : MonoBehaviour
         if (activeScreenId != null && WrongHotspots.Contains(TextKey(activeScreenId, obj.gameObject.name)))
         {
             TimeAttackController.Instance?.ApplyPenalty(WrongHotspotPenaltySeconds);
+        }
+
+        // ===== 자료실 앞 복도에서 들켰는가 =====
+        // 범인과 친분이 있는 인물이 복도에 서 있는 동안 자료실 문을 건드리면 그 자리에서
+        // 끝난다. 열쇠가 있든 없든, 이미 한 번 들어간 적이 있든 상관없이 "문에 손을 댔다"는
+        // 사실만 본다. 그래서 아래의 선행 아이템/통과 표시 분기보다 먼저 검사한다.
+        // (문을 연 뒤의 타이밍 클릭 미니게임은 이것과 별개로 그대로 동작한다)
+        if (activeScreenId == ResourceRoomDoorScreenId &&
+            obj.gameObject.name == ResourceRoomDoorHotspotKey &&
+            CorridorWatchController.Instance != null && CorridorWatchController.Instance.IsDangerous)
+        {
+            string who = CorridorWatchController.Instance.CurrentCaption;
+            Debug.Log($"[InvestigationController] 자료실 앞 복도에서 들켰습니다. (복도: {who})");
+            ForceExit();
+            GameFlowManager.Instance?.TriggerEnding(EndingType.Bad_C);
+            return;
         }
 
         // ===== 이미 한 번 통과했는지 확인 (선택지를 매번 다시 묻지 않게) =====
