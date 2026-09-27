@@ -589,6 +589,26 @@ public class InvestigationController : MonoBehaviour
         return result.Count > 0 ? result : null;
     }
 
+    // ===== 자료실 증거를 전부 모았는가 =====
+    // 자료실 앞(_04)의 NextScreenRequires 줄에 적힌 목록(자료실 증거 전부)을 그대로 쓴다.
+    // 이 목록은 원래 사장실 앞으로 가는 화살표를 열어줄 때 쓰는 것인데, 새 CSV 컬럼을
+    // 추가하지 않기 위해(팀 규칙, CSV_가이드.md 참고) 같은 목록을 재사용한다.
+    //
+    // 두 곳에서 이 판단이 필요하다 - 자료실 재입장을 막는 처리(Inspect)와 복도 감시를
+    // 끄는 처리(EnterScreen). 기준이 갈리면 "문은 안내문만 띄우는데 복도에서는 들키는"
+    // 어긋난 상태가 생기므로 한 함수로 묶어둔다.
+    //
+    // 목록이 비어 있으면 false다. HasAllItems()는 조건이 없으면 true를 돌려주는데,
+    // 그 값을 그대로 쓰면 CSV에서 NextScreenRequires 줄이 빠졌을 때 "이미 다 모았다"로
+    // 오해해서 복도 감시가 통째로 꺼져버린다.
+    private bool HasAllResourceRoomClues()
+    {
+        if (!screenData.TryGetValue(ResourceRoomDoorScreenId, out ScreenData doorScreen)) return false;
+        var need = doorScreen.nextScreenRequiredItemIds;
+        if (need == null || need.Count == 0) return false;
+        return HasAllItems(need);
+    }
+
     // itemIds에 적힌 아이템을 전부 가지고 있는지. itemIds가 비어있으면(조건이 없으면) 항상 true.
     private static bool HasAllItems(List<string> itemIds)
     {
@@ -698,10 +718,16 @@ public class InvestigationController : MonoBehaviour
         // ===== 자료실 앞 복도 감시 =====
         // 이 화면에 있는 동안만 복도에 직원들이 오간다. 범인과 친분이 있는 인물이 보일 때
         // 문을 건드리면 들킨다 (Inspect()의 판정 참고). 다른 화면으로 옮기면 꺼진다.
+        //
+        // 증거를 전부 모으고 자료실에서 나온 뒤에는 복도를 아예 띄우지 않는다. 그때부터
+        // 문은 안내문만 보여주고 더는 들어갈 수 없으므로(아래 자료실 재입장 처리 참고),
+        // 사람이 계속 오가는데 들키지도 않는 어정쩡한 상태가 되기 때문이다.
         if (CorridorWatchController.Instance != null)
         {
-            if (screenId == ResourceRoomDoorScreenId) CorridorWatchController.Instance.Begin();
-            else CorridorWatchController.Instance.Stop();
+            if (screenId == ResourceRoomDoorScreenId && !HasAllResourceRoomClues())
+                CorridorWatchController.Instance.Begin();
+            else
+                CorridorWatchController.Instance.Stop();
         }
         else if (screenId == ResourceRoomDoorScreenId)
         {
@@ -1169,8 +1195,13 @@ public class InvestigationController : MonoBehaviour
         // 끝난다. 열쇠가 있든 없든, 이미 한 번 들어간 적이 있든 상관없이 "문에 손을 댔다"는
         // 사실만 본다. 그래서 아래의 선행 아이템/통과 표시 분기보다 먼저 검사한다.
         // (문을 연 뒤의 타이밍 클릭 미니게임은 이것과 별개로 그대로 동작한다)
+        //
+        // 단, 증거를 전부 모은 뒤에는 검사하지 않는다. 그 시점의 문 클릭은 "다시 들어갈
+        // 필요는 없을 것 같다"는 안내만 띄우는 것이 목적이라(아래 자료실 재입장 처리 참고),
+        // 여기서 먼저 잡아버리면 조사를 다 끝낸 플레이어가 무심코 문을 눌렀다가 죽는다.
         if (activeScreenId == ResourceRoomDoorScreenId &&
             obj.gameObject.name == ResourceRoomDoorHotspotKey &&
+            !HasAllResourceRoomClues() &&
             CorridorWatchController.Instance != null && CorridorWatchController.Instance.IsDangerous)
         {
             string who = CorridorWatchController.Instance.CurrentCaption;
@@ -1202,10 +1233,11 @@ public class InvestigationController : MonoBehaviour
             // CSV_가이드.md 참고), _04의 NextScreenRequires 줄이 사장실 앞 화살표를 보여줄
             // 때 쓰는 것과 같은 아이템 목록(자료실 증거 전부)을 그대로 재사용해서
             // "증거를 이미 다 모았는지"를 판단한다.
+            // (판단은 HasAllResourceRoomClues()로 모아뒀다 - 복도 감시를 끄는 쪽과
+            //  기준이 갈리면 "문은 안내문만 띄우는데 복도에서는 들키는" 상태가 된다)
             if (activeScreenId == ResourceRoomDoorScreenId &&
                 obj.gameObject.name == ResourceRoomDoorHotspotKey &&
-                screenData.TryGetValue(ResourceRoomDoorScreenId, out ScreenData doorScreen) &&
-                HasAllItems(doorScreen.nextScreenRequiredItemIds))
+                HasAllResourceRoomClues())
             {
                 ShowLineInDialogue("", "다시 들어갈 필요는 없을 것 같다. 가져온 자료를 확인해 보자.");
                 return;

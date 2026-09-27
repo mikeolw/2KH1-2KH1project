@@ -498,13 +498,22 @@ public class DocumentViewerController : MonoBehaviour
     // 여기서 대신 해준다. 단 두 경우에는 닫지 않는다:
     //   - 끌어서 그림을 움직인 경우 (놓는 순간 창이 닫히면 황당하다)
     //   - 확대해서 보고 있는 경우 (글씨를 보려고 누른 것이지 닫으려는 게 아니다)
-    private class ZoomInputRelay : MonoBehaviour, IDragHandler, IScrollHandler, IPointerClickHandler
+    private class ZoomInputRelay : MonoBehaviour, IPointerDownHandler, IDragHandler, IScrollHandler, IPointerClickHandler
     {
         public DocumentViewerController owner;
 
         // 이번에 누른 동안 얼마나 끌었는지. 손이 살짝 떨린 정도는 클릭으로 봐준다.
         private const float DragSlack = 8f;
         private float draggedDistance;
+
+        // ===== 누를 때마다 처음부터 다시 센다 =====
+        // 예전에는 OnPointerClick에서만 0으로 되돌렸는데, 그림 밖에서 손을 떼면
+        // OnPointerClick이 오지 않아 끌린 거리가 그대로 남았다. 그러면 그 다음에 제대로
+        // 한 번 눌러도 "아까 끌었잖아"로 오해해서 뷰어가 닫히지 않았다.
+        public void OnPointerDown(PointerEventData e)
+        {
+            draggedDistance = 0f;
+        }
 
         public void OnDrag(PointerEventData e)
         {
