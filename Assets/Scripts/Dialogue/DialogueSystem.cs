@@ -593,6 +593,18 @@ public class DialogueSystem : MonoBehaviour
 
     public void ShowNextSentence()
     {
+        // ===== 조사가 진행 중이면 본편 대사를 한 줄도 넘기지 않는다 (마지막 방어선) =====
+        // 조사 화면이 떠 있는 동안 여기가 불리면, 조사 오브젝트와 "조사 그만하기" 버튼은
+        // 그대로 남아 있는데 대화창만 저 혼자 앞으로 나가버린다. 조사가 정상적으로 끝날 때는
+        // Exit()이 inSession을 먼저 끄고 콜백을 부르므로 이 검사에 걸리지 않는다.
+        // (AUTO 자동 진행이 이 구멍으로 새던 것을 막았지만, 다른 경로가 또 생겨도 여기서 걸린다)
+        if (IsInvestigationActive())
+        {
+            Debug.LogWarning("[DialogueSystem] 조사가 진행 중이라 다음 대사로 넘어가지 않습니다. " +
+                             "조사를 끝내는 쪽(InvestigationController.Exit)에서만 대사가 이어져야 합니다.");
+            return;
+        }
+
         // 대사가 끝났을 때
         if (lineIndex >= currentDialogue.lines.Count)
         {
@@ -1017,7 +1029,14 @@ public class DialogueSystem : MonoBehaviour
         // 스킵이 도는 중에는 예약하지 않는다 - 스킵 루프도 CompleteTypingImmediately()를 거쳐
         // 이 함수를 부르므로, 여기서 막지 않으면 자동 진행 코루틴과 스킵 루프가 동시에
         // ShowNextSentence()를 부르게 된다.
-        if (skipMode == SkipMode.None && SettingsManager.Instance != null && SettingsManager.Instance.Current.autoAdvance)
+        //
+        // ===== 조사 중에는 예약 자체를 하지 않는다 =====
+        // 조사 화면은 IsBlockedByOtherUI()에 들어있지 않다(선언부 주석 참고). 그래서 예전에는
+        // AUTO를 켜둔 채 조사에 들어가면, 조사 안내문이 다 찍힐 때마다 여기서 자동 진행이
+        // 예약되어 조사 화면이 떠 있는 채로 본편 대사가 혼자 계속 넘어갔다. 화면에는 조사
+        // 오브젝트와 "조사 그만하기"가 그대로 남아 있는데 대화창만 저 앞으로 가버리는 상태.
+        if (skipMode == SkipMode.None && !IsInvestigationActive() &&
+            SettingsManager.Instance != null && SettingsManager.Instance.Current.autoAdvance)
         {
             StopAutoAdvanceRoutine();
             autoAdvanceRoutine = StartCoroutine(AutoAdvanceAfterLine());
@@ -1040,7 +1059,9 @@ public class DialogueSystem : MonoBehaviour
         autoAdvanceRoutine = null;
 
         // 기다리는 사이에 선택지가 뜨거나 팝업이 열렸을 수 있으므로 다시 확인한다.
-        if (IsBlockedByOtherUI()) yield break;
+        // 조사 화면은 IsBlockedByOtherUI()에 없으므로 따로 본다 - 기다리는 동안 조사가
+        // 시작됐다면 여기서 멈춰야 한다(조사 중에 본편 대사가 혼자 넘어가는 것을 막는다).
+        if (IsBlockedByOtherUI() || IsInvestigationActive()) yield break;
 
         // 아직 읽을 쪽이 남아 있으면 다음 쪽으로, 다 읽었으면 다음 대사 줄로.
         if (HasMorePages) ShowNextPage();
@@ -1124,8 +1145,7 @@ public class DialogueSystem : MonoBehaviour
             // 조사 화면(InvestigationController)은 포함돼 있지 않다(Update()의 Talk 오버레이
             // 분기가 깨지지 않도록 일부러 그렇게 둔 것 - IsBlockedByOtherUI() 선언부 참고).
             // 그래서 스킵 전용으로 여기서 따로 확인한다.
-            bool blockedByInvestigation = InvestigationController.Instance != null && InvestigationController.Instance.IsActive;
-            if (IsBlockedByOtherUI() || blockedByInvestigation) break;
+            if (IsBlockedByOtherUI() || IsInvestigationActive()) break;
 
             if (isTyping)
             {
@@ -1328,6 +1348,15 @@ public class DialogueSystem : MonoBehaviour
 
     // 지금 대사 진행을 막아야 하는 UI(선택지/팝업/미니게임/자료 뷰어)가 떠 있는지 확인한다.
     // Update()와 자동 진행 코루틴이 똑같은 조건을 봐야 해서 함수로 빼두었다.
+    // 조사 화면이 떠 있는가. IsBlockedByOtherUI()에 넣지 않고 따로 둔 이유는 Update()의
+    // "조사 중 Talk 오버레이" 분기가 그 함수를 기준으로 짜여 있어서다(IsBlockedByOtherUI
+    // 선언부와 SkipRoutine 주석 참고). 대신 스스로 대사를 넘기는 쪽(AUTO/스킵)에서는
+    // 반드시 이것도 같이 확인해야 한다.
+    private bool IsInvestigationActive()
+    {
+        return InvestigationController.Instance != null && InvestigationController.Instance.IsActive;
+    }
+
     private bool IsBlockedByOtherUI()
     {
         if (choicePanel != null && choicePanel.activeSelf) return true;
