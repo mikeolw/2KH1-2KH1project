@@ -613,6 +613,7 @@ public class DialogueSystem : MonoBehaviour
             // 그 대본 첫 줄이 CSV의 IsFadeOut 설정과 무관하게 조사 직후 암전(4초)으로
             // 잘못 뜬다.
             nextLineFollowsInvestigation = false;
+            SetLongMonologueLayout(false);   // 큰 독백 화면이 선택지 뒤에 남지 않게
             ShowChoices();
             return;
         }
@@ -637,6 +638,7 @@ public class DialogueSystem : MonoBehaviour
         // 나지 않았다. 그래서 특수 줄로 분기하기 직전에 이 줄의 SFX/BGM을 먼저 적용해준다.
         if (line.isMinigame || line.isInvestigation || line.isDeduction)
         {
+            SetLongMonologueLayout(false);   // 큰 독백 화면이 다른 화면 위에 남지 않게
             ApplyLineAudio(sfxSource, line.sfxToPlay);
             ApplyLineAudio(bgmSource, line.bgmToPlay);
         }
@@ -863,7 +865,7 @@ public class DialogueSystem : MonoBehaviour
         }
 
         // ===== 5) 대사 텍스트 타이핑 시작 =====
-        StartTyping(line.sentence);
+        StartTyping(line.sentence, line.isLongMonologue, line.longMonologueNewPage);
     }
 
     // ---------------------------------------------------------------------------------
@@ -879,7 +881,7 @@ public class DialogueSystem : MonoBehaviour
     private int totalPages;     // 이 대사가 총 몇 쪽인지
 
     // 한 줄을 화면에 찍기 시작한다.
-    private void StartTyping(string sentence)
+    private void StartTyping(string sentence, bool allowLongLayout = false, bool newLongScreen = false)
     {
         // 이전 줄의 타이핑/자동진행이 남아있으면 확실히 정리한다.
         StopTypingRoutine();
@@ -888,7 +890,26 @@ public class DialogueSystem : MonoBehaviour
         currentFullSentence = sentence ?? "";
 
         // 글자를 전부 넣어두고, 창에 들어가는 만큼씩 쪽을 나눈다.
-        sentenceText.text = currentFullSentence;
+        // ===== 긴 독백이면 이전 줄 아래에 이어 붙인다 =====
+        // LongMonologue가 TRUE인 줄이 연달아 오면 한 화면에 위에서 아래로 쌓아 보여준다.
+        // 이미 읽은 앞줄은 그대로 두고 새 줄만 타이핑한다. 화면이 가득 차면 다음 쪽으로 넘어가
+        // 다시 위에서부터 시작한다. (TRUE가 아닌 줄을 만나면 쌓인 글이 비워진다)
+        bool continuingLong = longMonologueLayout;
+        bool longLine = allowLongLayout && SetLongMonologueLayout(true);
+        if (!longLine) SetLongMonologueLayout(false);
+
+        // 연달아 오는 줄은 큰 화면이 이미 켜져 있어서 위 함수가 이름 칸을 다시 숨기지 않는다.
+        // (DisplayLine이 줄마다 SetSpeakerName으로 이름 칸을 켜기 때문) 그래서 여기서 매번 숨긴다.
+        if (longLine && speakerNameBox != null) speakerNameBox.SetActive(false);
+
+        // newLongScreen(CSV의 LongMonologueNewPage)이면 앞에 쌓인 글을 버리고 이 줄부터 새 화면으로 시작한다.
+        string previousLong = longLine && continuingLong && !newLongScreen ? longMonologueBuffer : "";
+        longMonologueBuffer = longLine
+            ? (previousLong.Length == 0 ? currentFullSentence : previousLong + LongLineGap + currentFullSentence)
+            : "";
+        longTypingStartChar = 0;
+
+        sentenceText.text = longLine ? longMonologueBuffer : currentFullSentence;
         sentenceText.overflowMode = TMPro.TextOverflowModes.Page;
         sentenceText.maxVisibleCharacters = 0;
 
@@ -897,12 +918,110 @@ public class DialogueSystem : MonoBehaviour
         // 바로 다음 프레임이라, 캔버스 레이아웃이 아직 반영되기 전에 ForceMeshUpdate가
         // 불려서 페이지 수가 잘못 계산되어(0쪽 등) 첫 대사가 빈칸으로 보일 수 있다.
         // 레이아웃을 먼저 강제로 완료시켜서 이 문제를 막는다.
+        // (조사 대사는 조사 화면 위에 뜨므로 긴 독백 화면에서 항상 제외한다 - allowLongLayout이 false)
         Canvas.ForceUpdateCanvases();
         sentenceText.ForceMeshUpdate();
         totalPages = Mathf.Max(1, sentenceText.textInfo.pageCount);
 
         currentPage = 1;
+        if (longLine && previousLong.Length > 0)
+        {
+            // 새 줄이 시작되는 글자 번호를 구하고, 그 글자가 있는 쪽부터 보여준다.
+            // 앞줄(이미 읽은 글)은 처음부터 보이고, 새 줄만 그 뒤에서부터 타이핑된다.
+            sentenceText.text = previousLong + LongLineGap;
+            sentenceText.ForceMeshUpdate();
+            longTypingStartChar = sentenceText.textInfo.characterCount;
+            sentenceText.text = longMonologueBuffer;
+            sentenceText.ForceMeshUpdate();
+
+            var info = sentenceText.textInfo;
+            for (int p = 0; p < info.pageCount && p < info.pageInfo.Length; p++)
+            {
+                currentPage = p + 1;
+                if (info.pageInfo[p].lastCharacterIndex >= longTypingStartChar) break;
+            }
+        }
+
         ShowPage(currentPage);
+    }
+
+    // ===== 긴 독백: 작은 검은 대화창 대신 화면 가득 글자만 크게 =====
+    // CSV의 LongMonologue 칸이 TRUE인 줄은 작은 검은 박스에서 쪽을 넘기는 대신,
+    // 박스를 투명하게 하고 글자 영역을 화면 전체로 넓혀 크게 보여준다 (미연시의 긴 독백 연출).
+    // 선화(흰 바탕) 위에서도 읽히도록 배경을 어둡게 깐 판(longMonologueDim)을 대화창 뒤에 둔다.
+    // 화자 이름은 표시하지 않는다. AUTO/SKIP 버튼과 ▼ 표시는 대화창 안에 있어서 그대로 보인다.
+    private const float LongBoxHeight = 880f;         // 큰 화면일 때 글자 영역 높이
+    private const float LongSentenceFontSize = 42f;   // 큰 화면일 때 글자 크기
+    // 쌓인 줄과 줄 사이 간격: 줄바꿈 뒤에 글자 크기 50%짜리 빈 줄 하나를 끼운다. (간격을 넓히려면 % 값을 키운다)
+    private const string LongLineGap = "\n<size=50%>\n</size>";
+    private const float LongDimAlpha = 0.9f;         // 배경을 어둡게 까는 정도
+    private bool longMonologueLayout;                 // 지금 큰 화면 모양인지
+    private GameObject longMonologueDim;              // 배경을 어둡게 하는 판 (처음 필요할 때 만든다)
+    private string longMonologueBuffer = "";          // 큰 화면에 지금까지 쌓인 글 (연달아 TRUE인 줄들)
+    private int longTypingStartChar;                  // 새로 타이핑할 줄이 시작되는 글자 번호 (앞줄은 이미 보임)
+
+    // on=true면 큰 화면 모양, false면 평소 모양으로 되돌린다. 바꿀 수 없는 상황이면 false를 돌려준다.
+    private bool SetLongMonologueLayout(bool on)
+    {
+        if (!on) longMonologueBuffer = "";
+        if (on == longMonologueLayout) return on;
+        if (!autoStyleDialogueBox || dialoguePanel == null || sentenceText == null)
+        {
+            if (on) Debug.LogWarning("[DialogueSystem] 긴 독백 화면을 쓰려면 autoStyleDialogueBox가 켜져 있고 dialoguePanel/sentenceText가 연결돼 있어야 합니다.");
+            return false;
+        }
+
+        var panelRect = dialoguePanel.GetComponent<RectTransform>();
+        var textRect = sentenceText.GetComponent<RectTransform>();
+        var bg = dialoguePanel.GetComponent<UnityEngine.UI.Image>();
+        if (panelRect == null || textRect == null || sentenceText.transform.parent != dialoguePanel.transform)
+        {
+            if (on) Debug.LogWarning("[DialogueSystem] sentenceText가 dialoguePanel의 직접 자식이 아니라 긴 독백 화면으로 바꿀 수 없습니다.");
+            return false;
+        }
+
+        longMonologueLayout = on;
+        float boxHeight = on ? LongBoxHeight : DialogueBoxHeight;
+        panelRect.offsetMax = new Vector2(-DialogueSideMargin, DialogueBottomMargin + boxHeight);
+
+        // 위쪽은 이름 칸 자리만큼(평소) 또는 작은 여백(큰 화면)만 비운다.
+        float topInset = on ? 60f : SpeakerBoxHeight + 10f;
+        textRect.offsetMax = new Vector2(-52f, -topInset);
+        sentenceText.fontSize = on ? LongSentenceFontSize : SentenceFontSize;
+
+        if (bg != null) bg.color = on ? new Color(0f, 0f, 0f, 0f) : new Color(0f, 0f, 0f, 0.86f);
+
+        if (speakerNameBox != null)
+        {
+            // 큰 화면에서는 이름을 숨기고, 되돌릴 때는 이름이 있는 줄만 다시 보이게 한다.
+            speakerNameBox.SetActive(!on && speakerText != null && !string.IsNullOrEmpty(speakerText.text));
+        }
+
+        if (on && longMonologueDim == null) CreateLongMonologueDim();
+        if (longMonologueDim != null) longMonologueDim.SetActive(on);
+        return true;
+    }
+
+    private void CreateLongMonologueDim()
+    {
+        var parent = dialoguePanel.transform.parent;
+        if (parent == null) return;
+
+        longMonologueDim = new GameObject("LongMonologueDim", typeof(RectTransform), typeof(UnityEngine.UI.Image));
+        longMonologueDim.transform.SetParent(parent, false);
+
+        var rect = (RectTransform)longMonologueDim.transform;
+        rect.anchorMin = Vector2.zero;
+        rect.anchorMax = Vector2.one;
+        rect.offsetMin = Vector2.zero;
+        rect.offsetMax = Vector2.zero;
+
+        var img = longMonologueDim.GetComponent<UnityEngine.UI.Image>();
+        img.color = new Color(0f, 0f, 0f, LongDimAlpha);
+        img.raycastTarget = false;
+
+        // 대화창 바로 뒤에 둬서 배경/캐릭터는 덮고 대화창·버튼은 덮지 않게 한다.
+        longMonologueDim.transform.SetSiblingIndex(dialoguePanel.transform.GetSiblingIndex());
     }
 
     // 지정한 쪽을 타이핑해서 보여준다.
@@ -941,7 +1060,8 @@ public class DialogueSystem : MonoBehaviour
     {
         isTyping = true;
 
-        int firstChar = GetPageFirstCharIndex(page);
+        // 긴 독백에서 앞줄이 이미 보이는 쪽이면, 새 줄이 시작되는 글자부터 타이핑한다.
+        int firstChar = Mathf.Max(GetPageFirstCharIndex(page), longTypingStartChar);
         int lastChar = GetPageLastCharIndex(page);
 
         sentenceText.maxVisibleCharacters = firstChar;
@@ -1706,6 +1826,12 @@ public class DialogueSystem : MonoBehaviour
             // (SavePointManager.cs 참고).
             line.isSavePoint = GetField(data[i], "IsSavePoint").ToLower() == "true";
             line.savePointId = GetField(data[i], "SavePointId");
+
+            // 긴 독백: 이 칸이 TRUE인 줄은 작은 검은 대화창 대신 화면 가득 큰 글자로 보여준다.
+            // 칸이 없는 예전 CSV는 ""가 되어 평소처럼 나온다.
+            line.isLongMonologue = GetField(data[i], "LongMonologue").Trim().ToLower() == "true";
+            // LongMonologueNewPage가 TRUE인 줄은 쌓인 글을 지우고 새 화면 맨 위에서 시작한다.
+            line.longMonologueNewPage = GetField(data[i], "LongMonologueNewPage").Trim().ToLower() == "true";
 
             // 진행형 타임어택(미니게임 2)의 목표 지점. TRUE면 이 줄에 도달하는 순간
             // TimeAttackController.StopIfRunning()이 타이머를 끈다 (DialogueLine.cs 주석 참고).
