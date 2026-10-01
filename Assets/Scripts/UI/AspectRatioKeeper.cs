@@ -49,6 +49,24 @@ public class AspectRatioKeeper : MonoBehaviour
         // (URP에서는 이 설정이 카메라 인스펙터의 Background Type = Solid Color 에 해당한다)
         cam.clearFlags = CameraClearFlags.SolidColor;
         cam.backgroundColor = letterboxColor;   // 기본값 Color.black
+
+        CreateBackdropCamera();
+    }
+
+    // ===== 검은 띠를 "확실히" 칠하는 배경 카메라 =====
+    // 위 주석처럼 카메라는 자기 rect 안쪽만 지운다. 그래서 바깥 띠에는 직전 화면(예: 타이틀)의
+    // 마지막 프레임이 지워지지 않고 남아 비쳐 보인다. 화면 전체를 검게 지우기만 하는 카메라를
+    // 메인 카메라보다 먼저 그려서 이 문제를 막는다. (아무것도 렌더링하지 않고 clear만 한다.)
+    private void CreateBackdropCamera()
+    {
+        var go = new GameObject("LetterboxBackdropCamera");
+        go.transform.SetParent(transform, false);
+        var backdrop = go.AddComponent<Camera>();
+        backdrop.clearFlags = CameraClearFlags.SolidColor;
+        backdrop.backgroundColor = letterboxColor;
+        backdrop.cullingMask = 0;
+        backdrop.rect = new Rect(0f, 0f, 1f, 1f);
+        backdrop.depth = cam.depth - 100f;
     }
 
     private void Start()
