@@ -894,7 +894,8 @@ public class DialogueSystem : MonoBehaviour
         // LongMonologue가 TRUE인 줄이 연달아 오면 한 화면에 위에서 아래로 쌓아 보여준다.
         // 이미 읽은 앞줄은 그대로 두고 새 줄만 타이핑한다. 화면이 가득 차면 다음 쪽으로 넘어가
         // 다시 위에서부터 시작한다. (TRUE가 아닌 줄을 만나면 쌓인 글이 비워진다)
-        bool continuingLong = longMonologueLayout;
+        bool continuingLong = longMonologueLayout && !longBufferFromInvestigation;
+        longBufferFromInvestigation = false;
         bool longLine = allowLongLayout && SetLongMonologueLayout(true);
         if (!longLine) SetLongMonologueLayout(false);
 
@@ -951,12 +952,13 @@ public class DialogueSystem : MonoBehaviour
     // 선화(흰 바탕) 위에서도 읽히도록 배경을 어둡게 깐 판(longMonologueDim)을 대화창 뒤에 둔다.
     // 화자 이름은 표시하지 않는다. AUTO/SKIP 버튼과 ▼ 표시는 대화창 안에 있어서 그대로 보인다.
     private const float LongBoxHeight = 880f;         // 큰 화면일 때 글자 영역 높이
-    private const float LongSentenceFontSize = 42f;   // 큰 화면일 때 글자 크기
+    private const float LongSentenceFontSize = SentenceFontSize;   // 큰 화면일 때 글자 크기 (평소 대화창과 같게)
     // 쌓인 줄과 줄 사이 간격: 줄바꿈 뒤에 글자 크기 50%짜리 빈 줄 하나를 끼운다. (간격을 넓히려면 % 값을 키운다)
     private const string LongLineGap = "\n<size=50%>\n</size>";
     private const float LongDimAlpha = 0.9f;         // 배경을 어둡게 까는 정도
     private bool longMonologueLayout;                 // 지금 큰 화면 모양인지
     private GameObject longMonologueDim;              // 배경을 어둡게 하는 판 (처음 필요할 때 만든다)
+    private bool longBufferFromInvestigation;         // 지금 큰 화면의 글이 조사 대사의 것인지 (본편 줄이 위에 쌓이지 않게)
     private string longMonologueBuffer = "";          // 큰 화면에 지금까지 쌓인 글 (연달아 TRUE인 줄들)
     private int longTypingStartChar;                  // 새로 타이핑할 줄이 시작되는 글자 번호 (앞줄은 이미 보임)
 
@@ -1350,7 +1352,9 @@ public class DialogueSystem : MonoBehaviour
     // UI만 잠깐 빌려 쓰는 것이다. 다시 조사 화면으로 돌아가는 처리는
     // InvestigationController.DismissTalkLine()이 담당하고, 그 트리거(스페이스/클릭)는
     // 아래 Update()가 IsShowingTalkLine을 보고 분기한다.
-    public void ShowInvestigationLine(string speaker, string sentence)
+    // longMonologue가 true면 작은 검은 대화창 대신 화면 가득 큰 글자로 보여준다 (InvestigationData.csv의 LongMonologue 칸).
+    // 조사 대사는 클릭마다 따로 뜨므로 앞 줄에 이어 쌓지 않고 항상 새 화면에서 시작한다.
+    public void ShowInvestigationLine(string speaker, string sentence, bool longMonologue = false)
     {
         // 진행 중인 타이핑/자동진행은 확실히 멈춘다. 안 그러면 조사 대사를 보여주는 도중에
         // 원래 대사의 타이핑 코루틴이 글자 수를 계속 덮어써서 글자가 뒤섞인다.
@@ -1361,7 +1365,10 @@ public class DialogueSystem : MonoBehaviour
 
         // 조사 대사도 일반 대사와 똑같이 쪽 나누기 + 타이핑을 적용한다.
         // (조사 설명은 긴 문장이 많아서 쪽 나누기가 특히 중요하다)
-        StartTyping(sentence);
+        StartTyping(sentence, longMonologue, true);
+
+        // 이 큰 화면 글은 조사 대사의 것이므로, 조사가 끝나고 이어지는 본편 줄이 이 위에 쌓이지 않게 표시해 둔다.
+        longBufferFromInvestigation = longMonologue;
     }
 
     // 화자 이름을 굵게 표시한다.
@@ -1497,6 +1504,13 @@ public class DialogueSystem : MonoBehaviour
     {
         // "계속" 표시(▼) 깜빡임은 입력과 무관하게 항상 갱신한다.
         Update_ContinueIndicator();
+
+        // 큰 글자 화면의 어두운 판은 대화창이 숨겨지면(조사 대사를 닫았을 때 등) 같이 숨긴다.
+        if (longMonologueDim != null && dialoguePanel != null)
+        {
+            bool dimShouldShow = longMonologueLayout && dialoguePanel.activeInHierarchy;
+            if (longMonologueDim.activeSelf != dimShouldShow) longMonologueDim.SetActive(dimShouldShow);
+        }
 
         // 암전 연출(ShowLineWithFade) 진행 중엔 스페이스/클릭으로 건너뛰지 못하게 막는다.
         if (isFading) return;

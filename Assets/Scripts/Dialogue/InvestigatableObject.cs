@@ -99,6 +99,10 @@ public class InvestigatableObject : MonoBehaviour
     [TextArea(2, 5)]
     public string talkSentence;        // 대사창에 표시할 대사 내용
 
+    // 이 오브젝트의 설명/대사를 작은 검은 대화창 대신 화면 가득 큰 글자로 보여줄지.
+    // InvestigationData.csv의 LongMonologue 칸이 TRUE면 켜진다 (DialogueSystem.SetLongMonologueLayout 참고).
+    public bool longMonologue;
+
     // 대사 끝에 선택지를 보여줘야 하면 채워진다 (없으면 대사 한 줄 보여주고 바로 닫힌다).
     // InvestigationController.BuildScreens()가 InvestigationTalkChoices.csv를 읽어 채운다.
     public System.Collections.Generic.List<InvestigationTalkChoice> talkChoices;

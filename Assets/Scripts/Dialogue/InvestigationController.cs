@@ -186,6 +186,7 @@ public class InvestigationController : MonoBehaviour
         public string objectName;
         public string speaker;
         public string text;
+        public bool longMonologue;   // CSV의 LongMonologue 칸 (큰 글자 화면으로 보여줄지)
         public string itemId;
         public string spriteName;
         public List<InvestigationTalkChoice> talkChoices;
@@ -200,6 +201,7 @@ public class InvestigationController : MonoBehaviour
     {
         public string backgroundName;
         public string introText;
+        public bool introLongMonologue;   // 안내문을 큰 글자 화면으로 보여줄지 (CSV의 LongMonologue 칸)
         // ===== 화면 이동(다음/이전) =====
         // 한 조사(예: #07 회사 조사)가 여러 화면(재훈의 책상 ↔ 회의실)으로 나뉘어 있을 때,
         // "조사 그만하기"로 완전히 나가지 않고도 화면끼리 오갈 수 있게 하는 연결 정보다.
@@ -334,7 +336,11 @@ public class InvestigationController : MonoBehaviour
 
                 if (key == "IntroText")
                 {
-                    if (screen != null) screen.introText = GetField(row, "Text");
+                    if (screen != null)
+                    {
+                        screen.introText = GetField(row, "Text");
+                        screen.introLongMonologue = IsTrue(GetField(row, "LongMonologue"));
+                    }
                     else orphans.Add($"{id}/{key}");
                     continue;
                 }
@@ -423,6 +429,7 @@ public class InvestigationController : MonoBehaviour
             if (key == "IntroText")
             {
                 screen.introText = GetField(row, "Text");
+                screen.introLongMonologue = IsTrue(GetField(row, "LongMonologue"));
                 continue;
             }
 
@@ -516,6 +523,7 @@ public class InvestigationController : MonoBehaviour
                 objectName = objectName,
                 speaker = GetField(textRow, "Speaker"),
                 text = GetField(textRow, "Text"),
+                longMonologue = IsTrue(GetField(textRow, "LongMonologue")),
                 itemId = GetField(textRow, "ItemId"),
                 spriteName = spriteName,
                 talkChoices = talkChoices,
@@ -567,6 +575,12 @@ public class InvestigationController : MonoBehaviour
         }
 
         return result;
+    }
+
+    // CSV 칸이 TRUE인지 (대소문자, 앞뒤 공백 무시). 칸이 없으면 false.
+    private static bool IsTrue(string value)
+    {
+        return !string.IsNullOrEmpty(value) && value.Trim().ToLowerInvariant() == "true";
     }
 
     private string GetField(Dictionary<string, object> row, string column)
@@ -779,7 +793,7 @@ public class InvestigationController : MonoBehaviour
         // 3) 안내문을 대화창에 띄운다.
         if (!string.IsNullOrWhiteSpace(screen.introText))
         {
-            ShowLineInDialogue("", screen.introText);
+            ShowLineInDialogue("", screen.introText, screen.introLongMonologue);
         }
         else
         {
@@ -1040,6 +1054,7 @@ public class InvestigationController : MonoBehaviour
         io.spriteName = data.spriteName;
         io.talkSpeaker = string.IsNullOrEmpty(data.speaker) ? data.objectName : data.speaker;
         io.talkSentence = data.text;
+        io.longMonologue = data.longMonologue;
         io.talkChoices = data.talkChoices;
         io.requiredItemId = data.requiredItemId;
         io.requiredItemMissingText = data.requiredItemMissingText;
@@ -1384,24 +1399,25 @@ public class InvestigationController : MonoBehaviour
         if (obj.type == HotspotType.Talk)
         {
             string speaker = string.IsNullOrEmpty(obj.talkSpeaker) ? obj.objectName : obj.talkSpeaker;
-            ShowLineInDialogue(speaker, obj.talkSentence);
+            ShowLineInDialogue(speaker, obj.talkSentence, obj.longMonologue);
         }
         else
         {
             // 조사 설명은 지문처럼 화자 없이 보여준다.
-            ShowLineInDialogue("", obj.description);
+            ShowLineInDialogue("", obj.description, obj.longMonologue);
         }
     }
 
     // 대화창에 한 줄 띄운다. 조사 화면(오브젝트들)은 계속 보이는 채로 대화창만 위에 겹친다.
-    private void ShowLineInDialogue(string speaker, string sentence)
+    // longMonologue가 true면 작은 검은 대화창 대신 화면 가득 큰 글자로 보여준다 (CSV의 LongMonologue 칸).
+    private void ShowLineInDialogue(string speaker, string sentence, bool longMonologue = false)
     {
         IsShowingTalkLine = true;
         SetDialogueVisible(true);
 
         if (DialogueSystem.Instance != null)
         {
-            DialogueSystem.Instance.ShowInvestigationLine(speaker, sentence);
+            DialogueSystem.Instance.ShowInvestigationLine(speaker, sentence, longMonologue);
         }
     }
 
