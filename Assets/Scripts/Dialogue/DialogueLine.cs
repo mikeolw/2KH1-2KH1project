@@ -29,6 +29,14 @@ public class DialogueLine
     // 세이브 슬롯 목록에 "#01 사무실"처럼 표시된다. 비워두면 CSV 파일 이름이 대신 쓰인다.
     public string savePointId;
 
+    // 긴 독백을 작은 검은 대화창 대신 화면 가득 큰 글자로 보여줄지. CSV의 LongMonologue 칸이 TRUE면 켜진다.
+    // (이 줄에서만 적용되며, 다음 줄이 TRUE가 아니면 평소 대화창으로 돌아온다. DialogueSystem.SetLongMonologueLayout 참고)
+    public bool isLongMonologue;
+
+    // 긴 독백 중에 "이 줄부터 새 화면"으로 넘길지. CSV의 LongMonologueNewPage 칸이 TRUE면 켜진다.
+    // 쌓여 있던 글을 지우고 이 줄을 화면 맨 위에서 시작한다. isLongMonologue가 TRUE인 줄에서만 의미가 있다.
+    public bool longMonologueNewPage;
+
     // 조사기록(수첩)을 실시간으로 갱신할지 여부. CSV의 NoteRealtime 칸.
     //   off  : 이 줄부터 조사 내용이 수첩에 즉시 올라가지 않고 보류함에 쌓인다.
     //   on   : 보류해둔 것을 한꺼번에 수첩에 올리고 다시 실시간 갱신으로 돌아간다.

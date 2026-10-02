@@ -47,6 +47,17 @@ public enum HotspotType
 // Talk 타입 오브젝트가 대사 끝에 선택지를 보여줘야 할 때 쓰는 보기 하나.
 // Resources/Dialogues/InvestigationTalkChoices.csv에서 읽어온다
 // (InvestigationController.LoadTalkChoices() 참고).
+// 같은 오브젝트(InvestigationId+HotspotKey)로 InvestigationData.csv에 줄을 더 적었을 때, 첫 줄 다음에
+// 이어서 보여줄 한 줄. 첫 줄은 평소처럼 talkSentence/description으로 들어가고, 이 목록에는 그 뒤 줄들이 순서대로 담긴다.
+[System.Serializable]
+public class InvestigationFollowUpLine
+{
+    public string speaker;        // 비워두면 첫 줄과 같은 화자(Talk) / 화자 없음(그 외)
+    public string text;
+    public bool longMonologue;    // 이 줄을 큰 글자 화면으로 보여줄지 (LongMonologue 칸)
+    public bool longMonologueNewPage;   // TRUE면 쌓인 글을 지우고 이 줄부터 새 화면 (LongMonologueNewPage 칸)
+}
+
 public class InvestigationTalkChoice
 {
     public string choiceText;       // 선택지 버튼 문구
@@ -98,6 +109,14 @@ public class InvestigatableObject : MonoBehaviour
     public string talkSpeaker;         // 대사창에 표시할 화자 이름
     [TextArea(2, 5)]
     public string talkSentence;        // 대사창에 표시할 대사 내용
+
+    // 이 오브젝트의 설명/대사를 작은 검은 대화창 대신 화면 가득 큰 글자로 보여줄지.
+    // InvestigationData.csv의 LongMonologue 칸이 TRUE면 켜진다 (DialogueSystem.SetLongMonologueLayout 참고).
+    public bool longMonologue;
+
+    // 같은 키로 적은 둘째 줄부터의 대사들 (없으면 null). 클릭할 때마다 한 줄씩 이어서 보여준다.
+    // InvestigationController.LoadDataIfNeeded()가 InvestigationData.csv에서 채운다.
+    public System.Collections.Generic.List<InvestigationFollowUpLine> followUpLines;
 
     // 대사 끝에 선택지를 보여줘야 하면 채워진다 (없으면 대사 한 줄 보여주고 바로 닫힌다).
     // InvestigationController.BuildScreens()가 InvestigationTalkChoices.csv를 읽어 채운다.

@@ -27,6 +27,18 @@ public class TitleManager : MonoBehaviour
 
     private void Awake()
     {
+        // Title 씬에는 카메라가 없어서 화면이 지워지지 않는다(Game 뷰에 "No cameras rendering").
+        // 그러면 다른 씬으로 넘어간 뒤에도 타이틀 마지막 프레임이 가장자리에 남아 보인다.
+        // 화면을 검게 지우는 카메라가 없으면 하나 만들어 둔다.
+        if (Camera.allCamerasCount == 0)
+        {
+            var camGo = new GameObject("TitleClearCamera");
+            var clearCam = camGo.AddComponent<Camera>();
+            clearCam.clearFlags = CameraClearFlags.SolidColor;
+            clearCam.backgroundColor = Color.black;
+            clearCam.cullingMask = 0;
+        }
+
         // "시작하기"는 슬롯 선택 없이 곧바로 게임 씬으로 이동해 새 게임을 시작한다.
         // 이전에 이어하던 세이브가 남아 있으면 그 지점부터 시작해 버리므로 여기서 비워준다
         // (DialogueSystem.Start()가 SaveManager.ActiveSave를 보고 이어할지 판단한다).
