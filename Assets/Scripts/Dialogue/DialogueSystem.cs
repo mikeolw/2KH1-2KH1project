@@ -881,7 +881,7 @@ public class DialogueSystem : MonoBehaviour
     private int totalPages;     // 이 대사가 총 몇 쪽인지
 
     // 한 줄을 화면에 찍기 시작한다.
-    private void StartTyping(string sentence, bool allowLongLayout = false, bool newLongScreen = false)
+    private void StartTyping(string sentence, bool allowLongLayout = false, bool newLongScreen = false, bool fromInvestigation = false)
     {
         // 이전 줄의 타이핑/자동진행이 남아있으면 확실히 정리한다.
         StopTypingRoutine();
@@ -894,8 +894,8 @@ public class DialogueSystem : MonoBehaviour
         // LongMonologue가 TRUE인 줄이 연달아 오면 한 화면에 위에서 아래로 쌓아 보여준다.
         // 이미 읽은 앞줄은 그대로 두고 새 줄만 타이핑한다. 화면이 가득 차면 다음 쪽으로 넘어가
         // 다시 위에서부터 시작한다. (TRUE가 아닌 줄을 만나면 쌓인 글이 비워진다)
-        bool continuingLong = longMonologueLayout && !longBufferFromInvestigation;
-        longBufferFromInvestigation = false;
+        // 조사 대사의 큰 화면 글 위에 본편 줄이 쌓이거나, 그 반대가 되지 않게 출처가 같을 때만 이어 쌓는다.
+        bool continuingLong = longMonologueLayout && longBufferFromInvestigation == fromInvestigation;
         bool longLine = allowLongLayout && SetLongMonologueLayout(true);
         if (!longLine) SetLongMonologueLayout(false);
 
@@ -909,6 +909,7 @@ public class DialogueSystem : MonoBehaviour
             ? (previousLong.Length == 0 ? currentFullSentence : previousLong + LongLineGap + currentFullSentence)
             : "";
         longTypingStartChar = 0;
+        longBufferFromInvestigation = longLine && fromInvestigation;
 
         sentenceText.text = longLine ? longMonologueBuffer : currentFullSentence;
         sentenceText.overflowMode = TMPro.TextOverflowModes.Page;
@@ -1353,8 +1354,9 @@ public class DialogueSystem : MonoBehaviour
     // InvestigationController.DismissTalkLine()이 담당하고, 그 트리거(스페이스/클릭)는
     // 아래 Update()가 IsShowingTalkLine을 보고 분기한다.
     // longMonologue가 true면 작은 검은 대화창 대신 화면 가득 큰 글자로 보여준다 (InvestigationData.csv의 LongMonologue 칸).
-    // 조사 대사는 클릭마다 따로 뜨므로 앞 줄에 이어 쌓지 않고 항상 새 화면에서 시작한다.
-    public void ShowInvestigationLine(string speaker, string sentence, bool longMonologue = false)
+    // newLongScreen이 false이고 앞 줄도 큰 글자 화면이었으면 앞 줄 아래에 이어 쌓는다 (본편과 같은 규칙).
+    // 오브젝트를 처음 누르는 첫 줄은 항상 true(새 화면)로 불린다.
+    public void ShowInvestigationLine(string speaker, string sentence, bool longMonologue = false, bool newLongScreen = true)
     {
         // 진행 중인 타이핑/자동진행은 확실히 멈춘다. 안 그러면 조사 대사를 보여주는 도중에
         // 원래 대사의 타이핑 코루틴이 글자 수를 계속 덮어써서 글자가 뒤섞인다.
@@ -1365,10 +1367,7 @@ public class DialogueSystem : MonoBehaviour
 
         // 조사 대사도 일반 대사와 똑같이 쪽 나누기 + 타이핑을 적용한다.
         // (조사 설명은 긴 문장이 많아서 쪽 나누기가 특히 중요하다)
-        StartTyping(sentence, longMonologue, true);
-
-        // 이 큰 화면 글은 조사 대사의 것이므로, 조사가 끝나고 이어지는 본편 줄이 이 위에 쌓이지 않게 표시해 둔다.
-        longBufferFromInvestigation = longMonologue;
+        StartTyping(sentence, longMonologue, newLongScreen, true);
     }
 
     // 화자 이름을 굵게 표시한다.

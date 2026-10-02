@@ -87,6 +87,10 @@ public class InvestigationController : MonoBehaviour
     // (CheckAutoExit() 참고). 두 필드가 동시에 쓰일 일은 없다 - 있으면 pendingTalkChoices가 우선한다.
     private Action pendingAfterDismiss;
 
+    // 지금 보여주는 대사 뒤에 이어서 보여줄 줄들 (같은 키로 적은 둘째 줄부터). DismissTalkLine()이 한 줄씩 꺼낸다.
+    private Queue<InvestigationFollowUpLine> pendingFollowUps;
+    private string followUpDefaultSpeaker = "";   // 화자를 비운 이어지는 줄에 쓸 화자
+
     // ===== 조사할 때 서류 뷰어를 열지 않고 대사+토스트로만 안내하는 오브젝트 =====
     // (화면ID, HotspotKey) 쌍을 적어둔다. ItemData.csv의 ViewerType은 그대로
     // Document/Photo로 둬야 한다 - 가방에서 "펼쳐보기"로 나중에 다시 읽을 수 있어야
@@ -179,6 +183,9 @@ public class InvestigationController : MonoBehaviour
     // 같은 InvestigationId+HotspotKey로 여러 줄을 적으면 그 줄 순서대로 선택지 버튼이 뜬다.
     private const string InvestigationTalkChoicesCsv = "Dialogues/InvestigationTalkChoices";
 
+    // 같은 키로 적은 둘째 줄부터의 대사 목록을 합친 줄(row)에 담아두는 임시 칸 이름 (LoadDataIfNeeded 참고).
+    private const string FollowUpsKey = "__FollowUps";
+
     private class HotspotData
     {
         public string key;
@@ -187,6 +194,7 @@ public class InvestigationController : MonoBehaviour
         public string speaker;
         public string text;
         public bool longMonologue;   // CSV의 LongMonologue 칸 (큰 글자 화면으로 보여줄지)
+        public List<InvestigationFollowUpLine> followUps;   // 같은 키의 둘째 줄부터의 대사들
         public string itemId;
         public string spriteName;
         public List<InvestigationTalkChoice> talkChoices;
@@ -307,6 +315,14 @@ public class InvestigationController : MonoBehaviour
         }
 
         // 대사/이름 표: "InvestigationId|HotspotKey" -> 그 줄. 같은 키가 두 번 있으면 뒤에 적힌 줄을 쓴다(예전과 같다).
+        // ===== 같은 키가 여러 줄이면 "첫 줄 + 이어지는 줄들"이다 =====
+        // 한 오브젝트를 여러 대사로 말하게 하려면 같은 InvestigationId+HotspotKey로 줄을 더 적는다.
+        //   - 첫 줄이 기본 줄이다. ObjectName/ItemId/RequiredItemId/AfterItemId 같은 나머지 칸은
+        //     첫 줄에서 읽고, 첫 줄에서 비어 있으면 뒤 줄에서 처음 나오는 값을 쓴다.
+        //   - 둘째 줄부터는 Speaker/Text/LongMonologue만 쓰이며, 플레이어가 클릭할 때마다 한 줄씩
+        //     이어서 보인다 (InvestigationFollowUpLine). Speaker를 비우면 첫 줄과 같은 화자다.
+        //   - 아이템 획득, 수첩 기록은 오브젝트를 처음 누를 때, 선택지는 마지막 줄을 닫은 뒤에 평소처럼 처리된다.
+        // (원래는 같은 키가 두 번이면 뒤 줄만 남고 앞 줄은 조용히 버려졌다)
         var texts = new Dictionary<string, Dictionary<string, object>>();
         if (textRows != null)
         {
@@ -315,7 +331,37 @@ public class InvestigationController : MonoBehaviour
                 string id = GetField(row, "InvestigationId").Trim();
                 string key = GetField(row, "HotspotKey").Trim();
                 if (string.IsNullOrEmpty(id) || string.IsNullOrEmpty(key)) continue;
-                texts[TextKey(id, key)] = row;
+
+                string textKey = TextKey(id, key);
+                if (!texts.TryGetValue(textKey, out var first))
+                {
+                    // 원본 표(CSVReader가 돌려준 것)를 건드리지 않도록 복사해서 쓴다.
+                    texts[textKey] = new Dictionary<string, object>(row);
+                    continue;
+                }
+
+                // 둘째 줄부터: 첫 줄에서 비어 있던 칸을 채우고, 대사는 이어서 보여줄 목록에 쌓는다.
+                foreach (var kv in row)
+                {
+                    if (kv.Key == "Speaker" || kv.Key == "Text" || kv.Key == "LongMonologue" || kv.Key == "LongMonologueNewPage") continue;
+                    if (string.IsNullOrWhiteSpace(GetField(first, kv.Key)) && !string.IsNullOrWhiteSpace(kv.Value?.ToString()))
+                    {
+                        first[kv.Key] = kv.Value;
+                    }
+                }
+
+                if (!first.TryGetValue(FollowUpsKey, out var listObj))
+                {
+                    listObj = new List<InvestigationFollowUpLine>();
+                    first[FollowUpsKey] = listObj;
+                }
+                ((List<InvestigationFollowUpLine>)listObj).Add(new InvestigationFollowUpLine
+                {
+                    speaker = GetField(row, "Speaker"),
+                    text = GetField(row, "Text"),
+                    longMonologue = IsTrue(GetField(row, "LongMonologue")),
+                    longMonologueNewPage = IsTrue(GetField(row, "LongMonologueNewPage"))
+                });
             }
         }
 
@@ -524,6 +570,8 @@ public class InvestigationController : MonoBehaviour
                 speaker = GetField(textRow, "Speaker"),
                 text = GetField(textRow, "Text"),
                 longMonologue = IsTrue(GetField(textRow, "LongMonologue")),
+                followUps = textRow != null && textRow.TryGetValue(FollowUpsKey, out var followUpObj)
+                    ? followUpObj as List<InvestigationFollowUpLine> : null,
                 itemId = GetField(textRow, "ItemId"),
                 spriteName = spriteName,
                 talkChoices = talkChoices,
@@ -1055,6 +1103,7 @@ public class InvestigationController : MonoBehaviour
         io.talkSpeaker = string.IsNullOrEmpty(data.speaker) ? data.objectName : data.speaker;
         io.talkSentence = data.text;
         io.longMonologue = data.longMonologue;
+        io.followUpLines = data.followUps;
         io.talkChoices = data.talkChoices;
         io.requiredItemId = data.requiredItemId;
         io.requiredItemMissingText = data.requiredItemMissingText;
@@ -1196,6 +1245,9 @@ public class InvestigationController : MonoBehaviour
     // InvestigatableObject.OnClickInspect()가 호출한다.
     public void Inspect(InvestigatableObject obj)
     {
+        // 이전 오브젝트의 이어지는 대사가 남아 있으면 버린다 (다른 오브젝트를 눌렀을 때 섞이지 않게).
+        pendingFollowUps = null;
+
         // ===== "엉뚱한 곳" 페널티 =====
         // 다른 처리(아이템 지급, 선택지 등)와는 완전히 별개로, 눌린 오브젝트가 WrongHotspots에
         // 있으면 매번(다시 눌러도 그때마다) 시간을 깎는다. 이 오브젝트들엔 RequiredItemId나
@@ -1323,6 +1375,15 @@ public class InvestigationController : MonoBehaviour
             {
                 // Talk 타입은 대사이므로 "누가 이렇게 말했다" 형태로, 나머지는 조사 설명 그대로 적는다.
                 string noteBody = obj.type == HotspotType.Talk ? obj.talkSentence : obj.description;
+
+                // 이어지는 대사가 있으면 수첩에도 전부 옮겨 적는다 (원래 한 칸 안에 \n\n으로 이어 쓰던 것과 같은 모양).
+                if (obj.followUpLines != null)
+                {
+                    foreach (var follow in obj.followUpLines)
+                    {
+                        if (!string.IsNullOrWhiteSpace(follow.text)) noteBody += "\n\n" + follow.text;
+                    }
+                }
                 string noteName = obj.type == HotspotType.Talk
                     ? (string.IsNullOrEmpty(obj.talkSpeaker) ? obj.objectName : obj.talkSpeaker)
                     : obj.objectName;
@@ -1396,6 +1457,15 @@ public class InvestigationController : MonoBehaviour
         // 걸린 오브젝트가 없어 문제되지 않는다.
         if (grantedAnyItem) pendingAfterDismiss = CheckAutoExit;
 
+        // 첫 줄 다음에 이어서 보여줄 줄들을 준비해 둔다 (DismissTalkLine에서 한 줄씩 꺼낸다).
+        if (obj.followUpLines != null && obj.followUpLines.Count > 0)
+        {
+            pendingFollowUps = new Queue<InvestigationFollowUpLine>(obj.followUpLines);
+            followUpDefaultSpeaker = obj.type == HotspotType.Talk
+                ? (string.IsNullOrEmpty(obj.talkSpeaker) ? obj.objectName : obj.talkSpeaker)
+                : "";
+        }
+
         if (obj.type == HotspotType.Talk)
         {
             string speaker = string.IsNullOrEmpty(obj.talkSpeaker) ? obj.objectName : obj.talkSpeaker;
@@ -1410,14 +1480,16 @@ public class InvestigationController : MonoBehaviour
 
     // 대화창에 한 줄 띄운다. 조사 화면(오브젝트들)은 계속 보이는 채로 대화창만 위에 겹친다.
     // longMonologue가 true면 작은 검은 대화창 대신 화면 가득 큰 글자로 보여준다 (CSV의 LongMonologue 칸).
-    private void ShowLineInDialogue(string speaker, string sentence, bool longMonologue = false)
+    // newLongScreen이 true면 앞에 쌓인 글을 지우고 새 화면에서 시작한다 (CSV의 LongMonologueNewPage 칸).
+    // 오브젝트를 처음 누르는 첫 줄은 항상 새 화면이고, 이어지는 줄만 LongMonologue가 연달아 TRUE면 아래로 쌓인다.
+    private void ShowLineInDialogue(string speaker, string sentence, bool longMonologue = false, bool newLongScreen = true)
     {
         IsShowingTalkLine = true;
         SetDialogueVisible(true);
 
         if (DialogueSystem.Instance != null)
         {
-            DialogueSystem.Instance.ShowInvestigationLine(speaker, sentence, longMonologue);
+            DialogueSystem.Instance.ShowInvestigationLine(speaker, sentence, longMonologue, newLongScreen);
         }
     }
 
@@ -1425,6 +1497,17 @@ public class InvestigationController : MonoBehaviour
     public void DismissTalkLine()
     {
         if (!IsShowingTalkLine) return;
+
+        // 이어서 보여줄 줄이 남아 있으면 닫지 않고 다음 줄을 보여준다.
+        // (선택지, 아이템 획득 후 처리, 대화창 닫기는 마지막 줄을 닫을 때 한 번만 일어난다)
+        if (pendingFollowUps != null && pendingFollowUps.Count > 0)
+        {
+            var next = pendingFollowUps.Dequeue();
+            if (pendingFollowUps.Count == 0) pendingFollowUps = null;
+            string nextSpeaker = string.IsNullOrEmpty(next.speaker) ? followUpDefaultSpeaker : next.speaker;
+            ShowLineInDialogue(nextSpeaker, next.text, next.longMonologue, next.longMonologueNewPage);
+            return;
+        }
 
         IsShowingTalkLine = false;
 
