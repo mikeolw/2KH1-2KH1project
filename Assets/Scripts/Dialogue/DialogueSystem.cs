@@ -197,9 +197,34 @@ public class DialogueSystem : MonoBehaviour
     //   - 화자 이름을 굵게, 살짝 크게, 강조색으로
     //   - 오른쪽 아래에 "계속" 표시(▼)를 붙인다
     // 대화창 크기 기준값. 캔버스가 1440x1080이라는 전제로 잡은 값이다.
-    private const float DialogueBoxHeight = 300f;   // 대화창 전체 높이
-    private const float DialogueSideMargin = 60f;   // 좌우 여백
-    private const float DialogueBottomMargin = 40f; // 아래 여백
+    //
+    // 대화창 그림(Assets/Resources/Illusts/UI/DialogueBox.png, 투명 배경)은 화면 전체
+    // 크기 한 장(원본 3000x2250, 4:3)이다. 검은 띠는 그림 속 x 0~1440(화면 폭 전체), y 760~1080이고 그 안의 흰 선이 y 825에 있다.
+    // 아래 값은 전부 이 그림 속 좌표(왼쪽 위 기준 px)에서 뽑았다. 그림을 바꾸면 여기만 고치면 된다.
+    // 그림이 없으면 예전처럼 반투명 검은 판으로 그린다.
+    private const string DialogueArtPath = "Illusts/UI/DialogueBox";
+    private const float DialogueBoxHeight = 320f;   // 대화창 전체 높이 (그림 속 y 760~1080, 화면 맨 아래까지)
+    private const float DialogueSideMargin = 0f;    // 왼쪽 여백 (그림의 검은 띠가 화면 폭 전체)
+    private const float DialogueRightMargin = 0f;   // 오른쪽 여백
+    private const float DialogueBottomMargin = 0f;  // 아래 여백 (그림의 검은 띠가 화면 맨 아래까지)
+    private const float DialogueTopY = 760f;        // 대화창 위쪽 가장자리의 그림 속 y (검은 띠가 시작되는 곳)
+    private const float DialogueLineTop = 65f;      // 흰 선의 대화창 위에서부터의 거리 (그림 속 y 825)
+    private const float DialogueContentLeft = 174f; // 선 왼쪽 끝(그림 x 162)보다 살짝 안쪽
+    private const float DialogueContentRight = 169f; // 선 오른쪽 끝(그림 x 1283)보다 살짝 안쪽 (대화창 오른쪽 끝에서의 거리)
+    private const float DialogueTextTopInset = DialogueLineTop + 16f;   // 대사는 선 아래에서 시작
+    private const float DialogueTextBottomInset = 30f;
+    // 조사 화면의 대사창: AUTO/SKIP 버튼은 항상 숨긴다.
+    // 말하는 사람(이름)이 있으면 평소처럼 흰 선 있는 그림을 쓰고, 이름이 없는 조사 설명일 때만
+    // 흰 선이 없는 같은 검은 띠 그림(InvestigationTextBox.png)을 쓴다. 이때는 선이 없으므로
+    // 대사가 띠 맨 위쪽에서 시작한다.
+    private const string InvestigationArtPath = "Illusts/UI/InvestigationTextBox";
+    private const float InvestigationTextTopInset = 30f;   // 선 없는 띠에서는 이름이 없으므로 대사가 띠 위쪽에서 바로 시작한다
+    private bool investigationBox;                   // 지금 조사 대사인지 (AUTO/SKIP 숨김)
+    private bool linelessBox;                        // 지금 흰 선 없는 그림을 쓰는지 (이름 없는 조사 설명)
+    private Sprite dialogueArtSprite;                // 평소 대화창 그림
+    private Sprite investigationArtSprite;           // 조사 대화창 그림 (없으면 평소 그림을 그대로 쓴다)
+    private GameObject dialogueArt;                  // 대화창 그림 (긴 독백 때는 숨긴다)
+    private bool quickButtonsMadeByCode;             // AUTO/SKIP을 코드로 만들었는지 (그림이 있으면 글자만 보이게 한다)
     private const float SpeakerBoxHeight = 56f;     // 이름 칸 높이
     private const float SentenceFontSize = 34f;     // 대사 글자 크기
     private const float SpeakerFontSize = 30f;      // 이름 글자 크기
@@ -226,15 +251,16 @@ public class DialogueSystem : MonoBehaviour
             panelRect.anchorMax = new Vector2(1f, 0f);
             panelRect.pivot = new Vector2(0.5f, 0f);
             panelRect.offsetMin = new Vector2(DialogueSideMargin, DialogueBottomMargin);
-            panelRect.offsetMax = new Vector2(-DialogueSideMargin, DialogueBottomMargin + DialogueBoxHeight);
+            panelRect.offsetMax = new Vector2(-DialogueRightMargin, DialogueBottomMargin + DialogueBoxHeight);
         }
 
-        // ----- 대화창 배경 (검은색) -----
+        // ----- 대화창 배경 -----
+        // 그림이 있으면 그림이 배경이고, 없으면 검은 판을 깐다. (선화 위에 흰 글자를 올려야 한다)
         var bg = dialoguePanel.GetComponent<UnityEngine.UI.Image>();
+        CreateDialogueArt();
         if (bg != null)
         {
-            // 선화(흰 바탕 + 검은 선) 위에 흰 글자를 올려야 하므로 검은 판을 깐다.
-            bg.color = new Color(0f, 0f, 0f, 0.86f);
+            bg.color = dialogueArt != null ? new Color(0f, 0f, 0f, 0f) : new Color(0f, 0f, 0f, 0.86f);
         }
 
         // ----- 화자 이름 칸 -----
@@ -247,14 +273,23 @@ public class DialogueSystem : MonoBehaviour
                 nameRect.anchorMin = new Vector2(0f, 1f);
                 nameRect.anchorMax = new Vector2(0f, 1f);
                 nameRect.pivot = new Vector2(0f, 1f);
-                nameRect.anchoredPosition = new Vector2(30f, -14f);
+                if (dialogueArt != null)
+                {
+                    // 그림의 흰 선 바로 위, 선 왼쪽 끝에 맞춘다.
+                    nameRect.anchoredPosition = new Vector2(DialogueContentLeft, -(DialogueLineTop - SpeakerBoxHeight - 4f));
+                }
+                else
+                {
+                    nameRect.anchoredPosition = new Vector2(30f, -14f);
+                }
                 nameRect.sizeDelta = new Vector2(400f, SpeakerBoxHeight);
             }
 
             speakerText.fontStyle = TMPro.FontStyles.Bold;
             speakerText.fontSize = SpeakerFontSize;
-            speakerText.color = new Color(1f, 0.86f, 0.45f);   // 옅은 금색 - 대사와 구분되게
-            speakerText.alignment = TMPro.TextAlignmentOptions.Left;
+            // 그림이 있으면 흰색, 없으면 옅은 금색 - 대사와 구분되게
+            speakerText.color = dialogueArt != null ? new Color(0.96f, 0.96f, 0.94f) : new Color(1f, 0.86f, 0.45f);
+            speakerText.alignment = dialogueArt != null ? TMPro.TextAlignmentOptions.BottomLeft : TMPro.TextAlignmentOptions.Left;
             speakerText.margin = Vector4.zero;
             speakerText.raycastTarget = false;
 
@@ -274,8 +309,17 @@ public class DialogueSystem : MonoBehaviour
                 textRect.pivot = new Vector2(0.5f, 0.5f);
                 // 위쪽은 이름 칸만큼 비우고, 오른쪽은 "계속" 표시(▼) 자리를, 왼쪽 아래는
                 // AUTO/SKIP 버튼(높이 40 + 여백) 자리를 남긴다.
-                textRect.offsetMin = new Vector2(30f, 60f);
-                textRect.offsetMax = new Vector2(-52f, -(SpeakerBoxHeight + 10f));
+                if (dialogueArt != null)
+                {
+                    // 흰 선 아래에서 시작해 띠 바닥 근처까지 쓴다. AUTO/SKIP은 선 위로 올라갔다.
+                    textRect.offsetMin = new Vector2(DialogueContentLeft, DialogueTextBottomInset);
+                    textRect.offsetMax = new Vector2(-DialogueContentRight, -DialogueTextTopInset);
+                }
+                else
+                {
+                    textRect.offsetMin = new Vector2(30f, 60f);
+                    textRect.offsetMax = new Vector2(-52f, -(SpeakerBoxHeight + 10f));
+                }
             }
 
             // 넘치면 다음 쪽으로 (창 밖으로 삐져나가지 않게 하는 핵심 설정)
@@ -297,6 +341,105 @@ public class DialogueSystem : MonoBehaviour
         CreateContinueIndicator();
         CreateSkipButtons();
         FixFadeOverlayOrder();
+    }
+
+    // 대화창 그림을 대화창의 첫 번째 자식으로 깐다. 그림은 화면 전체 크기라서, 대화창 모서리를
+    // 기준으로 "대화창 바깥으로 넓게" 늘려 화면 전체에 맞춘다 (그림 속 좌표와 대화창 여백이 같은 값).
+    // 글자/버튼보다 뒤에 그려지고 클릭을 막지 않는다. 그림 파일이 없으면 아무것도 안 만든다.
+    private void CreateDialogueArt()
+    {
+        if (dialogueArt != null) return;
+
+        var sprite = Resources.Load<Sprite>(DialogueArtPath);
+        if (sprite == null)
+        {
+            Debug.LogWarning("[DialogueSystem] 대화창 그림을 찾을 수 없어 검은 판으로 그립니다: Assets/Resources/" + DialogueArtPath + ".png");
+            return;
+        }
+
+        dialogueArt = new GameObject("DialogueArt", typeof(RectTransform), typeof(Image));
+        dialogueArt.transform.SetParent(dialoguePanel.transform, false);
+        dialogueArt.transform.SetAsFirstSibling();
+
+        var rt = (RectTransform)dialogueArt.transform;
+        rt.anchorMin = Vector2.zero;
+        rt.anchorMax = Vector2.one;
+        rt.offsetMin = new Vector2(-DialogueSideMargin, -DialogueBottomMargin);
+        rt.offsetMax = new Vector2(DialogueRightMargin, DialogueTopY);
+
+        dialogueArtSprite = sprite;
+        investigationArtSprite = Resources.Load<Sprite>(InvestigationArtPath);
+
+        var img = dialogueArt.GetComponent<Image>();
+        img.sprite = sprite;
+        img.color = Color.white;
+        img.raycastTarget = false;
+    }
+
+    // 조사 화면에서 대사창을 빌려 쓸 때 on=true (hasSpeaker = 이름이 있는 줄인지). 본편 대사로 돌아오면 false.
+    // 조사 중에는 AUTO/SKIP을 숨기고, 이름이 없는 줄만 선 없는 그림으로 바꿔 대사 자리를 위로 올린다.
+    private void SetInvestigationTextBoxStyle(bool on, bool hasSpeaker = false)
+    {
+        if (on != investigationBox)
+        {
+            investigationBox = on;
+            if (autoButton != null) autoButton.gameObject.SetActive(!on);
+            if (skipAlreadyReadButton != null) skipAlreadyReadButton.gameObject.SetActive(!on);
+            if (skipForceButton != null) skipForceButton.gameObject.SetActive(!on);
+        }
+
+        bool lineless = on && !hasSpeaker;
+        if (lineless == linelessBox) return;
+        linelessBox = lineless;
+
+        if (dialogueArt == null) return;
+
+        var sprite = lineless && investigationArtSprite != null ? investigationArtSprite : dialogueArtSprite;
+        dialogueArt.GetComponent<Image>().sprite = sprite;
+
+        // 큰 독백 화면일 때는 SetLongMonologueLayout이 글자 자리를 따로 잡으므로 건드리지 않는다.
+        if (!longMonologueLayout && sentenceText != null && sentenceText.transform.parent == dialoguePanel.transform)
+        {
+            var textRect = sentenceText.GetComponent<RectTransform>();
+            textRect.offsetMax = new Vector2(-DialogueContentRight, -(lineless ? InvestigationTextTopInset : DialogueTextTopInset));
+        }
+    }
+
+    // AUTO/SKIP 버튼 자리. 평소에는 그림의 흰 선 위 오른쪽에 글자만 놓고(그림 속 모습),
+    // 긴 독백 큰 화면에서는 원래대로 왼쪽 아래에 둔다.
+    private void LayoutQuickButtons(bool longMonologue)
+    {
+        if (!quickButtonsMadeByCode) return;
+
+        bool onLine = dialogueArt != null && !longMonologue;
+        PlaceQuickButton(autoButton, onLine, 0, 30f, 90f);
+        PlaceQuickButton(skipAlreadyReadButton, onLine, 1, 130f, 90f);
+        PlaceQuickButton(skipForceButton, onLine, 2, 230f, 120f);
+    }
+
+    private void PlaceQuickButton(Button button, bool onLine, int order, float bottomLeftX, float width)
+    {
+        if (button == null) return;
+        var rt = (RectTransform)button.transform;
+
+        if (onLine)
+        {
+            // 오른쪽 끝부터 SKIP ALL / SKIP / AUTO 순으로 늘어놓는다 (왼쪽부터 AUTO, SKIP, SKIP ALL).
+            float[] widths = { 90f, 90f, 120f };
+            float rightEdge = -DialogueContentRight;
+            for (int i = widths.Length - 1; i > order; i--) rightEdge -= widths[i] + 10f;
+            rt.anchorMin = rt.anchorMax = new Vector2(1f, 1f);
+            rt.pivot = new Vector2(1f, 1f);
+            rt.anchoredPosition = new Vector2(rightEdge, -(DialogueLineTop - 44f));
+            rt.sizeDelta = new Vector2(width, 40f);
+        }
+        else
+        {
+            rt.anchorMin = rt.anchorMax = new Vector2(0f, 0f);
+            rt.pivot = new Vector2(0f, 0f);
+            rt.anchoredPosition = new Vector2(bottomLeftX, 12f);
+            rt.sizeDelta = new Vector2(width, 40f);
+        }
     }
 
     // ===== 페이드(암전) 연출이 UI까지 가리던 문제 =====
@@ -333,6 +476,18 @@ public class DialogueSystem : MonoBehaviour
         }
     }
 
+    private RectTransform indicatorRect;
+
+    // ▼ 표시를 그림 속 띠 안쪽 오른쪽 아래로 (긴 독백 큰 화면에서는 원래 자리).
+    private void UpdateContinueIndicatorPosition(bool longMonologue)
+    {
+        if (indicatorRect == null) return;
+        bool inBand = dialogueArt != null && !longMonologue;
+        indicatorRect.anchoredPosition = inBand
+            ? new Vector2(-(DialogueContentRight + 4f), 44f)
+            : new Vector2(-18f, 12f);
+    }
+
     // 대사가 더 남아 있음을 알려주는 ▼ 표시를 대화창 오른쪽 아래에 만든다.
     private void CreateContinueIndicator()
     {
@@ -347,6 +502,8 @@ public class DialogueSystem : MonoBehaviour
         rt.pivot = new Vector2(1f, 0f);
         rt.anchoredPosition = new Vector2(-18f, 12f);
         rt.sizeDelta = new Vector2(30f, 30f);
+        indicatorRect = rt;
+        UpdateContinueIndicatorPosition(false);
 
         continueIndicator = go.AddComponent<TextMeshProUGUI>();
         continueIndicator.text = "▼";
@@ -369,6 +526,7 @@ public class DialogueSystem : MonoBehaviour
         // 엔진에 내장된 리소스라서 빌드에도 그대로 포함된다.
         Sprite buttonSprite = Resources.GetBuiltinResource<Sprite>("UI/Skin/UISprite.psd");
 
+        bool created = autoButton == null && skipAlreadyReadButton == null && skipForceButton == null;
         if (autoButton == null) autoButton = CreateQuickActionButton("AutoButton", "AUTO", buttonSprite, 30f, 90f);
         if (skipAlreadyReadButton == null) skipAlreadyReadButton = CreateQuickActionButton("SkipAlreadyReadButton", "SKIP", buttonSprite, 130f, 90f);
         if (skipForceButton == null) skipForceButton = CreateQuickActionButton("SkipForceButton", "SKIP ALL", buttonSprite, 230f, 120f);
@@ -376,6 +534,11 @@ public class DialogueSystem : MonoBehaviour
         autoButton.onClick.AddListener(ToggleAuto);
         skipAlreadyReadButton.onClick.AddListener(ToggleSkipAlreadyRead);
         skipForceButton.onClick.AddListener(ToggleSkipForce);
+
+        quickButtonsMadeByCode = created;
+        LayoutQuickButtons(false);
+        UpdateAutoButtonVisual();
+        UpdateSkipButtonVisuals();
     }
 
     // 위 CreateSkipButtons()가 쓰는 버튼 하나 생성 도우미. 대화창 왼쪽 아래를 기준으로
@@ -604,6 +767,9 @@ public class DialogueSystem : MonoBehaviour
                              "조사를 끝내는 쪽(InvestigationController.Exit)에서만 대사가 이어져야 합니다.");
             return;
         }
+
+        // 본편 대사로 돌아왔으니 조사용 대사창 모양(선 없는 그림, AUTO/SKIP 숨김)을 풀어준다.
+        SetInvestigationTextBoxStyle(false);
 
         // 대사가 끝났을 때
         if (lineIndex >= currentDialogue.lines.Count)
@@ -985,14 +1151,30 @@ public class DialogueSystem : MonoBehaviour
 
         longMonologueLayout = on;
         float boxHeight = on ? LongBoxHeight : DialogueBoxHeight;
-        panelRect.offsetMax = new Vector2(-DialogueSideMargin, DialogueBottomMargin + boxHeight);
+        // 큰 화면은 화면 가득 쓰고, 평소에는 그림 속 띠 자리(좌우 여백이 다르다)로 되돌린다.
+        float leftMargin = on ? 60f : DialogueSideMargin;
+        float rightMargin = on ? 60f : DialogueRightMargin;
+        panelRect.offsetMin = new Vector2(leftMargin, DialogueBottomMargin);
+        panelRect.offsetMax = new Vector2(-rightMargin, DialogueBottomMargin + boxHeight);
 
-        // 위쪽은 이름 칸 자리만큼(평소) 또는 작은 여백(큰 화면)만 비운다.
-        float topInset = on ? 60f : SpeakerBoxHeight + 10f;
-        textRect.offsetMax = new Vector2(-52f, -topInset);
+        // 위쪽은 이름 칸 자리(평소, 그림이 있으면 흰 선 아래) 또는 작은 여백(큰 화면)만 비운다.
+        float artTopInset = linelessBox ? InvestigationTextTopInset : DialogueTextTopInset;
+        float topInset = on ? 60f : (dialogueArt != null ? artTopInset : SpeakerBoxHeight + 10f);
+        float insetLeft = on || dialogueArt == null ? 30f : DialogueContentLeft;
+        float insetRight = on || dialogueArt == null ? 52f : DialogueContentRight;
+        float insetBottom = on || dialogueArt == null ? 60f : DialogueTextBottomInset;
+        textRect.offsetMin = new Vector2(insetLeft, insetBottom);
+        textRect.offsetMax = new Vector2(-insetRight, -topInset);
         sentenceText.fontSize = on ? LongSentenceFontSize : SentenceFontSize;
 
-        if (bg != null) bg.color = on ? new Color(0f, 0f, 0f, 0f) : new Color(0f, 0f, 0f, 0.86f);
+        if (bg != null)
+        {
+            bool normalBlack = !on && dialogueArt == null;
+            bg.color = normalBlack ? new Color(0f, 0f, 0f, 0.86f) : new Color(0f, 0f, 0f, 0f);
+        }
+        if (dialogueArt != null) dialogueArt.SetActive(!on);
+        LayoutQuickButtons(on);
+        UpdateContinueIndicatorPosition(on);
 
         if (speakerNameBox != null)
         {
@@ -1331,7 +1513,17 @@ public class DialogueSystem : MonoBehaviour
         if (button == null) return;
         if (button.targetGraphic is Image image)
         {
-            image.color = active ? toggleActiveColor : toggleInactiveColor;
+            if (dialogueArt != null && quickButtonsMadeByCode)
+            {
+                // 그림 속 AUTO/SKIP은 버튼 배경 없이 글자만 있다 - 켜진 것만 금색 글자로 표시한다.
+                image.color = new Color(1f, 1f, 1f, 0f);
+                var label = button.GetComponentInChildren<TMP_Text>();
+                if (label != null) label.color = active ? toggleActiveColor : new Color(0.96f, 0.96f, 0.94f);
+            }
+            else
+            {
+                image.color = active ? toggleActiveColor : toggleInactiveColor;
+            }
         }
     }
 
@@ -1363,6 +1555,7 @@ public class DialogueSystem : MonoBehaviour
         StopTypingRoutine();
         StopAutoAdvanceRoutine();
 
+        SetInvestigationTextBoxStyle(true, !string.IsNullOrEmpty(speaker));
         SetSpeakerName(speaker);
 
         // 조사 대사도 일반 대사와 똑같이 쪽 나누기 + 타이핑을 적용한다.

@@ -37,7 +37,11 @@ public class NotePanelUI : MonoBehaviour
     private static readonly Color SpineColor = new Color(0.28f, 0.21f, 0.13f, 1f);
     private static readonly Color TabIdleColor = new Color(0.72f, 0.66f, 0.55f, 1f);
     private static readonly Color TabActiveColor = PaperColor;
-    private static readonly Color RowSelectedColor = new Color(0.82f, 0.74f, 0.58f, 1f);
+    private static readonly Color RowSelectedColor = new Color(0.62f, 0.63f, 0.76f, 0.45f);   // 노트 종이(연한 보랏빛 회색)에 맞춘 색
+
+    // 노트 그림 경로 (Resources 기준, 확장자 없음). 1440x1080, 투명 배경.
+    private const string BookSpritePath = "Illusts/UI/NoteBook";
+    private bool hasBookArt;
 
     private GameObject overlay;
 
@@ -307,10 +311,27 @@ public class NotePanelUI : MonoBehaviour
     {
         for (int i = 0; i < tabButtons.Count && i < NoteCatalog.Tabs.Length; i++)
         {
+            bool active = NoteCatalog.Tabs[i] == currentCategory;
+
             var image = tabButtons[i].GetComponent<Image>();
             if (image != null)
             {
-                image.color = NoteCatalog.Tabs[i] == currentCategory ? TabActiveColor : TabIdleColor;
+                if (hasBookArt)
+                {
+                    // 그림 속 탭 위에 얹는 투명 버튼 - 고른 탭만 살짝 어둡게 눌러둔다.
+                    image.color = active ? new Color(0.25f, 0.27f, 0.45f, 0.28f) : new Color(1f, 1f, 1f, 0.01f);
+                }
+                else
+                {
+                    image.color = active ? TabActiveColor : TabIdleColor;
+                }
+            }
+
+            var label = tabButtons[i].GetComponentInChildren<TMP_Text>();
+            if (label != null)
+            {
+                label.fontStyle = active ? FontStyles.Bold : FontStyles.Normal;
+                label.color = active ? InkColor : FadedInkColor;
             }
         }
     }
@@ -382,15 +403,32 @@ public class NotePanelUI : MonoBehaviour
         // (AspectRatioKeeper.cs 참고). 처음에는 1920 기준으로 1520x880을 잡았다가, 책이 캔버스보다
         // 넓어져서 왼쪽 바깥에 붙는 탭이 통째로 화면 밖으로 밀려나 탭 전환이 아예 불가능했다.
         // 책(1120) + 탭(130) = 1250이라 1440 안에 양옆 95씩 여백을 두고 들어간다.
-        bookRt.sizeDelta = new Vector2(1120f, 720f);
+        // 노트 그림(Assets/Resources/Illusts/UI/NoteBook.png)은 캔버스와 같은 1440x1080 한 장이라
+        // 책을 캔버스 전체 크기로 깔고, 탭/페이지 위치는 그림 속 좌표(왼쪽 위 기준 px)로 잡는다.
+        // 그림이 없으면(구글 드라이브에서 아직 안 받은 사람) 예전 색 도형 책으로 대신 그린다.
+        bookRt.sizeDelta = new Vector2(1440f, 1080f);
         bookRt.anchoredPosition = Vector2.zero;
-        book.GetComponent<Image>().color = PaperColor;
+        var bookSprite = Resources.Load<Sprite>(BookSpritePath);
+        hasBookArt = bookSprite != null;
+        var bookImage = book.GetComponent<Image>();
+        if (hasBookArt)
+        {
+            bookImage.sprite = bookSprite;
+            bookImage.color = Color.white;
+        }
+        else
+        {
+            bookImage.color = new Color(0f, 0f, 0f, 0f);
+            Debug.LogWarning("[NotePanelUI] 노트 그림을 찾을 수 없어 임시 도형으로 그립니다: Assets/Resources/" + BookSpritePath + ".png");
+            BuildFallbackBook(book.transform);
+        }
+        bookImage.raycastTarget = false;
 
         BuildTabs(book.transform);
-        BuildSpine(book.transform);
         BuildLeftPage(book.transform);
         BuildRightPage(book.transform);
-        BuildCloseButton(book.transform);
+        // 닫기 버튼은 책이 아니라 어두운 바깥 화면의 왼쪽 위 모서리에 붙인다.
+        BuildCloseButton(overlay.transform);
 
         // ----- 글꼴 -----
         // 코드로 만든 글자는 기본 글꼴에 한글 글자 모양이 없어 깨지므로,
@@ -400,38 +438,79 @@ public class NotePanelUI : MonoBehaviour
         overlay.SetActive(false);
     }
 
-    // 책 왼쪽 바깥에 세로로 붙는 탭 4개.
+    // 책 안의 자리를 "그림 속 좌표"(왼쪽 위가 0,0 / 단위 px)로 잡는다.
+    // 책이 1440x1080 그림 한 장이라 그림에서 본 숫자를 그대로 쓰면 된다.
+    private static void Place(RectTransform rt, float x, float y, float width, float height)
+    {
+        rt.anchorMin = new Vector2(0f, 1f);
+        rt.anchorMax = new Vector2(0f, 1f);
+        rt.pivot = new Vector2(0f, 1f);
+        rt.anchoredPosition = new Vector2(x, -y);
+        rt.sizeDelta = new Vector2(width, height);
+    }
+
+    // ----- 노트 그림 속 좌표 (NoteBook.png 기준) -----
+    // 왼쪽 페이지 x 250~770, 오른쪽 페이지 x 770~1290, 종이 y 75~990. 가운데 접힘선 그림자가
+    // 770 양옆으로 번지므로 글은 그보다 안쪽(40px)에서 시작하게 둔다.
+    private const float LeftPageX = 300f;
+    private const float LeftPageWidth = 430f;
+    private const float RightPageX = 830f;
+    private const float RightPageWidth = 410f;
+    private const float PageTop = 120f;
+    private const float PageBottom = 940f;
+
+    // 탭 4개. 그림 속 탭 자리(x 65~250, 높이 약 105, 간격 약 141)에 투명 버튼을 얹는다.
+    private const float TabX = 65f;
+    private const float TabWidth = 185f;
+    private const float TabHeight = 105f;
+    private const float TabFirstY = 127f;
+    private const float TabPitch = 141.5f;
+
+    // 노트 그림이 없을 때 쓰는 임시 책 (종이 + 가운데 접힘선).
+    private void BuildFallbackBook(Transform bookTransform)
+    {
+        var paper = new GameObject("FallbackPaper", typeof(RectTransform), typeof(Image));
+        paper.transform.SetParent(bookTransform, false);
+        Place(paper.GetComponent<RectTransform>(), 250f, 75f, 1040f, 915f);
+        var paperImg = paper.GetComponent<Image>();
+        paperImg.color = PaperColor;
+        paperImg.raycastTarget = false;
+
+        var spine = new GameObject("FallbackSpine", typeof(RectTransform), typeof(Image));
+        spine.transform.SetParent(bookTransform, false);
+        Place(spine.GetComponent<RectTransform>(), 760f, 75f, 20f, 915f);
+        var spineImg = spine.GetComponent<Image>();
+        spineImg.color = SpineColor;
+        spineImg.raycastTarget = false;
+    }
+
+    // 왼쪽 바깥에 세로로 붙는 탭 4개.
     private void BuildTabs(Transform bookTransform)
     {
-        // 책 왼쪽 바깥으로 나가는 폭이라 책 크기와 같이 봐야 한다 (BuildOverlay의 책 크기 주석 참고).
-        const float tabWidth = 130f;
-        const float tabHeight = 52f;
-        const float gap = 8f;
-
         for (int i = 0; i < NoteCatalog.Tabs.Length; i++)
         {
             string category = NoteCatalog.Tabs[i];
 
             var go = new GameObject("Tab_" + category, typeof(RectTransform), typeof(Image), typeof(Button));
             go.transform.SetParent(bookTransform, false);
-            // 책의 왼쪽 위 모서리를 기준으로 아래로 쌓는다.
-            var rt = go.GetComponent<RectTransform>();
-            rt.anchorMin = new Vector2(0f, 1f);
-            rt.anchorMax = new Vector2(0f, 1f);
-            rt.pivot = new Vector2(1f, 1f);   // 책 왼쪽 바깥으로 나가도록
-            rt.sizeDelta = new Vector2(tabWidth, tabHeight);
-            rt.anchoredPosition = new Vector2(0f, -60f - i * (tabHeight + gap));
+            Place(go.GetComponent<RectTransform>(), TabX, TabFirstY + i * TabPitch, TabWidth, TabHeight);
 
+            // 그림 속 탭이 이미 있으므로 버튼은 거의 투명하게 두고, 고른 탭만 UpdateTabVisuals가 칠한다.
             var bg = go.GetComponent<Image>();
             bg.color = TabIdleColor;
             bg.raycastTarget = true;
 
             var labelGo = new GameObject("Label", typeof(RectTransform));
             labelGo.transform.SetParent(go.transform, false);
-            Stretch(labelGo.GetComponent<RectTransform>());
+            // 글자는 책 쪽(오른쪽) 가장자리가 페이지에 가려지는 걸 피해 왼쪽 150px 안에 둔다.
+            var labelRt = labelGo.GetComponent<RectTransform>();
+            labelRt.anchorMin = Vector2.zero;
+            labelRt.anchorMax = Vector2.one;
+            labelRt.offsetMin = Vector2.zero;
+            labelRt.offsetMax = new Vector2(-40f, 0f);
             var label = labelGo.AddComponent<TextMeshProUGUI>();
             label.text = category;
-            label.fontSize = 22;
+            label.fontSize = 28;
             label.alignment = TextAlignmentOptions.Center;
             label.color = InkColor;
             label.raycastTarget = false;
@@ -450,34 +529,13 @@ public class NotePanelUI : MonoBehaviour
         }
     }
 
-    // 가운데 접힘선.
-    private void BuildSpine(Transform bookTransform)
-    {
-        var go = new GameObject("Spine", typeof(RectTransform), typeof(Image));
-        go.transform.SetParent(bookTransform, false);
-        var rt = go.GetComponent<RectTransform>();
-        rt.anchorMin = new Vector2(0.5f, 0f);
-        rt.anchorMax = new Vector2(0.5f, 1f);
-        rt.pivot = new Vector2(0.5f, 0.5f);
-        rt.sizeDelta = new Vector2(20f, 0f);
-        rt.offsetMin = new Vector2(rt.offsetMin.x, 40f);
-        rt.offsetMax = new Vector2(rt.offsetMax.x, -40f);
-
-        var img = go.GetComponent<Image>();
-        img.color = SpineColor;
-        img.raycastTarget = false;
-    }
-
     // 왼쪽 페이지: 세로로 줄을 쌓는 스크롤 목록.
     private void BuildLeftPage(Transform bookTransform)
     {
         var viewport = new GameObject("ListViewport", typeof(RectTransform), typeof(Image), typeof(RectMask2D));
         viewport.transform.SetParent(bookTransform, false);
         var viewportRt = viewport.GetComponent<RectTransform>();
-        viewportRt.anchorMin = new Vector2(0f, 0f);
-        viewportRt.anchorMax = new Vector2(0.5f, 1f);
-        viewportRt.offsetMin = new Vector2(40f, 90f);    // 아래는 닫기 버튼 자리
-        viewportRt.offsetMax = new Vector2(-20f, -40f);
+        Place(viewportRt, LeftPageX, PageTop, LeftPageWidth, PageBottom - PageTop);
         viewport.GetComponent<Image>().color = new Color(1f, 1f, 1f, 0.01f);   // 스크롤 입력만 받는다
 
         var content = new GameObject("ListContent", typeof(RectTransform),
@@ -513,14 +571,7 @@ public class NotePanelUI : MonoBehaviour
     {
         var titleGo = new GameObject("DetailTitle", typeof(RectTransform));
         titleGo.transform.SetParent(bookTransform, false);
-        var titleRt = titleGo.GetComponent<RectTransform>();
-        titleRt.anchorMin = new Vector2(0.5f, 1f);
-        titleRt.anchorMax = new Vector2(1f, 1f);
-        titleRt.pivot = new Vector2(0.5f, 1f);
-        titleRt.offsetMin = new Vector2(20f, 0f);
-        titleRt.offsetMax = new Vector2(-40f, 0f);
-        titleRt.sizeDelta = new Vector2(titleRt.sizeDelta.x, 56f);
-        titleRt.anchoredPosition = new Vector2(0f, -40f);
+        Place(titleGo.GetComponent<RectTransform>(), RightPageX, PageTop, RightPageWidth, 56f);
 
         detailTitleText = titleGo.AddComponent<TextMeshProUGUI>();
         detailTitleText.text = "";
@@ -532,14 +583,7 @@ public class NotePanelUI : MonoBehaviour
 
         var line = new GameObject("DetailDivider", typeof(RectTransform), typeof(Image));
         line.transform.SetParent(bookTransform, false);
-        var lineRt = line.GetComponent<RectTransform>();
-        lineRt.anchorMin = new Vector2(0.5f, 1f);
-        lineRt.anchorMax = new Vector2(1f, 1f);
-        lineRt.pivot = new Vector2(0.5f, 1f);
-        lineRt.offsetMin = new Vector2(20f, 0f);
-        lineRt.offsetMax = new Vector2(-40f, 0f);
-        lineRt.sizeDelta = new Vector2(lineRt.sizeDelta.x, 2f);
-        lineRt.anchoredPosition = new Vector2(0f, -100f);
+        Place(line.GetComponent<RectTransform>(), RightPageX, PageTop + 60f, RightPageWidth, 2f);
         var lineImg = line.GetComponent<Image>();
         lineImg.color = LineColor;
         lineImg.raycastTarget = false;
@@ -547,10 +591,8 @@ public class NotePanelUI : MonoBehaviour
         var viewport = new GameObject("DetailViewport", typeof(RectTransform), typeof(Image), typeof(RectMask2D));
         viewport.transform.SetParent(bookTransform, false);
         var viewportRt = viewport.GetComponent<RectTransform>();
-        viewportRt.anchorMin = new Vector2(0.5f, 0f);
-        viewportRt.anchorMax = new Vector2(1f, 1f);
-        viewportRt.offsetMin = new Vector2(20f, 90f);
-        viewportRt.offsetMax = new Vector2(-40f, -114f);   // 위는 제목과 구분선 자리
+        float bodyTop = PageTop + 74f;   // 제목과 구분선 아래
+        Place(viewportRt, RightPageX, bodyTop, RightPageWidth, PageBottom - bodyTop);
         viewport.GetComponent<Image>().color = new Color(1f, 1f, 1f, 0.01f);
 
         var content = new GameObject("DetailContent", typeof(RectTransform), typeof(ContentSizeFitter));
@@ -584,16 +626,16 @@ public class NotePanelUI : MonoBehaviour
         detailScroll.scrollSensitivity = 40f;
     }
 
-    private void BuildCloseButton(Transform bookTransform)
+    private void BuildCloseButton(Transform parent)
     {
         var go = new GameObject("Btn_Close", typeof(RectTransform), typeof(Image), typeof(Button));
-        go.transform.SetParent(bookTransform, false);
+        go.transform.SetParent(parent, false);
         var rt = go.GetComponent<RectTransform>();
-        rt.anchorMin = new Vector2(0.5f, 0f);
-        rt.anchorMax = new Vector2(0.5f, 0f);
-        rt.pivot = new Vector2(0.5f, 0f);
-        rt.anchoredPosition = new Vector2(0f, 24f);
-        rt.sizeDelta = new Vector2(200f, 50f);
+        rt.anchorMin = new Vector2(1f, 1f);
+        rt.anchorMax = new Vector2(1f, 1f);
+        rt.pivot = new Vector2(1f, 1f);
+        rt.anchoredPosition = new Vector2(-24f, -24f);
+        rt.sizeDelta = new Vector2(64f, 64f);
 
         var bg = go.GetComponent<Image>();
         bg.color = new Color(0.35f, 0.28f, 0.18f, 0.85f);
@@ -603,8 +645,9 @@ public class NotePanelUI : MonoBehaviour
         labelGo.transform.SetParent(go.transform, false);
         Stretch(labelGo.GetComponent<RectTransform>());
         var label = labelGo.AddComponent<TextMeshProUGUI>();
-        label.text = "닫기";
-        label.fontSize = 24;
+        label.text = "X";
+        label.fontSize = 34;
+        label.fontStyle = FontStyles.Bold;
         label.alignment = TextAlignmentOptions.Center;
         label.color = new Color(0.96f, 0.94f, 0.88f);
         label.raycastTarget = false;
