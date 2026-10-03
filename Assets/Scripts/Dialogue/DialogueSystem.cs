@@ -213,12 +213,14 @@ public class DialogueSystem : MonoBehaviour
     private const float DialogueContentRight = 169f; // 선 오른쪽 끝(그림 x 1283)보다 살짝 안쪽 (대화창 오른쪽 끝에서의 거리)
     private const float DialogueTextTopInset = DialogueLineTop + 16f;   // 대사는 선 아래에서 시작
     private const float DialogueTextBottomInset = 30f;
-    // 조사 화면의 대사창: 흰 선이 없는 같은 검은 띠 그림(InvestigationTextBox.png)을 쓰고,
-    // AUTO/SKIP 버튼은 숨긴다. 선이 없으므로 이름은 띠 맨 위, 대사는 그 아래에서 시작한다.
+    // 조사 화면의 대사창: AUTO/SKIP 버튼은 항상 숨긴다.
+    // 말하는 사람(이름)이 있으면 평소처럼 흰 선 있는 그림을 쓰고, 이름이 없는 조사 설명일 때만
+    // 흰 선이 없는 같은 검은 띠 그림(InvestigationTextBox.png)을 쓴다. 이때는 선이 없으므로
+    // 대사가 띠 맨 위쪽에서 시작한다.
     private const string InvestigationArtPath = "Illusts/UI/InvestigationTextBox";
-    private const float InvestigationNameTop = 18f;
-    private const float InvestigationTextTopInset = InvestigationNameTop + 56f + 6f;
-    private bool investigationBox;                   // 지금 조사용 대사창 모양인지
+    private const float InvestigationTextTopInset = 30f;   // 선 없는 띠에서는 이름이 없으므로 대사가 띠 위쪽에서 바로 시작한다
+    private bool investigationBox;                   // 지금 조사 대사인지 (AUTO/SKIP 숨김)
+    private bool linelessBox;                        // 지금 흰 선 없는 그림을 쓰는지 (이름 없는 조사 설명)
     private Sprite dialogueArtSprite;                // 평소 대화창 그림
     private Sprite investigationArtSprite;           // 조사 대화창 그림 (없으면 평소 그림을 그대로 쓴다)
     private GameObject dialogueArt;                  // 대화창 그림 (긴 독백 때는 숨긴다)
@@ -374,34 +376,32 @@ public class DialogueSystem : MonoBehaviour
         img.raycastTarget = false;
     }
 
-    // 조사 화면에서 대사창을 빌려 쓸 때 on=true. 본편 대사로 돌아오면 false.
-    // 그림이 있으면 선 없는 그림으로 바꾸고 이름/대사 자리를 옮기며, AUTO/SKIP은 숨긴다.
-    private void SetInvestigationTextBoxStyle(bool on)
+    // 조사 화면에서 대사창을 빌려 쓸 때 on=true (hasSpeaker = 이름이 있는 줄인지). 본편 대사로 돌아오면 false.
+    // 조사 중에는 AUTO/SKIP을 숨기고, 이름이 없는 줄만 선 없는 그림으로 바꿔 대사 자리를 위로 올린다.
+    private void SetInvestigationTextBoxStyle(bool on, bool hasSpeaker = false)
     {
-        if (on == investigationBox) return;
-        investigationBox = on;
+        if (on != investigationBox)
+        {
+            investigationBox = on;
+            if (autoButton != null) autoButton.gameObject.SetActive(!on);
+            if (skipAlreadyReadButton != null) skipAlreadyReadButton.gameObject.SetActive(!on);
+            if (skipForceButton != null) skipForceButton.gameObject.SetActive(!on);
+        }
 
-        if (autoButton != null) autoButton.gameObject.SetActive(!on);
-        if (skipAlreadyReadButton != null) skipAlreadyReadButton.gameObject.SetActive(!on);
-        if (skipForceButton != null) skipForceButton.gameObject.SetActive(!on);
+        bool lineless = on && !hasSpeaker;
+        if (lineless == linelessBox) return;
+        linelessBox = lineless;
 
         if (dialogueArt == null) return;
 
-        var sprite = on && investigationArtSprite != null ? investigationArtSprite : dialogueArtSprite;
+        var sprite = lineless && investigationArtSprite != null ? investigationArtSprite : dialogueArtSprite;
         dialogueArt.GetComponent<Image>().sprite = sprite;
-
-        if (speakerText != null && speakerText.transform.parent == dialoguePanel.transform)
-        {
-            var nameRect = speakerText.GetComponent<RectTransform>();
-            float top = on ? InvestigationNameTop : DialogueLineTop - SpeakerBoxHeight - 4f;
-            nameRect.anchoredPosition = new Vector2(DialogueContentLeft, -top);
-        }
 
         // 큰 독백 화면일 때는 SetLongMonologueLayout이 글자 자리를 따로 잡으므로 건드리지 않는다.
         if (!longMonologueLayout && sentenceText != null && sentenceText.transform.parent == dialoguePanel.transform)
         {
             var textRect = sentenceText.GetComponent<RectTransform>();
-            textRect.offsetMax = new Vector2(-DialogueContentRight, -(on ? InvestigationTextTopInset : DialogueTextTopInset));
+            textRect.offsetMax = new Vector2(-DialogueContentRight, -(lineless ? InvestigationTextTopInset : DialogueTextTopInset));
         }
     }
 
@@ -1158,7 +1158,7 @@ public class DialogueSystem : MonoBehaviour
         panelRect.offsetMax = new Vector2(-rightMargin, DialogueBottomMargin + boxHeight);
 
         // 위쪽은 이름 칸 자리(평소, 그림이 있으면 흰 선 아래) 또는 작은 여백(큰 화면)만 비운다.
-        float artTopInset = investigationBox ? InvestigationTextTopInset : DialogueTextTopInset;
+        float artTopInset = linelessBox ? InvestigationTextTopInset : DialogueTextTopInset;
         float topInset = on ? 60f : (dialogueArt != null ? artTopInset : SpeakerBoxHeight + 10f);
         float insetLeft = on || dialogueArt == null ? 30f : DialogueContentLeft;
         float insetRight = on || dialogueArt == null ? 52f : DialogueContentRight;
@@ -1555,7 +1555,7 @@ public class DialogueSystem : MonoBehaviour
         StopTypingRoutine();
         StopAutoAdvanceRoutine();
 
-        SetInvestigationTextBoxStyle(true);
+        SetInvestigationTextBoxStyle(true, !string.IsNullOrEmpty(speaker));
         SetSpeakerName(speaker);
 
         // 조사 대사도 일반 대사와 똑같이 쪽 나누기 + 타이핑을 적용한다.
