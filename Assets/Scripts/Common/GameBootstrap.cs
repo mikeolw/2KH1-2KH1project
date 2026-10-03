@@ -193,6 +193,23 @@ public static class GameBootstrap
             cameraButton.SetActive(false);
             Debug.Log("[GameBootstrap] 퀵바의 카메라 버튼을 숨겼습니다 (카메라는 가방에서 [작동하기]로 사용).");
         }
+
+        // ----- 퀵바(노트/가방/설정 등)는 화면 왼쪽 위로 옮긴다 -----
+        // 대화창이 화면 아래 전체 폭을 쓰는 디자인으로 바뀌어서, 원래 있던 오른쪽 아래 자리는
+        // 대화창과 겹친다. 이것도 씬 파일을 고치지 않고 코드로 옮긴다(위와 같은 이유).
+        // 퀵바는 ContentSizeFitter로 크기가 정해지는 패널이라 기준점(앵커/피벗)과 위치만 바꾸면 된다.
+        var quickBar = GameObject.Find("QuickBarPanel");
+        if (quickBar != null)
+        {
+            var quickBarRect = quickBar.GetComponent<RectTransform>();
+            if (quickBarRect != null)
+            {
+                quickBarRect.anchorMin = new Vector2(0f, 1f);
+                quickBarRect.anchorMax = new Vector2(0f, 1f);
+                quickBarRect.pivot = new Vector2(0f, 1f);
+                quickBarRect.anchoredPosition = new Vector2(20f, -20f);
+            }
+        }
     }
 
     // ---------------------------------------------------------------------------------
