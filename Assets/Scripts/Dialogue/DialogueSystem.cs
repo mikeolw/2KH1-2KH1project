@@ -203,7 +203,10 @@ public class DialogueSystem : MonoBehaviour
     // 아래 값은 전부 이 그림 속 좌표(왼쪽 위 기준 px)에서 뽑았다. 그림을 바꾸면 여기만 고치면 된다.
     // 그림이 없으면 예전처럼 반투명 검은 판으로 그린다.
     private const string DialogueArtPath = "Illusts/UI/DialogueBox";
-    private const float DialogueBoxHeight = 320f;   // 대화창 전체 높이 (그림 속 y 760~1080, 화면 맨 아래까지)
+    // 그림+대화창 전체를 아래로 내리는 양. 그림의 띠 맨 아래(단색 부분)가 그만큼 화면 밖으로 나간다.
+    // 띠 위쪽 페이드 구간이 화면 가운데 그림(흰 선화)과 덜 겹치게 하려고 내렸다.
+    private const float DialogueArtShift = 40f;
+    private const float DialogueBoxHeight = 320f - DialogueArtShift;   // 대화창 전체 높이 (그림 속 y 760~1080을 40 내려 화면 y 800~1080)
     private const float DialogueSideMargin = 0f;    // 왼쪽 여백 (그림의 검은 띠가 화면 폭 전체)
     private const float DialogueRightMargin = 0f;   // 오른쪽 여백
     private const float DialogueBottomMargin = 0f;  // 아래 여백 (그림의 검은 띠가 화면 맨 아래까지)
@@ -211,17 +214,14 @@ public class DialogueSystem : MonoBehaviour
     private const float DialogueLineTop = 65f;      // 흰 선의 대화창 위에서부터의 거리 (그림 속 y 825)
     private const float DialogueContentLeft = 174f; // 선 왼쪽 끝(그림 x 162)보다 살짝 안쪽
     private const float DialogueContentRight = 174f; // 선 오른쪽 끝(그림 x 1278)보다 살짝 안쪽 (대화창 오른쪽 끝에서의 거리)
-    // 이름과 AUTO/SKIP은 흰 선 "아래" 한 줄에 놓는다. 선 위쪽은 띠가 옅어지는 구간이라
-    // 흰 배경(선화) 위에서 글자가 안 보였다.
-    private const float DialogueHeaderTop = DialogueLineTop + 12f;     // 이름/AUTO 줄의 위쪽 (선 아래 12px)
-    private const float DialogueTextTopInset = DialogueLineTop + 58f;  // 대사는 이름 줄 아래에서 시작
-    private const float DialogueTextBottomInset = 24f;
+    private const float DialogueTextTopInset = DialogueLineTop + 16f;   // 대사는 선 아래에서 시작
+    private const float DialogueTextBottomInset = 30f;
     // 조사 화면의 대사창: AUTO/SKIP 버튼은 항상 숨긴다.
     // 말하는 사람(이름)이 있으면 평소처럼 흰 선 있는 그림을 쓰고, 이름이 없는 조사 설명일 때만
     // 흰 선이 없는 같은 검은 띠 그림(InvestigationTextBox.png)을 쓴다. 이때는 선이 없으므로
     // 대사가 띠 맨 위쪽에서 시작한다.
     private const string InvestigationArtPath = "Illusts/UI/InvestigationTextBox";
-    private const float InvestigationTextTopInset = 70f;   // 선 없는 띠: 이름이 없으므로 띠가 충분히 진해지는 곳(선 자리)부터 대사를 시작한다
+    private const float InvestigationTextTopInset = DialogueTextTopInset;   // 선 없는 띠도 화자 있는 대사와 같은 높이에서 대사를 시작한다 (띠 위쪽 페이드 구간은 흰 배경에서 글자가 안 보임)
     private bool investigationBox;                   // 지금 조사 대사인지 (AUTO/SKIP 숨김)
     private bool linelessBox;                        // 지금 흰 선 없는 그림을 쓰는지 (이름 없는 조사 설명)
     private Sprite dialogueArtSprite;                // 평소 대화창 그림
@@ -289,8 +289,8 @@ public class DialogueSystem : MonoBehaviour
                 if (dialogueArt != null)
                 {
                     // 그림의 흰 선 바로 위, 선 왼쪽 끝에 맞춘다.
-                    // 흰 선 아래 이름 줄. 앞에 마름모 표시가 붙으므로 그만큼 오른쪽에서 시작한다.
-                    nameRect.anchoredPosition = new Vector2(DialogueContentLeft + SpeakerAccentGap, -DialogueHeaderTop);
+                    // 흰 선 바로 위. 앞에 마름모 표시가 붙으므로 그만큼 오른쪽에서 시작한다.
+                    nameRect.anchoredPosition = new Vector2(DialogueContentLeft + SpeakerAccentGap, -(DialogueLineTop - SpeakerBoxHeight - 4f));
                 }
                 else
                 {
@@ -308,7 +308,7 @@ public class DialogueSystem : MonoBehaviour
                 speakerText.characterSpacing = 4f;
                 CreateSpeakerAccent();
             }
-            speakerText.alignment = dialogueArt != null ? TMPro.TextAlignmentOptions.TopLeft : TMPro.TextAlignmentOptions.Left;
+            speakerText.alignment = dialogueArt != null ? TMPro.TextAlignmentOptions.BottomLeft : TMPro.TextAlignmentOptions.Left;
             speakerText.margin = Vector4.zero;
             speakerText.raycastTarget = false;
 
@@ -384,7 +384,7 @@ public class DialogueSystem : MonoBehaviour
         var rt = (RectTransform)dialogueArt.transform;
         rt.anchorMin = Vector2.zero;
         rt.anchorMax = Vector2.one;
-        rt.offsetMin = new Vector2(-DialogueSideMargin, -DialogueBottomMargin);
+        rt.offsetMin = new Vector2(-DialogueSideMargin, -(DialogueBottomMargin + DialogueArtShift));
         rt.offsetMax = new Vector2(DialogueRightMargin, DialogueTopY);
 
         dialogueArtSprite = sprite;
@@ -434,10 +434,10 @@ public class DialogueSystem : MonoBehaviour
         var go = new GameObject("SpeakerAccent", typeof(RectTransform), typeof(Image));
         go.transform.SetParent(speakerText.transform, false);
         var rt = (RectTransform)go.transform;
-        rt.anchorMin = rt.anchorMax = new Vector2(0f, 1f);
+        rt.anchorMin = rt.anchorMax = new Vector2(0f, 0f);
         rt.pivot = new Vector2(0.5f, 0.5f);
         rt.sizeDelta = new Vector2(7f, 7f);
-        rt.anchoredPosition = new Vector2(-SpeakerAccentGap + 7f, -SpeakerFontSize * 0.62f);   // 이름 글자 세로 가운데쯤
+        rt.anchoredPosition = new Vector2(-SpeakerAccentGap + 7f, 15f);   // 이름 글자 세로 가운데쯤
         rt.localRotation = Quaternion.Euler(0f, 0f, 45f);
         var img = go.GetComponent<Image>();
         img.color = DialogueAccentColor;
@@ -479,9 +479,8 @@ public class DialogueSystem : MonoBehaviour
             for (int i = widths.Length - 1; i > order; i--) rightEdge -= widths[i] + 16f;
             rt.anchorMin = rt.anchorMax = new Vector2(1f, 1f);
             rt.pivot = new Vector2(1f, 1f);
-            // 이름과 같은 줄(흰 선 아래). 높이 32 안에서 글자가 세로 가운데에 온다.
-            rt.anchoredPosition = new Vector2(rightEdge, -(DialogueHeaderTop + 1f));
-            rt.sizeDelta = new Vector2(width, 32f);
+            rt.anchoredPosition = new Vector2(rightEdge, -(DialogueLineTop - 44f));
+            rt.sizeDelta = new Vector2(width, 40f);
         }
         else
         {
