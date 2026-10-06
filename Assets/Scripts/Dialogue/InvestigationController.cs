@@ -861,8 +861,9 @@ public class InvestigationController : MonoBehaviour
         inSession = false;
         IsShowingTalkLine = false;
 
-        // 조사가 끝나면 대화창을 다시 켜서 다음 대사가 보이게 한다.
-        SetDialogueVisible(true);
+        // 대화창은 여기서 켜지 않는다. 조사 직후 줄은 암전(ShowLineWithFade)으로 이어지는데,
+        // 여기서 켜면 암전이 진행되는 동안 직전 대사가 남은 대화창이 그대로 떠 있었다.
+        // 대화창은 다음 대사가 실제로 표시되는 순간 DialogueSystem.ShowDialoguePanel()이 켠다.
 
         // 이 조사에서 거쳐 간 화면을 전부 마쳤다는 사실을 조사기록(수첩)에 남긴다.
         // (NextScreen/PrevScreen 화살표로 여러 화면을 오갔을 수 있으므로 activeScreenId
