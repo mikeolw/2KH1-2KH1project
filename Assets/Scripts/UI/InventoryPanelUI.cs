@@ -25,6 +25,17 @@ using TMPro;
 //     (플레이 화면 퀵바의 카메라 버튼은 없앴다 - 카메라는 가방 안에서만 쓸 수 있다.
 //      OnOperateClicked / UIManager.OpenCamera / GameBootstrap.EnsurePanelUI 참고)
 //
+// ===== 화면 구성 (Figma "Screen / Inventory" - 청회색 테마) =====
+//   [검은 막 + 패널 그림(InventoryPanel.png, 패널 x160 y130 1120x820)]
+//     INVENTORY / 가방  N개                                   [X]
+//     ┌ 아이템 칸 4열 (132x132) ┐ │ [고른 아이템 그림]
+//     │  고른 칸 = 모서리 표시    │ │ 분류
+//     │  조합 재료 = 점선 + 재료1 │ │ 아이템 이름 / 설명
+//     └─────────────────────┘ │
+//     [안내 문구 줄]              │ [작동하기] [자세히 보기] [조합하기] (보이는 것만 아래부터 쌓기)
+// 그림은 Assets/Resources/Illusts/UI/Inventory/ 와 Settings/ (버튼) 에 있다 (git 제외 - 드라이브 공유).
+// 그림이 없으면 같은 자리에 색 도형으로 대신 그린다.
+//
 // ===== 씬 배치 =====
 // 인스펙터 필드를 비워두면 게임 시작 시 스스로 UI를 만든다. UIManager.inventoryPanel에
 // 이 스크립트가 붙은 GameObject를 연결해두면 퀵바의 가방 버튼으로 여닫을 수 있다.
@@ -59,8 +70,65 @@ public class InventoryPanelUI : MonoBehaviour
     // 조합 모드로 들어갈 때 "첫 번째 재료"로 잡아둔 아이템.
     private string combineSourceItemId;
 
-    // 지금 화면에 만들어둔 아이템 버튼들. 목록을 새로 그릴 때 지우기 위해 들고 있는다.
+    // 지금 화면에 만들어둔 아이템 버튼들(빈 칸 포함). 목록을 새로 그릴 때 지우기 위해 들고 있는다.
     private readonly List<GameObject> spawnedButtons = new List<GameObject>();
+
+    // ===== 코드로 만든 화면에서만 쓰는 것들 =====
+    // 아이템 칸 하나의 모양을 바꾸려고 들고 있는다 (고른 칸 / 조합 재료 칸 표시).
+    private class SlotView
+    {
+        public Image background;
+        public TMP_Text name;
+        public GameObject badge;   // "재료 1"
+    }
+    private readonly Dictionary<string, SlotView> slotViews = new Dictionary<string, SlotView>();
+    private bool codeBuiltUI;
+    private TMP_Text countText;
+    private TMP_Text categoryText;
+    private Image messageBar;
+    private RectTransform itemListViewport;
+
+    // ===== 화면 크기 기준값 (Figma "Screen / Inventory", 패널 안 왼쪽 위 기준 px) =====
+    private const float BoxWidth = 1120f;
+    private const float BoxHeight = 820f;
+    private const float Pad = 56f;
+    private const float GridTop = 160f;
+    private const float SlotSize = 132f;
+    private const float SlotGap = 16f;
+    private const int GridColumns = 4;
+    private const int MinSlots = 12;                 // 아이템이 적어도 빈 칸을 채워 4x3 격자를 보여준다
+    private const float GridWidth = SlotSize * GridColumns + SlotGap * (GridColumns - 1);   // 576
+    private const float GridHeight = SlotSize * 3f + SlotGap * 2f;                          // 428 (넘치면 스크롤)
+    private const float DetailX = Pad + GridWidth + 48f;                                    // 680
+    private const float DetailWidth = BoxWidth - Pad - DetailX;                             // 384
+    private const float ButtonHeight = 54f;
+    private const float ButtonGap = 12f;
+
+    // ===== 색 =====
+    private static readonly Color Accent = new Color(0.561f, 0.643f, 0.718f);       // 8FA4B7
+    private static readonly Color TitleColor = new Color(0.894f, 0.918f, 0.937f);   // E4EAEF
+    private static readonly Color KickerColor = new Color(0.435f, 0.518f, 0.588f);  // 6F8496
+    private static readonly Color LabelColor = new Color(0.788f, 0.835f, 0.878f);   // C9D5E0
+    private static readonly Color ActiveColor = new Color(0.851f, 0.89f, 0.922f);   // D9E3EB
+    private static readonly Color DimColor = new Color(0.424f, 0.486f, 0.545f);     // 6C7C8B
+    private static readonly Color HintColor = new Color(0.482f, 0.541f, 0.596f);    // 7B8A98
+    private static readonly Color ButtonTextColor = new Color(0.663f, 0.729f, 0.788f);   // A9BAC9
+    private static readonly Color PrimaryTextColor = new Color(0.059f, 0.082f, 0.106f);  // 0F151B
+    private static readonly Color PrimaryBadgeText = PrimaryTextColor;
+    // 그림이 없을 때만 쓰는 색
+    private static readonly Color PanelColor = new Color(0.063f, 0.086f, 0.114f, 0.95f);   // 10161D
+    private static readonly Color SlotColor = new Color(0.043f, 0.063f, 0.082f, 0.9f);     // 0B1015
+    private static readonly Color SlotSelectedColor = new Color(0.094f, 0.133f, 0.176f);   // 18222D
+    private static readonly Color LineColor = new Color(0.165f, 0.208f, 0.251f);           // 2A3540
+    private static readonly Color OnFillColor = new Color(0.141f, 0.192f, 0.251f);         // 243140
+    private static readonly Color MessageBarColor = new Color(0.043f, 0.063f, 0.082f, 0.6f);
+
+    // 그림 경로 (Resources 기준)
+    private const string ArtFolder = "Illusts/UI/Inventory/";
+    private const string ButtonArtFolder = "Illusts/UI/Settings/";   // 버튼 그림은 환경설정 것을 같이 쓴다
+    private readonly Dictionary<string, Sprite> spriteCache = new Dictionary<string, Sprite>();
+
+    private const string DefaultHint = "아이템을 눌러 설명을 보세요. 두 개를 합치려면 하나를 고른 뒤 [조합하기]를 누르세요.";
 
     private void Awake()
     {
@@ -89,7 +157,7 @@ public class InventoryPanelUI : MonoBehaviour
         SetCombineMode(false, null);
 
         Refresh();
-        ShowMessage("아이템을 눌러 설명을 보세요. 두 개를 합치려면 하나를 고른 뒤 [조합하기]를 누르세요.");
+        ShowMessage(DefaultHint);
     }
 
     private void OnDisable()
@@ -114,9 +182,14 @@ public class InventoryPanelUI : MonoBehaviour
         // 이전 버튼 정리
         foreach (var go in spawnedButtons)
         {
-            if (go != null) Destroy(go);
+            if (go == null) continue;
+            // 부모에서 먼저 떼어낸다. Destroy()는 프레임 끝에 지워져서, 그냥 지우면 한 프레임 동안
+            // 새 칸과 옛 칸이 함께 격자에 잡혀 칸이 밀려 보인다.
+            go.transform.SetParent(null, false);
+            Destroy(go);
         }
         spawnedButtons.Clear();
+        slotViews.Clear();
 
         if (InventoryManager.Instance == null) return;
 
@@ -131,12 +204,21 @@ public class InventoryPanelUI : MonoBehaviour
             count++;
         }
 
+        if (codeBuiltUI)
+        {
+            // 빈 칸으로 4열 격자를 채운다 (최소 4x3, 아이템이 많으면 마지막 줄까지).
+            int total = Mathf.Max(MinSlots, Mathf.CeilToInt(count / (float)GridColumns) * GridColumns);
+            for (int i = count; i < total; i++) CreateEmptySlot();
+            if (countText != null) countText.text = count + "개";
+        }
+
         // 아무것도 없을 때 안내
         if (count == 0)
         {
             if (selectedNameText != null) selectedNameText.text = "";
             if (selectedDescriptionText != null) selectedDescriptionText.text = "아직 가진 것이 없다.";
             if (selectedIconImage != null) selectedIconImage.enabled = false;
+            if (categoryText != null) categoryText.text = "";
             SetButtonVisible(viewDetailButton, false);
             SetButtonVisible(combineButton, false);
             SetButtonVisible(operateButton, false);
@@ -149,6 +231,8 @@ public class InventoryPanelUI : MonoBehaviour
             selectedItemId = null;
             ClearSelection();
         }
+
+        UpdateSlotVisuals();
     }
 
     // 아이템 버튼 하나를 만든다.
@@ -167,19 +251,14 @@ public class InventoryPanelUI : MonoBehaviour
             go.transform.SetParent(itemListContainer, false);
 
             var slotBg = go.GetComponent<Image>();
-            slotBg.color = new Color(1f, 1f, 1f, 0.14f);
+            SetImage(slotBg, ArtFolder + "Slot_Default", SlotColor);
             slotBg.raycastTarget = true;
 
             // targetGraphic을 지정해야 클릭 판정과 색 변화가 동작한다.
             // (이게 빠져 있어서 아이템을 눌러도 아무 반응이 없었다)
             var slotBtn = go.GetComponent<Button>();
             slotBtn.targetGraphic = slotBg;
-            slotBtn.transition = Selectable.Transition.ColorTint;
-
-            var c = slotBtn.colors;
-            c.highlightedColor = new Color(1f, 0.95f, 0.7f);
-            c.pressedColor = new Color(0.8f, 0.7f, 0.35f);
-            slotBtn.colors = c;
+            ApplyButtonColors(slotBtn);
         }
 
         // 아이콘: 버튼 안에 Image가 두 개 이상이면 두 번째를 아이콘으로 본다.
@@ -197,12 +276,12 @@ public class InventoryPanelUI : MonoBehaviour
         }
         else if (itemButtonPrefab == null)
         {
-            // 코드로 만든 버튼이면 아이콘용 Image를 하나 더 붙인다.
+            // 코드로 만든 버튼이면 아이콘용 Image를 하나 더 붙인다. 칸 위쪽 (16, 12) ~ (116, 92).
             var iconGo = new GameObject("Icon", typeof(RectTransform), typeof(Image));
             iconGo.transform.SetParent(go.transform, false);
             var iconRt = iconGo.GetComponent<RectTransform>();
-            iconRt.anchorMin = new Vector2(0.1f, 0.25f);
-            iconRt.anchorMax = new Vector2(0.9f, 0.95f);
+            iconRt.anchorMin = new Vector2(16f / SlotSize, 40f / SlotSize);
+            iconRt.anchorMax = new Vector2(116f / SlotSize, 120f / SlotSize);
             iconRt.offsetMin = Vector2.zero;
             iconRt.offsetMax = Vector2.zero;
             var iconImg = iconGo.GetComponent<Image>();
@@ -212,7 +291,7 @@ public class InventoryPanelUI : MonoBehaviour
             iconImg.enabled = iconImg.sprite != null;
         }
 
-        // 이름 라벨
+        // 이름 라벨 (칸 아래쪽)
         var label = go.GetComponentInChildren<TMP_Text>();
         if (label == null && itemButtonPrefab == null)
         {
@@ -220,16 +299,27 @@ public class InventoryPanelUI : MonoBehaviour
             textGo.transform.SetParent(go.transform, false);
             var textRt = textGo.GetComponent<RectTransform>();
             textRt.anchorMin = new Vector2(0f, 0f);
-            textRt.anchorMax = new Vector2(1f, 0.25f);
-            textRt.offsetMin = Vector2.zero;
-            textRt.offsetMax = Vector2.zero;
+            textRt.anchorMax = new Vector2(1f, 0f);
+            textRt.pivot = new Vector2(0.5f, 0f);
+            textRt.offsetMin = new Vector2(6f, 12f);
+            textRt.offsetMax = new Vector2(-6f, 36f);
             label = textGo.AddComponent<TextMeshProUGUI>();
-            label.fontSize = 16;
+            label.fontSize = 14;
             label.alignment = TextAlignmentOptions.Center;
-            label.color = Color.white;
+            label.color = LabelColor;
             label.raycastTarget = false;
+            label.overflowMode = TextOverflowModes.Ellipsis;
+            label.textWrappingMode = TextWrappingModes.NoWrap;
         }
         if (label != null) label.text = info.displayName;
+
+        // 조합 재료 표시 ("재료 1", 칸 왼쪽 위에 걸친 작은 딱지)
+        if (itemButtonPrefab == null)
+        {
+            var view = new SlotView { background = go.GetComponent<Image>(), name = label };
+            view.badge = CreateBadge(go.transform);
+            slotViews[info.itemId] = view;
+        }
 
         // 클릭 처리
         var button = go.GetComponent<Button>();
@@ -243,6 +333,66 @@ public class InventoryPanelUI : MonoBehaviour
         UIFontHelper.ApplyToChildren(go);
 
         spawnedButtons.Add(go);
+    }
+
+    // 아무 아이템도 없는 빈 칸 (누를 수 없음).
+    private void CreateEmptySlot()
+    {
+        var go = new GameObject("EmptySlot", typeof(RectTransform), typeof(Image));
+        go.transform.SetParent(itemListContainer, false);
+        var img = go.GetComponent<Image>();
+        SetImage(img, ArtFolder + "Slot_Empty", new Color(SlotColor.r, SlotColor.g, SlotColor.b, 0.45f));
+        img.raycastTarget = false;
+        spawnedButtons.Add(go);
+    }
+
+    private GameObject CreateBadge(Transform slot)
+    {
+        var badge = new GameObject("Badge", typeof(RectTransform), typeof(Image));
+        badge.transform.SetParent(slot, false);
+        var rt = badge.GetComponent<RectTransform>();
+        rt.anchorMin = rt.anchorMax = new Vector2(0f, 1f);
+        rt.pivot = new Vector2(0f, 0.5f);
+        rt.anchoredPosition = new Vector2(8f, 0f);
+        rt.sizeDelta = new Vector2(52f, 20f);
+        var img = badge.GetComponent<Image>();
+        img.color = Accent;
+        img.raycastTarget = false;
+
+        var textGo = new GameObject("Text", typeof(RectTransform));
+        textGo.transform.SetParent(badge.transform, false);
+        Stretch(textGo.GetComponent<RectTransform>());
+        var t = textGo.AddComponent<TextMeshProUGUI>();
+        t.text = "재료 1";
+        t.fontSize = 12;
+        t.fontStyle = FontStyles.Bold;
+        t.alignment = TextAlignmentOptions.Center;
+        t.color = PrimaryBadgeText;
+        t.raycastTarget = false;
+
+        badge.SetActive(false);
+        return badge;
+    }
+
+    // 칸 모양: 조합 재료 > 고른 칸 > 기본.
+    private void UpdateSlotVisuals()
+    {
+        foreach (var pair in slotViews)
+        {
+            var view = pair.Value;
+            bool isSource = combineMode && pair.Key == combineSourceItemId;
+            bool isSelected = !isSource && pair.Key == selectedItemId;
+
+            string art = isSource ? "Slot_Combine" : isSelected ? "Slot_Selected" : "Slot_Default";
+            SetImage(view.background, ArtFolder + art, isSource || isSelected ? SlotSelectedColor : SlotColor);
+
+            if (view.name != null)
+            {
+                view.name.color = isSource || isSelected ? ActiveColor : LabelColor;
+                view.name.fontStyle = isSource || isSelected ? FontStyles.Bold : FontStyles.Normal;
+            }
+            if (view.badge != null) view.badge.SetActive(isSource);
+        }
     }
 
     // ---------------------------------------------------------------------------------
@@ -293,6 +443,23 @@ public class InventoryPanelUI : MonoBehaviour
 
         // 카메라처럼 작동시킬 수 있는 아이템일 때만 "작동하기" 버튼을 보여준다.
         SetButtonVisible(operateButton, IsOperable(itemId));
+
+        UpdateCategoryText();
+        UpdateSlotVisuals();
+    }
+
+    // 이름 위의 작은 분류 표기: 도구(작동 가능) / 자료(펼쳐 볼 수 있음) / 증거물 (+ 조합 재료).
+    private void UpdateCategoryText()
+    {
+        if (categoryText == null) return;
+        if (string.IsNullOrEmpty(selectedItemId)) { categoryText.text = ""; return; }
+
+        var info = ItemDatabase.Get(selectedItemId);
+        string kind = IsOperable(selectedItemId) ? "도구"
+            : info != null && info.viewerType != ItemDatabase.ItemViewerType.None ? "자료"
+            : "증거물";
+        bool isSource = combineMode && selectedItemId == combineSourceItemId;
+        categoryText.text = isSource ? kind + "  ·  조합 재료" : kind;
     }
 
     private void ClearSelection()
@@ -301,9 +468,11 @@ public class InventoryPanelUI : MonoBehaviour
         if (selectedNameText != null) selectedNameText.text = "";
         if (selectedDescriptionText != null) selectedDescriptionText.text = "";
         if (selectedIconImage != null) selectedIconImage.enabled = false;
+        if (categoryText != null) categoryText.text = "";
         SetButtonVisible(viewDetailButton, false);
         SetButtonVisible(combineButton, false);
         SetButtonVisible(operateButton, false);
+        UpdateSlotVisuals();
     }
 
     // "자세히 보기" 버튼. 서류/사진을 전체 화면 뷰어로 펼친다.
@@ -379,7 +548,7 @@ public class InventoryPanelUI : MonoBehaviour
         }
 
         SetCombineMode(true, selectedItemId);
-        ShowMessage($"'{ItemDatabase.GetDisplayName(selectedItemId)}'와(과) 함께 쓸 물건을 고르세요.");
+        ShowMessage($"'{ItemDatabase.GetDisplayName(selectedItemId)}'와(과) 함께 쓸 물건을 고르세요.", highlight: true);
     }
 
     // 조합 모드를 켜고 끄면서 화면 표시도 함께 바꾼다.
@@ -389,13 +558,28 @@ public class InventoryPanelUI : MonoBehaviour
         combineMode = on;
         combineSourceItemId = on ? sourceItemId : null;
 
+        UpdateSlotVisuals();
+        UpdateCategoryText();
+
         if (combineButton == null) return;
 
         var label = combineButton.GetComponentInChildren<TMP_Text>();
         if (label != null) label.text = on ? "조합 취소" : "조합하기";
 
         var bg = combineButton.GetComponent<Image>();
-        if (bg != null)
+        if (bg == null) return;
+
+        if (codeBuiltUI)
+        {
+            // 조합 모드일 땐 채워진 칸(Toggle_On) + 밝은 굵은 글자로 눈에 띄게
+            SetSlicedImage(bg, ButtonArtFolder + (on ? "Toggle_On" : "Button_Secondary"), on ? OnFillColor : new Color(0f, 0f, 0f, 0f));
+            if (label != null)
+            {
+                label.color = on ? ActiveColor : ButtonTextColor;
+                label.fontStyle = on ? FontStyles.Bold : FontStyles.Normal;
+            }
+        }
+        else
         {
             bg.color = on
                 ? new Color(1f, 0.75f, 0.25f, 0.55f)   // 조합 모드일 땐 눈에 띄는 주황빛
@@ -441,9 +625,21 @@ public class InventoryPanelUI : MonoBehaviour
         }
     }
 
-    private void ShowMessage(string message)
+    // 안내 문구 줄. highlight면 조합 모드처럼 밝은 테두리 줄로, 비어 있으면 줄을 숨긴다.
+    private void ShowMessage(string message, bool highlight = false)
     {
-        if (messageText != null) messageText.text = message;
+        if (messageText != null)
+        {
+            messageText.text = message;
+            if (codeBuiltUI) messageText.color = highlight ? ActiveColor : HintColor;
+        }
+
+        if (messageBar != null)
+        {
+            messageBar.gameObject.SetActive(!string.IsNullOrEmpty(message));
+            if (highlight) SetSlicedImage(messageBar, ArtFolder + "MessageBar_Combine", OnFillColor);
+            else { messageBar.sprite = null; messageBar.color = MessageBarColor; }
+        }
     }
 
     private void SetButtonVisible(Button button, bool visible)
@@ -452,33 +648,29 @@ public class InventoryPanelUI : MonoBehaviour
         LayoutActionButtons();
     }
 
-    // ===== 오른쪽 아래 버튼 줄 정렬 =====
+    // ===== 오른쪽 아래 버튼 정렬 =====
     // [작동하기] [자세히 보기] [조합하기] 세 버튼은 아이템에 따라 보였다 숨었다 한다
     // (카메라는 작동하기+조합하기, 서류는 자세히 보기+조합하기 ...).
-    // 자리를 고정해두면 숨은 버튼 자리가 빈칸으로 남아 어색하므로, 보이는 버튼만 왼쪽부터
-    // 빈틈없이 채워 넣는다. 코드로 만든 버튼일 때만 정렬하고, 인스펙터에서 직접 배치한
-    // 버튼이면 그 배치를 존중해 건드리지 않는다.
+    // 자리를 고정해두면 숨은 버튼 자리가 빈칸으로 남아 어색하므로, 보이는 버튼만
+    // 오른쪽 페이지 아래에서부터 위로 빈틈없이 쌓는다 (순서는 위에서부터 작동/자세히/조합).
+    // 코드로 만든 버튼일 때만 정렬하고, 인스펙터에서 직접 배치한 버튼이면 그 배치를 존중한다.
     private bool autoLayoutButtons;
 
     private void LayoutActionButtons()
     {
         if (!autoLayoutButtons) return;
 
-        // 버튼 줄의 영역(가방 상자 안에서의 비율 좌표)과 한 칸의 너비.
-        const float left = 0.58f, right = 0.97f, bottom = 0.155f, top = 0.225f, gap = 0.01f;
-        const float slot = (right - left - gap * 2f) / 3f;
-
-        float x = left;
+        var visible = new List<Button>();
         foreach (var button in new[] { operateButton, viewDetailButton, combineButton })
         {
-            if (button == null || !button.gameObject.activeSelf) continue;
+            if (button != null && button.gameObject.activeSelf) visible.Add(button);
+        }
 
-            var rt = (RectTransform)button.transform;
-            rt.anchorMin = new Vector2(x, bottom);
-            rt.anchorMax = new Vector2(x + slot, top);
-            rt.offsetMin = Vector2.zero;
-            rt.offsetMax = Vector2.zero;
-            x += slot + gap;
+        float y = BoxHeight - Pad - (visible.Count * ButtonHeight + (visible.Count - 1) * ButtonGap);
+        foreach (var button in visible)
+        {
+            PlaceTopLeft((RectTransform)button.transform, DetailX, y, DetailWidth, ButtonHeight);
+            y += ButtonHeight + ButtonGap;
         }
     }
 
@@ -513,14 +705,11 @@ public class InventoryPanelUI : MonoBehaviour
             return;
         }
 
-        // 이미 만들어둔 게 있으면 그것을 쓴다.
+        // 예전에 만들어둔 게 남아 있으면 지우고 새로 만든다 (모양이 바뀌었을 수 있으므로).
         var existing = canvas.transform.Find(ContentRootName);
-        if (existing != null)
-        {
-            overlay = existing.gameObject;
-            contentRoot = existing;
-            return;
-        }
+        if (existing != null) DestroyImmediate(existing.gameObject);
+
+        codeBuiltUI = true;
 
         // ----- 씬의 원래 패널은 안 보이게 한다 -----
         // (UIManager가 이 패널을 켜고 끄면서 여닫음을 관리하므로 오브젝트 자체는 남겨둔다)
@@ -535,75 +724,169 @@ public class InventoryPanelUI : MonoBehaviour
             transform.GetChild(i).gameObject.SetActive(false);
         }
 
-        // ----- 화면 전체를 덮는 막 -----
+        // ----- 화면 전체를 덮는 검은 막 (환경설정과 같은 톤) -----
         overlay = new GameObject(ContentRootName, typeof(RectTransform), typeof(Image));
         overlay.transform.SetParent(canvas.transform, false);
-        var oRt = overlay.GetComponent<RectTransform>();
-        oRt.anchorMin = Vector2.zero;
-        oRt.anchorMax = Vector2.one;
-        oRt.offsetMin = Vector2.zero;
-        oRt.offsetMax = Vector2.zero;
+        Stretch(overlay.GetComponent<RectTransform>());
         var dim = overlay.GetComponent<Image>();
-        dim.color = new Color(0f, 0f, 0f, 0.72f);
+        dim.color = new Color(0f, 0f, 0f, 0.97f);
         dim.raycastTarget = true;
 
-        // ----- 가운데 상자 -----
+        // ----- 패널 그림 (1440x1080 한 장: 패널 + 그림자 + 위쪽 강조선 + 구분선) -----
+        var panelArt = LoadSprite(ArtFolder + "InventoryPanel");
+        if (panelArt != null)
+        {
+            var art = new GameObject("PanelArt", typeof(RectTransform), typeof(Image));
+            art.transform.SetParent(overlay.transform, false);
+            var artRt = art.GetComponent<RectTransform>();
+            artRt.anchorMin = artRt.anchorMax = artRt.pivot = new Vector2(0.5f, 0.5f);
+            artRt.sizeDelta = new Vector2(1440f, 1080f);
+            artRt.anchoredPosition = Vector2.zero;
+            var artImg = art.GetComponent<Image>();
+            artImg.sprite = panelArt;
+            artImg.raycastTarget = false;
+        }
+        else
+        {
+            Debug.LogWarning("[InventoryPanelUI] 가방 화면 그림을 찾을 수 없어 색 도형으로 그립니다: Assets/Resources/" + ArtFolder + "InventoryPanel.png");
+        }
+
+        // ----- 가운데 패널 (그림 속 패널 자리 x160 y130 1120x820 = 화면 정가운데) -----
         var box = new GameObject("Box", typeof(RectTransform), typeof(Image));
         box.transform.SetParent(overlay.transform, false);
         var boxRt = box.GetComponent<RectTransform>();
-        boxRt.anchorMin = new Vector2(0.5f, 0.5f);
-        boxRt.anchorMax = new Vector2(0.5f, 0.5f);
-        boxRt.pivot = new Vector2(0.5f, 0.5f);
-        boxRt.sizeDelta = new Vector2(1200f, 820f);
+        boxRt.anchorMin = boxRt.anchorMax = boxRt.pivot = new Vector2(0.5f, 0.5f);
+        boxRt.sizeDelta = new Vector2(BoxWidth, BoxHeight);
         boxRt.anchoredPosition = Vector2.zero;
-        box.GetComponent<Image>().color = new Color(0f, 0f, 0f, 0.97f);
+        var boxImg = box.GetComponent<Image>();
+        boxImg.color = panelArt != null ? new Color(0f, 0f, 0f, 0f) : PanelColor;
+        boxImg.raycastTarget = false;
 
         contentRoot = box.transform;
 
-        // 닫기 버튼. 씬의 InventoryPanel을 끄면 OnDisable에서 이 화면도 함께 닫힌다.
-        CreateButton("Btn_CloseInventory", "닫기",
-            new Vector2(0.40f, 0.015f), new Vector2(0.60f, 0.07f),
-            () => gameObject.SetActive(false));
+        if (panelArt == null)
+        {
+            // 그림에 들어 있는 선들을 대신 그린다.
+            AddRect("TopAccent", Pad, 0f, 120f, 3f, Accent);
+            AddRect("HeadDivider", Pad, 128f, BoxWidth - Pad * 2f, 1f, LineColor);
+            AddRect("DetailDivider", DetailX - 24f, GridTop, 1f, 560f, LineColor);
+        }
 
-        // ----- 제목 -----
-        var title = CreateText("Title", new Vector2(0.03f, 0.93f), new Vector2(0.55f, 0.99f), 30, TextAlignmentOptions.Left);
+        // ----- 머리말 -----
+        var kicker = CreateText("Kicker", Pad, 40f, 300f, 20f, 14, TextAlignmentOptions.TopLeft);
+        kicker.text = "INVENTORY";
+        kicker.fontStyle = FontStyles.Bold;
+        kicker.characterSpacing = 36f;
+        kicker.color = KickerColor;
+
+        var title = CreateText("Title", Pad, 58f, 120f, 54f, 36, TextAlignmentOptions.TopLeft);
         title.text = "가방";
         title.fontStyle = FontStyles.Bold;
-        title.color = new Color(1f, 0.86f, 0.45f);
+        title.color = TitleColor;
 
-        // ----- 왼쪽: 아이템 격자 -----
-        var listGo = new GameObject("ItemList", typeof(RectTransform), typeof(GridLayoutGroup));
-        listGo.transform.SetParent(contentRoot, false);
+        countText = CreateText("Count", Pad + 84f, 76f, 120f, 24f, 16, TextAlignmentOptions.TopLeft);
+        countText.color = DimColor;
+
+        // 닫기 버튼 (오른쪽 위). 씬의 InventoryPanel을 끄면 OnDisable에서 이 화면도 함께 닫힌다.
+        var close = CreateButton("Btn_CloseInventory", "", ArtFolder + "CloseBox", new Color(0f, 0f, 0f, 0f),
+                                 () => gameObject.SetActive(false));
+        PlaceTopLeft((RectTransform)close.transform, BoxWidth - Pad - 48f, 48f, 48f, 48f);
+        if (LoadSprite(ArtFolder + "CloseBox") == null)
+        {
+            var x = close.GetComponentInChildren<TMP_Text>();
+            x.text = "X";
+            x.fontSize = 22;
+        }
+
+        // ----- 왼쪽: 아이템 격자 (3줄이 넘으면 스크롤) -----
+        var viewport = new GameObject("ItemListViewport", typeof(RectTransform), typeof(Image), typeof(RectMask2D));
+        viewport.transform.SetParent(contentRoot, false);
+        itemListViewport = viewport.GetComponent<RectTransform>();
+        // 위로 10px 더 열어둔다 - 조합 재료 딱지("재료 1")가 칸 위로 걸쳐 나오므로 잘리지 않게.
+        PlaceTopLeft(itemListViewport, Pad, GridTop - 10f, GridWidth, GridHeight + 10f);
+        viewport.GetComponent<Image>().color = new Color(0f, 0f, 0f, 0f);   // 스크롤 입력만 받는다
+
+        var listGo = new GameObject("ItemList", typeof(RectTransform), typeof(GridLayoutGroup), typeof(ContentSizeFitter));
+        listGo.transform.SetParent(viewport.transform, false);
         var listRt = listGo.GetComponent<RectTransform>();
-        listRt.anchorMin = new Vector2(0.03f, 0.05f);
-        listRt.anchorMax = new Vector2(0.55f, 0.92f);
-        listRt.offsetMin = Vector2.zero;
-        listRt.offsetMax = Vector2.zero;
+        listRt.anchorMin = new Vector2(0f, 1f);
+        listRt.anchorMax = new Vector2(1f, 1f);
+        listRt.pivot = new Vector2(0.5f, 1f);
+        listRt.anchoredPosition = Vector2.zero;
+        listRt.sizeDelta = new Vector2(0f, GridHeight + 10f);
 
         var grid = listGo.GetComponent<GridLayoutGroup>();
-        grid.cellSize = new Vector2(150f, 150f);
-        grid.spacing = new Vector2(12f, 12f);
-        grid.padding = new RectOffset(10, 10, 10, 10);
+        grid.cellSize = new Vector2(SlotSize, SlotSize);
+        grid.spacing = new Vector2(SlotGap, SlotGap);
+        grid.padding = new RectOffset(0, 0, 10, 0);
         grid.startCorner = GridLayoutGroup.Corner.UpperLeft;
         grid.childAlignment = TextAnchor.UpperLeft;
+        grid.constraint = GridLayoutGroup.Constraint.FixedColumnCount;
+        grid.constraintCount = GridColumns;
+        listGo.GetComponent<ContentSizeFitter>().verticalFit = ContentSizeFitter.FitMode.PreferredSize;
         itemListContainer = listGo.transform;
 
-        // ----- 오른쪽: 고른 아이템 정보 -----
-        selectedIconImage = CreateImage("SelectedIcon", new Vector2(0.58f, 0.58f), new Vector2(0.97f, 0.92f));
-        selectedNameText = CreateText("SelectedName", new Vector2(0.58f, 0.49f), new Vector2(0.97f, 0.57f), 30, TextAlignmentOptions.Left);
-        selectedNameText.fontStyle = FontStyles.Bold;
-        selectedDescriptionText = CreateText("SelectedDescription", new Vector2(0.58f, 0.24f), new Vector2(0.97f, 0.48f), 22, TextAlignmentOptions.TopLeft);
-        messageText = CreateText("Message", new Vector2(0.58f, 0.05f), new Vector2(0.97f, 0.14f), 19, TextAlignmentOptions.TopLeft);
-        messageText.color = new Color(1f, 0.85f, 0.4f);
+        var scroll = viewport.AddComponent<ScrollRect>();
+        scroll.viewport = itemListViewport;
+        scroll.content = listRt;
+        scroll.horizontal = false;
+        scroll.vertical = true;
+        scroll.movementType = ScrollRect.MovementType.Clamped;
+        scroll.scrollSensitivity = 40f;
 
-        // 버튼 셋의 실제 위치는 LayoutActionButtons()가 "보이는 것만 왼쪽부터" 다시 잡는다.
-        // 여기서 넘기는 좌표는 처음 만들 때의 임시 자리일 뿐이다.
-        operateButton = CreateButton("OperateButton", "작동하기",
-            new Vector2(0.58f, 0.155f), new Vector2(0.70f, 0.225f), OnOperateClicked);
-        viewDetailButton = CreateButton("ViewDetailButton", "자세히 보기",
-            new Vector2(0.71f, 0.155f), new Vector2(0.84f, 0.225f), OnViewDetailClicked);
-        combineButton = CreateButton("CombineButton", "조합하기",
-            new Vector2(0.85f, 0.155f), new Vector2(0.97f, 0.225f), OnCombineClicked);
+        // ----- 격자 아래: 안내 문구 줄 -----
+        var barGo = new GameObject("MessageBar", typeof(RectTransform), typeof(Image));
+        barGo.transform.SetParent(contentRoot, false);
+        messageBar = barGo.GetComponent<Image>();
+        messageBar.color = MessageBarColor;
+        messageBar.raycastTarget = false;
+        PlaceTopLeft((RectTransform)barGo.transform, Pad, GridTop + GridHeight + 22f, GridWidth, 46f);
+
+        var msgGo = new GameObject("Message", typeof(RectTransform));
+        msgGo.transform.SetParent(barGo.transform, false);
+        var msgRt = msgGo.GetComponent<RectTransform>();
+        msgRt.anchorMin = Vector2.zero;
+        msgRt.anchorMax = Vector2.one;
+        msgRt.offsetMin = new Vector2(16f, 4f);
+        msgRt.offsetMax = new Vector2(-16f, -4f);
+        messageText = msgGo.AddComponent<TextMeshProUGUI>();
+        messageText.fontSize = 15;
+        messageText.alignment = TextAlignmentOptions.Left;
+        messageText.color = HintColor;
+        messageText.raycastTarget = false;
+        messageText.overflowMode = TextOverflowModes.Ellipsis;
+
+        // ----- 오른쪽: 고른 아이템 정보 -----
+        var frameGo = new GameObject("ItemImageFrame", typeof(RectTransform), typeof(Image));
+        frameGo.transform.SetParent(contentRoot, false);
+        PlaceTopLeft((RectTransform)frameGo.transform, DetailX, GridTop, DetailWidth, 230f);
+        var frameImg = frameGo.GetComponent<Image>();
+        SetSlicedImage(frameImg, ArtFolder + "ItemImageFrame", SlotColor);
+        frameImg.raycastTarget = false;
+
+        selectedIconImage = CreateImage("SelectedIcon", DetailX + 20f, GridTop + 16f, DetailWidth - 40f, 198f);
+
+        categoryText = CreateText("Category", DetailX, 412f, DetailWidth, 20f, 14, TextAlignmentOptions.TopLeft);
+        categoryText.fontStyle = FontStyles.Bold;
+        categoryText.characterSpacing = 20f;
+        categoryText.color = KickerColor;
+
+        selectedNameText = CreateText("SelectedName", DetailX, 434f, DetailWidth, 44f, 30, TextAlignmentOptions.TopLeft);
+        selectedNameText.fontStyle = FontStyles.Bold;
+        selectedNameText.color = TitleColor;
+
+        // 설명은 이름 아래부터 버튼 3개가 다 보일 때의 맨 위 버튼 직전까지.
+        float descTop = 486f;
+        float buttonsTop = BoxHeight - Pad - (3f * ButtonHeight + 2f * ButtonGap);
+        selectedDescriptionText = CreateText("SelectedDescription", DetailX, descTop, DetailWidth, buttonsTop - descTop - 12f, 18, TextAlignmentOptions.TopLeft);
+        selectedDescriptionText.color = LabelColor;
+        selectedDescriptionText.lineSpacing = 18f;
+        selectedDescriptionText.overflowMode = TextOverflowModes.Ellipsis;
+
+        // 버튼 셋의 실제 위치는 LayoutActionButtons()가 "보이는 것만 아래부터" 다시 잡는다.
+        operateButton = CreateActionButton("OperateButton", "작동하기", primary: true, OnOperateClicked);
+        viewDetailButton = CreateActionButton("ViewDetailButton", "자세히 보기", primary: false, OnViewDetailClicked);
+        combineButton = CreateActionButton("CombineButton", "조합하기", primary: false, OnCombineClicked);
 
         // 코드로 만든 버튼이므로 자동 정렬을 켠다(인스펙터에서 배치한 버튼이면 이 줄에 오지 않는다).
         autoLayoutButtons = true;
@@ -618,15 +901,99 @@ public class InventoryPanelUI : MonoBehaviour
         UIFontHelper.ApplyToChildren(overlay);
     }
 
-    private Image CreateImage(string name, Vector2 anchorMin, Vector2 anchorMax)
+    private Button CreateActionButton(string name, string label, bool primary, UnityEngine.Events.UnityAction onClick)
+    {
+        var btn = CreateButton(name, label, ButtonArtFolder + (primary ? "Button_Primary" : "Button_Secondary"),
+                               primary ? Accent : new Color(0f, 0f, 0f, 0f), onClick);
+        var text = btn.GetComponentInChildren<TMP_Text>();
+        text.fontSize = 19;
+        text.fontStyle = primary ? FontStyles.Bold : FontStyles.Normal;
+        text.color = primary ? PrimaryTextColor : ButtonTextColor;
+        return btn;
+    }
+
+    // ---------------------------------------------------------------------------------
+    // 기본 부품 만들기
+    // ---------------------------------------------------------------------------------
+    // 패널 왼쪽 위 기준 (x, y)에 w x h 크기로 놓는다.
+    private static void PlaceTopLeft(RectTransform rt, float x, float y, float w, float h)
+    {
+        rt.anchorMin = rt.anchorMax = new Vector2(0f, 1f);
+        rt.pivot = new Vector2(0f, 1f);
+        rt.anchoredPosition = new Vector2(x, -y);
+        rt.sizeDelta = new Vector2(w, h);
+    }
+
+    private static void Stretch(RectTransform rt)
+    {
+        rt.anchorMin = Vector2.zero;
+        rt.anchorMax = Vector2.one;
+        rt.offsetMin = Vector2.zero;
+        rt.offsetMax = Vector2.zero;
+    }
+
+    private void AddRect(string name, float x, float y, float w, float h, Color color)
     {
         var go = new GameObject(name, typeof(RectTransform), typeof(Image));
         go.transform.SetParent(contentRoot, false);
-        var rt = go.GetComponent<RectTransform>();
-        rt.anchorMin = anchorMin;
-        rt.anchorMax = anchorMax;
-        rt.offsetMin = Vector2.zero;
-        rt.offsetMax = Vector2.zero;
+        PlaceTopLeft(go.GetComponent<RectTransform>(), x, y, w, h);
+        var img = go.GetComponent<Image>();
+        img.color = color;
+        img.raycastTarget = false;
+    }
+
+    private Sprite LoadSprite(string path)
+    {
+        if (spriteCache.TryGetValue(path, out var cached)) return cached;
+        var sprite = Resources.Load<Sprite>(path);
+        spriteCache[path] = sprite;
+        return sprite;
+    }
+
+    // 그림이 있으면 그림을, 없으면 fallbackColor 색 도형을 쓴다.
+    // (그림이 없을 때 투명색이면 테두리가 안 보이므로 옅은 선 색으로 바꿔 준다)
+    private void SetImage(Image img, string path, Color fallbackColor)
+    {
+        var sprite = LoadSprite(path);
+        img.sprite = sprite;
+        img.type = Image.Type.Simple;
+        img.color = sprite != null ? Color.white
+            : fallbackColor.a > 0f ? fallbackColor : new Color(LineColor.r, LineColor.g, LineColor.b, 0.6f);
+    }
+
+    // 가장자리(둥근 모서리/테두리)를 유지한 채 늘려 쓰는 그림.
+    // 내보낸 그림은 2배 크기(@2x)라 가장자리 6px = 화면에서 3px. 크기가 그림과 달라도
+    // 모서리가 찌그러지지 않도록, 읽어온 그림에 가장자리 정보를 붙인 사본을 만들어 쓴다.
+    private const float SliceBorder = 6f;
+    private readonly Dictionary<string, Sprite> slicedCache = new Dictionary<string, Sprite>();
+
+    private void SetSlicedImage(Image img, string path, Color fallbackColor)
+    {
+        if (!slicedCache.TryGetValue(path, out var sliced))
+        {
+            var src = LoadSprite(path);
+            sliced = src == null ? null : Sprite.Create(src.texture, src.rect, new Vector2(0.5f, 0.5f), src.pixelsPerUnit,
+                                                        0, SpriteMeshType.FullRect,
+                                                        new Vector4(SliceBorder, SliceBorder, SliceBorder, SliceBorder));
+            slicedCache[path] = sliced;
+        }
+
+        if (sliced == null)
+        {
+            SetImage(img, path, fallbackColor);
+            return;
+        }
+        img.sprite = sliced;
+        img.type = Image.Type.Sliced;
+        img.pixelsPerUnitMultiplier = 2f;
+        img.color = Color.white;
+    }
+
+    private Image CreateImage(string name, float x, float y, float w, float h)
+    {
+        var go = new GameObject(name, typeof(RectTransform), typeof(Image));
+        go.transform.SetParent(contentRoot, false);
+        PlaceTopLeft(go.GetComponent<RectTransform>(), x, y, w, h);
         var img = go.GetComponent<Image>();
         img.preserveAspect = true;
         img.raycastTarget = false;
@@ -634,23 +1001,16 @@ public class InventoryPanelUI : MonoBehaviour
         return img;
     }
 
-    private TMP_Text CreateText(string name, Vector2 anchorMin, Vector2 anchorMax, float size, TextAlignmentOptions align)
+    private TMP_Text CreateText(string name, float x, float y, float w, float h, float size, TextAlignmentOptions align)
     {
         var go = new GameObject(name, typeof(RectTransform));
         go.transform.SetParent(contentRoot, false);
-        var rt = go.GetComponent<RectTransform>();
-        rt.anchorMin = anchorMin;
-        rt.anchorMax = anchorMax;
-        rt.offsetMin = Vector2.zero;
-        rt.offsetMax = Vector2.zero;
+        PlaceTopLeft(go.GetComponent<RectTransform>(), x, y, w, h);
         var tmp = go.AddComponent<TextMeshProUGUI>();
         tmp.fontSize = size;
         tmp.alignment = align;
-        tmp.color = Color.white;
+        tmp.color = LabelColor;
         tmp.raycastTarget = false;
-        // 줄바꿈은 TextMeshPro 기본값이 켜짐이라 따로 지정하지 않는다.
-        // (TMP 버전에 따라 속성 이름이 enableWordWrapping / textWrappingMode 로 달라서,
-        //  버전을 타지 않도록 건드리지 않는 편이 안전하다.)
         return tmp;
     }
 
@@ -658,49 +1018,46 @@ public class InventoryPanelUI : MonoBehaviour
     // 예전에는 글씨만 있고 눌리지 않는 버튼이 만들어졌다. 원인은 두 가지였다:
     //   1) Button에 targetGraphic이 연결되지 않아 클릭 판정이 잡히지 않았다.
     //   2) 배경 Image의 raycastTarget이 꺼져 있으면 클릭이 아예 통과해 버린다.
-    // 아래에서 둘 다 확실히 지정한다. 눌렀을 때 색이 변하는 것도 함께 넣어서
-    // "지금 눌리는 버튼이다"라는 게 눈에 보이게 했다.
-    private Button CreateButton(string name, string label, Vector2 anchorMin, Vector2 anchorMax,
+    // 아래에서 둘 다 확실히 지정한다. 마우스를 올리거나 누르면 색이 살짝 변해서
+    // "지금 눌리는 버튼이다"라는 게 눈에 보인다.
+    private Button CreateButton(string name, string label, string spritePath, Color fallbackColor,
                                 UnityEngine.Events.UnityAction onClick)
     {
         var go = new GameObject(name, typeof(RectTransform), typeof(Image), typeof(Button));
         go.transform.SetParent(contentRoot, false);
-        var rt = go.GetComponent<RectTransform>();
-        rt.anchorMin = anchorMin;
-        rt.anchorMax = anchorMax;
-        rt.offsetMin = Vector2.zero;
-        rt.offsetMax = Vector2.zero;
 
         var bg = go.GetComponent<Image>();
-        bg.color = new Color(1f, 1f, 1f, 0.20f);
+        SetSlicedImage(bg, spritePath, fallbackColor);
         bg.raycastTarget = true;   // 이게 꺼져 있으면 클릭이 통과해 버튼이 안 눌린다
 
         var textGo = new GameObject("Text", typeof(RectTransform));
         textGo.transform.SetParent(go.transform, false);
-        var textRt = textGo.GetComponent<RectTransform>();
-        textRt.anchorMin = Vector2.zero;
-        textRt.anchorMax = Vector2.one;
-        textRt.offsetMin = Vector2.zero;
-        textRt.offsetMax = Vector2.zero;
+        Stretch(textGo.GetComponent<RectTransform>());
         var tmp = textGo.AddComponent<TextMeshProUGUI>();
         tmp.text = label;
-        tmp.fontSize = 22;
+        tmp.fontSize = 19;
         tmp.alignment = TextAlignmentOptions.Center;
-        tmp.color = Color.white;
+        tmp.color = ButtonTextColor;
         tmp.raycastTarget = false;   // 글씨가 클릭을 가로채지 않게
 
         var btn = go.GetComponent<Button>();
         btn.targetGraphic = bg;      // 클릭 판정과 색 변화의 기준이 되는 그래픽
-        btn.transition = Selectable.Transition.ColorTint;
-
-        var colors = btn.colors;
-        colors.normalColor = Color.white;
-        colors.highlightedColor = new Color(1f, 0.95f, 0.7f);
-        colors.pressedColor = new Color(0.8f, 0.7f, 0.35f);
-        colors.selectedColor = Color.white;
-        btn.colors = colors;
+        ApplyButtonColors(btn);
 
         btn.onClick.AddListener(onClick);
         return btn;
+    }
+
+    // 마우스를 올리면 살짝 푸르게, 누르면 살짝 어둡게 (환경설정 버튼과 같은 값).
+    private static void ApplyButtonColors(Button btn)
+    {
+        btn.transition = Selectable.Transition.ColorTint;
+        var colors = btn.colors;
+        colors.normalColor = Color.white;
+        colors.highlightedColor = new Color(0.9f, 0.94f, 1f);
+        colors.pressedColor = new Color(0.72f, 0.76f, 0.82f);
+        colors.selectedColor = Color.white;
+        colors.colorMultiplier = 1f;
+        btn.colors = colors;
     }
 }
