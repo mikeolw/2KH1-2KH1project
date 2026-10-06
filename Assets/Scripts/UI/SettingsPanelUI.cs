@@ -70,7 +70,6 @@ public class SettingsPanelUI : MonoBehaviour
     private static readonly Color HintColor = new Color(0.482f, 0.541f, 0.596f);    // 7B8A98 안내 문구
     private static readonly Color ButtonTextColor = new Color(0.663f, 0.729f, 0.788f);   // A9BAC9
     private static readonly Color PrimaryTextColor = new Color(0.059f, 0.082f, 0.106f);  // 0F151B
-    private static readonly Color WarnColor = new Color(0.86f, 0.55f, 0.5f);        // "정말 나가시겠습니까?"
     private static readonly Color RowLineColor = new Color(0.165f, 0.208f, 0.251f, 0.6f);  // 2A3540
     // 그림이 없을 때만 쓰는 색
     private static readonly Color PanelColor = new Color(0.063f, 0.086f, 0.114f, 0.95f);   // 10161D
@@ -89,7 +88,7 @@ public class SettingsPanelUI : MonoBehaviour
 
     private TMP_Text fontPreviewText;
     private Button mainMenuButton;
-    private bool mainMenuConfirming;
+    private GameObject confirmDialog;   // "정말 나가시겠습니까?" 확인 창 (화면 가운데)
 
     // 열 때마다 모든 항목을 현재 설정값으로 다시 맞추기 위한 갱신 함수 목록.
     private readonly List<System.Action> refreshActions = new List<System.Action>();
@@ -122,8 +121,7 @@ public class SettingsPanelUI : MonoBehaviour
 
         RefreshAllControls();
 
-        mainMenuConfirming = false;
-        SetMainMenuLabel("메인 화면으로");
+        if (confirmDialog != null) confirmDialog.SetActive(false);
 
         ShowCategory(Category.Sound);
 
@@ -250,6 +248,9 @@ public class SettingsPanelUI : MonoBehaviour
 
         // ----- 아래쪽 버튼 -----
         BuildFooter(box.transform);
+
+        // ----- "메인 화면으로" 확인 창 (맨 위에 겹쳐 뜬다) -----
+        BuildConfirmDialog(panel.transform);
 
         // 코드로 만든 글자는 기본 글꼴에 한글 글자 모양이 없어 깨진다.
         // 화면에서 한글이 잘 나오는 글꼴을 찾아 물려준다 (UIFontHelper.cs 참고).
@@ -696,15 +697,22 @@ public class SettingsPanelUI : MonoBehaviour
     // ---------------------------------------------------------------------------------
     // 메인 화면으로
     // ---------------------------------------------------------------------------------
+    // 저장하지 않은 진행 상황이 날아가므로 바로 나가지 않고, 화면 가운데에 확인 창을 띄운다.
+    // (예전에는 버튼 글자를 "정말 나가시겠습니까?"로 바꾸는 방식이라 눈에 잘 띄지 않았다)
     private void OnClickMainMenu()
     {
-        // 저장하지 않은 진행 상황이 날아가므로 한 번 더 확인받는다.
-        if (!mainMenuConfirming)
+        if (confirmDialog == null)
         {
-            mainMenuConfirming = true;
-            SetMainMenuLabel("정말 나가시겠습니까?");
+            GoToMainMenu();
             return;
         }
+        confirmDialog.SetActive(true);
+        confirmDialog.transform.SetAsLastSibling();
+    }
+
+    private void GoToMainMenu()
+    {
+        if (confirmDialog != null) confirmDialog.SetActive(false);
 
         if (SavePointManager.Instance != null) SavePointManager.Instance.ResetForNewGame();
         if (SaveManager.Instance != null) SaveManager.Instance.SetActiveSave(null);
@@ -714,17 +722,63 @@ public class SettingsPanelUI : MonoBehaviour
         UnityEngine.SceneManagement.SceneManager.LoadScene(titleSceneName);
     }
 
-    private void SetMainMenuLabel(string text)
-    {
-        if (mainMenuButton == null) return;
+    // ===== 확인 창 =====
+    //   [설정 화면 위를 덮는 어두운 막]
+    //     [가운데 상자 520x260]
+    //        메인 화면으로 나가시겠습니까?
+    //        저장하지 않은 진행 상황은 사라집니다.
+    //                         [취소] [나가기]
+    private const float ConfirmWidth = 520f;
+    private const float ConfirmHeight = 260f;
+    private const float ConfirmPad = 40f;
+    private const float ConfirmButtonWidth = 180f;
 
-        var label = mainMenuButton.GetComponentInChildren<TMP_Text>();
-        if (label != null)
-        {
-            label.text = text;
-            // 확인 단계에서는 붉은빛으로 바꿔 경고임을 알린다.
-            label.color = mainMenuConfirming ? WarnColor : ButtonTextColor;
-        }
+    private void BuildConfirmDialog(Transform parent)
+    {
+        confirmDialog = new GameObject("ConfirmMainMenu", typeof(RectTransform), typeof(Image));
+        confirmDialog.transform.SetParent(parent, false);
+        Stretch(confirmDialog.GetComponent<RectTransform>());
+        var dim = confirmDialog.GetComponent<Image>();
+        dim.color = new Color(0f, 0f, 0f, 0.6f);
+        dim.raycastTarget = true;   // 뒤의 설정 화면이 눌리지 않게 막는다
+
+        var box = new GameObject("Box", typeof(RectTransform), typeof(Image), typeof(Outline));
+        box.transform.SetParent(confirmDialog.transform, false);
+        var boxRt = box.GetComponent<RectTransform>();
+        boxRt.anchorMin = boxRt.anchorMax = boxRt.pivot = new Vector2(0.5f, 0.5f);
+        boxRt.sizeDelta = new Vector2(ConfirmWidth, ConfirmHeight);
+        boxRt.anchoredPosition = Vector2.zero;
+        var boxImg = box.GetComponent<Image>();
+        boxImg.color = new Color(PanelColor.r, PanelColor.g, PanelColor.b, 1f);
+        boxImg.raycastTarget = true;
+        // 1px 테두리 (패널 그림의 테두리 색)
+        var outline = box.GetComponent<Outline>();
+        outline.effectColor = new Color(0.227f, 0.282f, 0.333f);   // 3A4855
+        outline.effectDistance = new Vector2(1f, -1f);
+
+        AddRect(box.transform, "TopAccent", ConfirmPad, 0f, 120f, 3f, Accent);
+
+        var title = CreateLabel(box.transform, "Title", "메인 화면으로 나가시겠습니까?", 24, TextAlignmentOptions.TopLeft);
+        PlaceTopLeft(title.rectTransform, ConfirmPad, 44f, ConfirmWidth - ConfirmPad * 2f, 36f);
+        title.fontStyle = FontStyles.Bold;
+        title.color = TitleColor;
+
+        var body = CreateLabel(box.transform, "Body", "저장하지 않은 진행 상황은 사라집니다.", 17, TextAlignmentOptions.TopLeft);
+        PlaceTopLeft(body.rectTransform, ConfirmPad, 92f, ConfirmWidth - ConfirmPad * 2f, 28f);
+        body.color = HintColor;
+
+        float by = ConfirmHeight - ConfirmPad + 8f - ButtonHeight;
+        var cancel = CreateButton(box.transform, "Btn_Cancel", "취소", "Button_Secondary", new Color(0f, 0f, 0f, 0f),
+                                  () => confirmDialog.SetActive(false));
+        PlaceTopLeft(cancel.GetComponent<RectTransform>(), ConfirmWidth - ConfirmPad - ConfirmButtonWidth * 2f - 12f, by, ConfirmButtonWidth, ButtonHeight);
+
+        var ok = CreateButton(box.transform, "Btn_Confirm", "나가기", "Button_Primary", Accent, GoToMainMenu);
+        PlaceTopLeft(ok.GetComponent<RectTransform>(), ConfirmWidth - ConfirmPad - ConfirmButtonWidth, by, ConfirmButtonWidth, ButtonHeight);
+        var okText = ok.GetComponentInChildren<TMP_Text>();
+        okText.fontStyle = FontStyles.Bold;
+        okText.color = PrimaryTextColor;
+
+        confirmDialog.SetActive(false);
     }
 
     // ---------------------------------------------------------------------------------
