@@ -672,7 +672,7 @@ public class NotePanelUI : MonoBehaviour
             go.transform.SetParent(bookTransform, false);
             Place(go.GetComponent<RectTransform>(), TabActiveX, TabFirstY + i * TabPitch, TabClickWidth, TabHeight);
             var hit = go.GetComponent<Image>();
-            hit.color = new Color(1f, 1f, 1f, 0.01f);
+            hit.color = new Color(0f, 0f, 0f, 0f);   // 클릭만 받는 완전 투명 (흰색 1%는 Linear 색 공간에서 회색 네모로 보인다)
             hit.raycastTarget = true;
 
             // 고른 탭 그림 (176x80, 클릭 영역보다 넓어서 페이지 가장자리까지 덮는다)
