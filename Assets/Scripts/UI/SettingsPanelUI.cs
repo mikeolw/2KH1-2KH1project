@@ -16,13 +16,16 @@ using TMPro;
 // 그래서 씬을 오가지 않고, 이 스크립트가 설정 화면 전체를 코드로 만들어 켜고 끈다.
 // 배치를 전부 코드가 정하므로 항목을 추가해도 잘리거나 겹치지 않는다.
 //
-// ===== 화면 구성 =====
-//   [화면 전체를 덮는 어두운 막]
-//     [가운데 상자]
-//        ── 제목: 환경설정
-//        ── 위쪽 탭:  [ 사운드 ] [ 화면 ] [ 텍스트 ]      (고른 탭에 밑줄 + 강조색)
-//        ── 가운데:   고른 탭의 조절 항목들
-//        ── 아래쪽:   [메인 화면으로]        [돌아가기] [종료하기]
+// ===== 화면 구성 (Figma "Screen / Settings" - 청회색 테마) =====
+//   [화면 전체를 덮는 어두운 막 + 패널 그림(SettingsPanel.png)]
+//     [가운데 패널 960x800]
+//        ── SETTINGS / 환경설정
+//        ── 탭:  사운드   화면   텍스트          (고른 탭은 밝은 굵은 글자 + 밑줄)
+//        ── 항목: 왼쪽에 이름, 오른쪽 끝에 조작 칸 (슬라이더 / 꺼짐·켜짐 / ◀ 값 ▶)
+//        ── 아래: [메인 화면으로] [종료하기]                  [돌아가기]
+//
+// 그림은 Assets/Resources/Illusts/UI/Settings/ 에 있다 (git 제외 - 드라이브로 공유).
+// 그림이 없으면 같은 자리에 색 도형으로 대신 그린다.
 //
 // ===== 쓰는 법 =====
 // SettingsPanelUI.Instance.Open() / Close() 로 여닫는다.
@@ -35,29 +38,54 @@ public class SettingsPanelUI : MonoBehaviour
     private enum Category { Sound, Display, Text }
 
     // ===== 화면 크기 기준값 =====
-    // 캔버스가 1440x1080이라는 전제로 잡은 값이다.
-    private const float BoxWidth = 1000f;
-    private const float BoxHeight = 780f;
-    private const float TitleHeight = 72f;     // 제목 영역
-    private const float TabHeight = 58f;       // 위쪽 탭 영역
-    private const float FooterHeight = 92f;    // 아래쪽 버튼 영역
-    private const float ContentPadding = 44f;  // 조절 항목 좌우 여백
-    private const float RowHeight = 54f;       // 항목 한 줄 높이
-    private const float RowGap = 16f;          // 항목 사이 간격
-    private const float LabelWidth = 300f;     // 항목 이름 칸 너비
+    // 캔버스가 1440x1080이라는 전제로 잡은 값이다. 패널 그림(SettingsPanel.png)이
+    // 1440x1080 한 장이고, 그 안의 패널이 가운데 960x800 자리에 그려져 있다.
+    private const float BoxWidth = 960f;
+    private const float BoxHeight = 800f;
+    private const float Pad = 64f;              // 패널 좌우 여백
+    private const float TabTop = 140f;          // 탭 줄 위쪽 (패널 위에서부터)
+    private const float ContentTop = 212f;      // 항목 영역 위쪽 (탭 아래 구분선 + 여백)
+    private const float FooterButtonBottom = 48f;
+    private const float ContentBottom = 134f;   // 버튼 위 구분선 (패널 아래에서부터)
+    private const float RowHeight = 70f;        // 항목 한 줄 높이 (아래 옅은 구분선 포함)
+    private const float NoteHeight = 52f;       // 안내 문구 줄 높이
+
+    // 조작 칸 크기 (그림 크기와 같다)
+    private const float SliderTrackWidth = 300f;
+    private const float SliderValueWidth = 80f;
+    private const float ToggleSegWidth = 100f;
+    private const float ToggleSegGap = 10f;
+    private const float ControlHeight = 44f;
+    private const float OptionValueWidth = 212f;
+    private const float ButtonWidth = 200f;
+    private const float ButtonHeight = 54f;
 
     // ===== 색 =====
-    private static readonly Color Accent = new Color(1f, 0.84f, 0.42f);        // 강조(금색)
-    private static readonly Color TextMain = new Color(0.95f, 0.95f, 0.93f);   // 본문 글자
-    private static readonly Color TextDim = new Color(0.66f, 0.66f, 0.64f);    // 설명 글자
-    private static readonly Color BoxBg = new Color(0f, 0f, 0f, 0.97f);        // 상자 배경
-    private static readonly Color LineColor = new Color(1f, 1f, 1f, 0.16f);    // 구분선
+    private static readonly Color Accent = new Color(0.561f, 0.643f, 0.718f);       // 8FA4B7 청회색 강조
+    private static readonly Color TitleColor = new Color(0.894f, 0.918f, 0.937f);   // E4EAEF 제목
+    private static readonly Color KickerColor = new Color(0.435f, 0.518f, 0.588f);  // 6F8496 SETTINGS
+    private static readonly Color LabelColor = new Color(0.788f, 0.835f, 0.878f);   // C9D5E0 항목 이름/값
+    private static readonly Color ActiveColor = new Color(0.851f, 0.89f, 0.922f);   // D9E3EB 고른 것
+    private static readonly Color DimColor = new Color(0.424f, 0.486f, 0.545f);     // 6C7C8B 안 고른 것
+    private static readonly Color HintColor = new Color(0.482f, 0.541f, 0.596f);    // 7B8A98 안내 문구
+    private static readonly Color ButtonTextColor = new Color(0.663f, 0.729f, 0.788f);   // A9BAC9
+    private static readonly Color PrimaryTextColor = new Color(0.059f, 0.082f, 0.106f);  // 0F151B
+    private static readonly Color WarnColor = new Color(0.86f, 0.55f, 0.5f);        // "정말 나가시겠습니까?"
+    private static readonly Color RowLineColor = new Color(0.165f, 0.208f, 0.251f, 0.6f);  // 2A3540
+    // 그림이 없을 때만 쓰는 색
+    private static readonly Color PanelColor = new Color(0.063f, 0.086f, 0.114f, 0.95f);   // 10161D
+    private static readonly Color TrackColor = new Color(0.204f, 0.255f, 0.302f);          // 34414D
+    private static readonly Color OnFillColor = new Color(0.141f, 0.192f, 0.251f);         // 243140
+
+    // 그림 경로 (Resources 기준)
+    private const string ArtFolder = "Illusts/UI/Settings/";
 
     private GameObject panel;
     private RectTransform contentArea;
     private readonly Dictionary<Category, GameObject> pages = new Dictionary<Category, GameObject>();
-    private readonly Dictionary<Category, Button> tabButtons = new Dictionary<Category, Button>();
+    private readonly Dictionary<Category, TMP_Text> tabLabels = new Dictionary<Category, TMP_Text>();
     private readonly Dictionary<Category, Image> tabUnderlines = new Dictionary<Category, Image>();
+    private readonly Dictionary<string, Sprite> spriteCache = new Dictionary<string, Sprite>();
 
     private TMP_Text fontPreviewText;
     private Button mainMenuButton;
@@ -149,53 +177,63 @@ public class SettingsPanelUI : MonoBehaviour
         panel.transform.SetParent(canvas.transform, false);
         Stretch(panel.GetComponent<RectTransform>());
         var dim = panel.GetComponent<Image>();
-        dim.color = new Color(0f, 0f, 0f, 0.78f);
+        // 설정 화면 뒤의 게임 화면(흰 선화)이 비쳐 보이면 글자가 읽기 어려워서 거의 가린다.
+        dim.color = new Color(0f, 0f, 0f, 0.97f);   // 검은색
         dim.raycastTarget = true;   // 뒤쪽 게임 화면이 눌리지 않게 막는다
 
-        // ----- 가운데 상자 -----
+        // ----- 패널 그림 (1440x1080 한 장: 패널 + 그림자 + 위쪽 강조선 + 구분선) -----
+        var panelArt = LoadSprite("SettingsPanel");
+        if (panelArt != null)
+        {
+            var art = new GameObject("PanelArt", typeof(RectTransform), typeof(Image));
+            art.transform.SetParent(panel.transform, false);
+            var artRt = art.GetComponent<RectTransform>();
+            artRt.anchorMin = artRt.anchorMax = artRt.pivot = new Vector2(0.5f, 0.5f);
+            artRt.sizeDelta = new Vector2(1440f, 1080f);
+            artRt.anchoredPosition = Vector2.zero;
+            var artImg = art.GetComponent<Image>();
+            artImg.sprite = panelArt;
+            artImg.raycastTarget = false;
+        }
+        else
+        {
+            Debug.LogWarning("[SettingsPanelUI] 설정 화면 그림을 찾을 수 없어 색 도형으로 그립니다: Assets/Resources/" + ArtFolder + "SettingsPanel.png");
+        }
+
+        // ----- 가운데 패널 (글자/조작 칸을 얹는 자리) -----
         var box = new GameObject("Box", typeof(RectTransform), typeof(Image));
         box.transform.SetParent(panel.transform, false);
         var boxRt = box.GetComponent<RectTransform>();
-        boxRt.anchorMin = new Vector2(0.5f, 0.5f);
-        boxRt.anchorMax = new Vector2(0.5f, 0.5f);
-        boxRt.pivot = new Vector2(0.5f, 0.5f);
+        boxRt.anchorMin = boxRt.anchorMax = boxRt.pivot = new Vector2(0.5f, 0.5f);
         boxRt.sizeDelta = new Vector2(BoxWidth, BoxHeight);
-        boxRt.anchoredPosition = Vector2.zero;
-        box.GetComponent<Image>().color = BoxBg;
+        // 그림 속 패널은 화면 가운데보다 20px 아래(y140~940)에 있다.
+        boxRt.anchoredPosition = new Vector2(0f, -(140f + BoxHeight / 2f - 540f));
+        var boxImg = box.GetComponent<Image>();
+        boxImg.color = panelArt != null ? new Color(0f, 0f, 0f, 0f) : PanelColor;
+        boxImg.raycastTarget = false;
 
-        // 상자 테두리(위쪽 강조선) - 밋밋한 검은 판에 포인트를 준다.
-        var topAccent = new GameObject("TopAccent", typeof(RectTransform), typeof(Image));
-        topAccent.transform.SetParent(box.transform, false);
-        var taRt = topAccent.GetComponent<RectTransform>();
-        taRt.anchorMin = new Vector2(0f, 1f);
-        taRt.anchorMax = new Vector2(1f, 1f);
-        taRt.pivot = new Vector2(0.5f, 1f);
-        taRt.offsetMin = Vector2.zero;
-        taRt.offsetMax = Vector2.zero;
-        taRt.sizeDelta = new Vector2(0f, 3f);
-        taRt.anchoredPosition = Vector2.zero;
-        var taImg = topAccent.GetComponent<Image>();
-        taImg.color = Accent;
-        taImg.raycastTarget = false;
+        if (panelArt == null)
+        {
+            // 그림에 들어 있는 선들을 대신 그린다.
+            AddRect(box.transform, "TopAccent", Pad, 0f, 120f, 3f, Accent);
+            AddRect(box.transform, "TabDivider", Pad, 188f, BoxWidth - Pad * 2f, 1f, RowLineColor);
+            AddRect(box.transform, "FooterDivider", Pad, BoxHeight - ContentBottom, BoxWidth - Pad * 2f, 1f, RowLineColor);
+        }
 
-        // ----- 제목 -----
-        var title = CreateLabel(box.transform, "Title", "환경설정", 34, TextAlignmentOptions.Center);
-        var titleRt = title.rectTransform;
-        titleRt.anchorMin = new Vector2(0f, 1f);
-        titleRt.anchorMax = new Vector2(1f, 1f);
-        titleRt.pivot = new Vector2(0.5f, 1f);
-        titleRt.offsetMin = new Vector2(ContentPadding, 0f);
-        titleRt.offsetMax = new Vector2(-ContentPadding, 0f);
-        titleRt.sizeDelta = new Vector2(titleRt.sizeDelta.x, TitleHeight);
-        titleRt.anchoredPosition = new Vector2(0f, -6f);
+        // ----- 머리말 -----
+        var kicker = CreateLabel(box.transform, "Kicker", "SETTINGS", 14, TextAlignmentOptions.TopLeft);
+        PlaceTopLeft(kicker.rectTransform, Pad, 44f, 300f, 20f);
+        kicker.fontStyle = FontStyles.Bold;
+        kicker.characterSpacing = 36f;
+        kicker.color = KickerColor;
+
+        var title = CreateLabel(box.transform, "Title", "환경설정", 36, TextAlignmentOptions.TopLeft);
+        PlaceTopLeft(title.rectTransform, Pad, 62f, 500f, 54f);
         title.fontStyle = FontStyles.Bold;
-        title.color = Accent;
+        title.color = TitleColor;
 
         // ----- 위쪽 탭 -----
         BuildTabBar(box.transform);
-
-        // 탭 아래 구분선
-        CreateDivider(box.transform, -(TitleHeight + TabHeight));
 
         // ----- 가운데: 조절 항목 영역 -----
         var content = new GameObject("Content", typeof(RectTransform));
@@ -203,15 +241,14 @@ public class SettingsPanelUI : MonoBehaviour
         contentArea = content.GetComponent<RectTransform>();
         contentArea.anchorMin = new Vector2(0f, 0f);
         contentArea.anchorMax = new Vector2(1f, 1f);
-        contentArea.offsetMin = new Vector2(ContentPadding, FooterHeight);
-        contentArea.offsetMax = new Vector2(-ContentPadding, -(TitleHeight + TabHeight + 24f));
+        contentArea.offsetMin = new Vector2(Pad, ContentBottom + 12f);
+        contentArea.offsetMax = new Vector2(-Pad, -ContentTop);
 
         BuildSoundPage();
         BuildDisplayPage();
         BuildTextPage();
 
         // ----- 아래쪽 버튼 -----
-        CreateDivider(box.transform, -(BoxHeight - FooterHeight));
         BuildFooter(box.transform);
 
         // 코드로 만든 글자는 기본 글꼴에 한글 글자 모양이 없어 깨진다.
@@ -220,44 +257,35 @@ public class SettingsPanelUI : MonoBehaviour
     }
 
     // ===== 위쪽 탭 =====
-    // 탭 세 개를 가로로 나란히 놓는다. 고른 탭은 글자가 강조색이 되고 아래에 밑줄이 켜진다.
+    // 글자 폭만큼의 탭 세 개를 왼쪽부터 40px 간격으로 놓는다.
+    // 고른 탭은 밝은 굵은 글자 + 글자 폭만큼의 밑줄.
     private void BuildTabBar(Transform box)
     {
-        var bar = new GameObject("TabBar", typeof(RectTransform));
-        bar.transform.SetParent(box, false);
-        var barRt = bar.GetComponent<RectTransform>();
-        barRt.anchorMin = new Vector2(0f, 1f);
-        barRt.anchorMax = new Vector2(1f, 1f);
-        barRt.pivot = new Vector2(0.5f, 1f);
-        barRt.offsetMin = new Vector2(ContentPadding, 0f);
-        barRt.offsetMax = new Vector2(-ContentPadding, 0f);
-        barRt.sizeDelta = new Vector2(barRt.sizeDelta.x, TabHeight);
-        barRt.anchoredPosition = new Vector2(0f, -TitleHeight);
-
-        CreateTabButton(bar.transform, Category.Sound, "사운드", 0, 3);
-        CreateTabButton(bar.transform, Category.Display, "화면", 1, 3);
-        CreateTabButton(bar.transform, Category.Text, "텍스트", 2, 3);
+        float x = Pad;
+        x = CreateTabButton(box, Category.Sound, "사운드", x) + 40f;
+        x = CreateTabButton(box, Category.Display, "화면", x) + 40f;
+        CreateTabButton(box, Category.Text, "텍스트", x);
     }
 
-    // 탭 버튼 하나. index/total로 가로를 균등하게 나눠 앉힌다.
-    private void CreateTabButton(Transform parent, Category category, string label, int index, int total)
+    // 탭 버튼 하나를 x에 놓고, 그 오른쪽 끝 x를 돌려준다.
+    private float CreateTabButton(Transform parent, Category category, string label, float x)
     {
         var go = new GameObject($"Tab_{category}", typeof(RectTransform), typeof(Image), typeof(Button));
         go.transform.SetParent(parent, false);
 
-        var rt = go.GetComponent<RectTransform>();
-        rt.anchorMin = new Vector2((float)index / total, 0f);
-        rt.anchorMax = new Vector2((float)(index + 1) / total, 1f);
-        rt.offsetMin = new Vector2(4f, 6f);
-        rt.offsetMax = new Vector2(-4f, 0f);
+        var text = CreateLabel(go.transform, "Text", label, 22, TextAlignmentOptions.TopLeft);
+        text.fontStyle = FontStyles.Bold;   // 폭을 굵은 글자 기준으로 잡아 고를 때 밀리지 않게
+        UIFontHelper.Apply(text);
+        float width = Mathf.Ceil(text.GetPreferredValues(label).x) + 2f;
+        Stretch(text.rectTransform);
+
+        PlaceTopLeft(go.GetComponent<RectTransform>(), x, TabTop, width, 48f);
 
         var bg = go.GetComponent<Image>();
-        bg.color = new Color(1f, 1f, 1f, 0.05f);
-        bg.raycastTarget = true;   // 꺼져 있으면 탭이 눌리지 않는다
-
-        var text = CreateLabel(go.transform, "Text", label, 24, TextAlignmentOptions.Center);
-        Stretch(text.rectTransform);
-        text.fontStyle = FontStyles.Bold;
+        // 클릭만 받는 완전 투명. (Image는 알파 0이어도 클릭을 받는다)
+        // 예전처럼 흰색 1%를 깔면 Linear 색 공간에서는 어두운 배경 위에 회색 네모로 보인다.
+        bg.color = new Color(0f, 0f, 0f, 0f);
+        bg.raycastTarget = true;
 
         // 선택 표시용 밑줄 (선택된 탭만 켜진다)
         var underline = new GameObject("Underline", typeof(RectTransform), typeof(Image));
@@ -266,25 +294,20 @@ public class SettingsPanelUI : MonoBehaviour
         uRt.anchorMin = new Vector2(0f, 0f);
         uRt.anchorMax = new Vector2(1f, 0f);
         uRt.pivot = new Vector2(0.5f, 0f);
-        uRt.offsetMin = Vector2.zero;
-        uRt.offsetMax = Vector2.zero;
-        uRt.sizeDelta = new Vector2(0f, 3f);
-        uRt.anchoredPosition = Vector2.zero;
+        uRt.offsetMin = new Vector2(0f, 2f);
+        uRt.offsetMax = new Vector2(0f, 4f);
         var uImg = underline.GetComponent<Image>();
-        uImg.color = Accent;
+        SetImage(uImg, "Tab_Underline", Accent);
         uImg.raycastTarget = false;
 
         var btn = go.GetComponent<Button>();
         btn.targetGraphic = bg;
-        btn.transition = Selectable.Transition.ColorTint;
-        var colors = btn.colors;
-        colors.highlightedColor = new Color(1f, 0.95f, 0.8f);
-        colors.pressedColor = new Color(0.85f, 0.75f, 0.45f);
-        btn.colors = colors;
+        btn.transition = Selectable.Transition.None;
         btn.onClick.AddListener(() => ShowCategory(category));
 
-        tabButtons[category] = btn;
+        tabLabels[category] = text;
         tabUnderlines[category] = uImg;
+        return x + width;
     }
 
     // 고른 탭의 내용만 보여주고, 탭 모양도 그에 맞게 바꾼다.
@@ -295,13 +318,14 @@ public class SettingsPanelUI : MonoBehaviour
             if (pair.Value != null) pair.Value.SetActive(pair.Key == category);
         }
 
-        foreach (var pair in tabButtons)
+        foreach (var pair in tabLabels)
         {
             bool selected = pair.Key == category;
-
-            var text = pair.Value != null ? pair.Value.GetComponentInChildren<TMP_Text>() : null;
-            if (text != null) text.color = selected ? Accent : TextDim;
-
+            if (pair.Value != null)
+            {
+                pair.Value.color = selected ? ActiveColor : DimColor;
+                pair.Value.fontStyle = selected ? FontStyles.Bold : FontStyles.Normal;
+            }
             if (tabUnderlines.TryGetValue(pair.Key, out var underline) && underline != null)
             {
                 underline.enabled = selected;
@@ -310,26 +334,26 @@ public class SettingsPanelUI : MonoBehaviour
     }
 
     // ===== 아래쪽 버튼 =====
-    //   왼쪽 : 메인 화면으로 (게임 도중에만 의미가 있다)
-    //   오른쪽: 돌아가기 / 종료하기
+    //   왼쪽 : 메인 화면으로 (게임 도중에만 의미가 있다) / 종료하기
+    //   오른쪽: 돌아가기 (주 버튼)
     private void BuildFooter(Transform box)
     {
-        mainMenuButton = CreateButton(box, "Btn_MainMenu", "메인 화면으로",
-            new Vector2(0f, 0f), new Vector2(0f, 0f), new Vector2(0f, 0f),
-            new Vector2(ContentPadding, 22f), new Vector2(220f, 50f),
-            OnClickMainMenu, subtle: true);
+        mainMenuButton = CreateFooterButton(box, "Btn_MainMenu", "메인 화면으로", Pad, primary: false, OnClickMainMenu);
+        CreateFooterButton(box, "Btn_Quit", "종료하기", Pad + ButtonWidth + 16f, primary: false, OnClickQuit);
+        CreateFooterButton(box, "Btn_Back", "돌아가기", BoxWidth - Pad - ButtonWidth, primary: true, Close);
+    }
 
-        // 종료하기 (맨 오른쪽)
-        CreateButton(box, "Btn_Quit", "종료하기",
-            new Vector2(1f, 0f), new Vector2(1f, 0f), new Vector2(1f, 0f),
-            new Vector2(-ContentPadding, 22f), new Vector2(180f, 50f),
-            OnClickQuit, subtle: true);
-
-        // 돌아가기 (종료하기 왼쪽)
-        CreateButton(box, "Btn_Back", "돌아가기",
-            new Vector2(1f, 0f), new Vector2(1f, 0f), new Vector2(1f, 0f),
-            new Vector2(-(ContentPadding + 180f + 12f), 22f), new Vector2(180f, 50f),
-            Close, subtle: false);
+    private Button CreateFooterButton(Transform box, string name, string label, float x, bool primary,
+                                      UnityEngine.Events.UnityAction onClick)
+    {
+        var btn = CreateButton(box, name, label, primary ? "Button_Primary" : "Button_Secondary",
+                               primary ? Accent : new Color(0f, 0f, 0f, 0f), onClick);
+        PlaceTopLeft(btn.GetComponent<RectTransform>(), x, BoxHeight - FooterButtonBottom - ButtonHeight, ButtonWidth, ButtonHeight);
+        var text = btn.GetComponentInChildren<TMP_Text>();
+        text.fontSize = 19;
+        text.fontStyle = primary ? FontStyles.Bold : FontStyles.Normal;
+        text.color = primary ? PrimaryTextColor : ButtonTextColor;
+        return btn;
     }
 
     private void OnClickQuit()
@@ -349,33 +373,33 @@ public class SettingsPanelUI : MonoBehaviour
     private void BuildSoundPage()
     {
         var page = CreatePage(Category.Sound);
-        int row = 0;
+        float y = 0f;
 
-        CreateSliderRow(page, row++, "전체 소리", 0f, 1f,
+        y = CreateSliderRow(page, y, "전체 소리", 0f, 1f,
             () => Settings.masterVolume,
             v => SettingsManager.Instance.SetMasterVolume(v), percent: true);
 
-        CreateSliderRow(page, row++, "배경음악", 0f, 1f,
+        y = CreateSliderRow(page, y, "배경음악", 0f, 1f,
             () => Settings.bgmVolume,
             v => SettingsManager.Instance.SetBgmVolume(v), percent: true);
 
-        CreateSliderRow(page, row++, "효과음", 0f, 1f,
+        y = CreateSliderRow(page, y, "효과음", 0f, 1f,
             () => Settings.sfxVolume,
             v => SettingsManager.Instance.SetSfxVolume(v), percent: true);
 
-        CreateNoteRow(page, row, "전체 소리는 배경음악과 효과음 모두에 함께 적용됩니다.");
+        CreateNoteRow(page, y, "전체 소리는 배경음악과 효과음 모두에 함께 적용됩니다.");
     }
 
     private void BuildDisplayPage()
     {
         var page = CreatePage(Category.Display);
-        int row = 0;
+        float y = 0f;
 
-        CreateToggleRow(page, row++, "창 모드",
+        y = CreateToggleRow(page, y, "창 모드",
             () => Settings.windowed,
             v => SettingsManager.Instance.SetWindowed(v));
 
-        CreateNoteRow(page, row,
+        CreateNoteRow(page, y,
             "전체화면에서는 그림이 찌그러지지 않도록 좌우에 검은 여백이 생깁니다.\n"
             + "창 크기 변화는 빌드한 게임에서만 확인할 수 있습니다.");
     }
@@ -383,29 +407,30 @@ public class SettingsPanelUI : MonoBehaviour
     private void BuildTextPage()
     {
         var page = CreatePage(Category.Text);
-        int row = 0;
+        float y = 0f;
 
-        CreateOptionRow(page, row++, "글꼴", FontManager.FontOptionNames,
+        y = CreateOptionRow(page, y, "글꼴", FontManager.FontOptionNames,
             () => Settings.fontIndex,
             v => SettingsManager.Instance.SetFontIndex(v));
 
-        CreateSliderRow(page, row++, "글씨 크기", 0.7f, 1.6f,
+        y = CreateSliderRow(page, y, "글씨 크기", 0.7f, 1.6f,
             () => Settings.fontScale,
             v => { SettingsManager.Instance.SetFontScale(v); UpdateFontPreview(); },
             percent: false, suffix: "배");
 
-        fontPreviewText = CreateNoteRow(page, row++, "");
+        fontPreviewText = CreateNoteRow(page, y, "");
+        y += NoteHeight;
         UpdateFontPreview();
 
-        CreateOptionRow(page, row++, "텍스트 속도", TextSpeedNames,
+        y = CreateOptionRow(page, y, "텍스트 속도", TextSpeedNames,
             () => Settings.textSpeedLevel,
             v => SettingsManager.Instance.SetTextSpeedLevel(v));
 
-        CreateToggleRow(page, row++, "자동 진행",
+        y = CreateToggleRow(page, y, "자동 진행",
             () => Settings.autoAdvance,
             v => SettingsManager.Instance.SetAutoAdvance(v));
 
-        CreateSliderRow(page, row++, "자동 진행 대기시간", 0.2f, 5f,
+        CreateSliderRow(page, y, "자동 진행 대기시간", 0.2f, 5f,
             () => Settings.autoAdvanceDelay,
             v => SettingsManager.Instance.SetAutoAdvanceDelay(v),
             percent: false, suffix: "초");
@@ -430,14 +455,15 @@ public class SettingsPanelUI : MonoBehaviour
     // ---------------------------------------------------------------------------------
     // 항목 한 줄 만들기
     // ---------------------------------------------------------------------------------
-    // 모든 항목은 "왼쪽에 이름, 오른쪽에 조작 요소" 형태로 같은 자리에 놓인다.
-    // 줄 번호(row)만 주면 위에서부터 차곡차곡 쌓이므로 겹치거나 잘릴 일이 없다.
+    // 모든 항목은 "왼쪽에 이름, 오른쪽 끝에 조작 칸" 형태로 놓이고, 아래에 옅은 선이 그어진다.
+    // 줄의 위쪽 y(항목 영역 위에서부터)를 받아서, 다음 줄이 시작할 y를 돌려준다.
+    // 그래서 위에서부터 차곡차곡 쌓이고 겹치거나 잘릴 일이 없다.
 
-    private RectTransform CreateRow(GameObject page, int row, out RectTransform controlArea)
+    // controlWidth: 오른쪽 끝에 붙는 조작 칸의 폭.
+    private RectTransform CreateRow(GameObject page, float y, string label, float controlWidth)
     {
-        var go = new GameObject($"Row_{row}", typeof(RectTransform));
+        var go = new GameObject($"Row_{label}", typeof(RectTransform));
         go.transform.SetParent(page.transform, false);
-
         var rt = go.GetComponent<RectTransform>();
         rt.anchorMin = new Vector2(0f, 1f);
         rt.anchorMax = new Vector2(1f, 1f);
@@ -445,58 +471,63 @@ public class SettingsPanelUI : MonoBehaviour
         rt.offsetMin = Vector2.zero;
         rt.offsetMax = Vector2.zero;
         rt.sizeDelta = new Vector2(0f, RowHeight);
-        rt.anchoredPosition = new Vector2(0f, -row * (RowHeight + RowGap));
+        rt.anchoredPosition = new Vector2(0f, -y);
 
+        var text = CreateLabel(go.transform, "Label", label, 22, TextAlignmentOptions.Left);
+        var lRt = text.rectTransform;
+        lRt.anchorMin = new Vector2(0f, 0f);
+        lRt.anchorMax = new Vector2(1f, 1f);
+        lRt.offsetMin = Vector2.zero;
+        lRt.offsetMax = new Vector2(-(controlWidth + 20f), 0f);
+        text.color = LabelColor;
+
+        // 줄 아래 옅은 구분선
+        var line = new GameObject("RowLine", typeof(RectTransform), typeof(Image));
+        line.transform.SetParent(go.transform, false);
+        var lineRt = line.GetComponent<RectTransform>();
+        lineRt.anchorMin = new Vector2(0f, 0f);
+        lineRt.anchorMax = new Vector2(1f, 0f);
+        lineRt.pivot = new Vector2(0.5f, 0f);
+        lineRt.offsetMin = Vector2.zero;
+        lineRt.offsetMax = new Vector2(0f, 1f);
+        var lineImg = line.GetComponent<Image>();
+        lineImg.color = RowLineColor;
+        lineImg.raycastTarget = false;
+
+        // 조작 칸 (오른쪽 끝, 세로 가운데)
         var ctrl = new GameObject("Control", typeof(RectTransform));
         ctrl.transform.SetParent(go.transform, false);
-        controlArea = ctrl.GetComponent<RectTransform>();
-        controlArea.anchorMin = new Vector2(0f, 0f);
-        controlArea.anchorMax = new Vector2(1f, 1f);
-        controlArea.offsetMin = new Vector2(LabelWidth, 0f);
-        controlArea.offsetMax = Vector2.zero;
-
-        return rt;
+        var cRt = ctrl.GetComponent<RectTransform>();
+        cRt.anchorMin = cRt.anchorMax = new Vector2(1f, 0.5f);
+        cRt.pivot = new Vector2(1f, 0.5f);
+        cRt.sizeDelta = new Vector2(controlWidth, ControlHeight);
+        cRt.anchoredPosition = Vector2.zero;
+        return cRt;
     }
 
-    private void CreateRowLabel(RectTransform row, string text)
+    // 슬라이더 한 줄: [────●─────] 100%
+    private float CreateSliderRow(GameObject page, float y, string label, float min, float max,
+                                  System.Func<float> getter, System.Action<float> setter,
+                                  bool percent, string suffix = "")
     {
-        var label = CreateLabel(row, "Label", text, 24, TextAlignmentOptions.Left);
-        var rt = label.rectTransform;
-        rt.anchorMin = new Vector2(0f, 0f);
-        rt.anchorMax = new Vector2(0f, 1f);
-        rt.pivot = new Vector2(0f, 0.5f);
-        rt.offsetMin = Vector2.zero;
-        rt.offsetMax = Vector2.zero;
-        rt.sizeDelta = new Vector2(LabelWidth - 20f, 0f);
-        rt.anchoredPosition = Vector2.zero;
-    }
+        var ctrl = CreateRow(page, y, label, SliderTrackWidth + 20f + SliderValueWidth);
 
-    // 슬라이더 한 줄 (오른쪽 끝에 현재 값을 숫자로 보여준다)
-    private void CreateSliderRow(GameObject page, int row, string label, float min, float max,
-                                 System.Func<float> getter, System.Action<float> setter,
-                                 bool percent, string suffix = "")
-    {
-        var rowRt = CreateRow(page, row, out RectTransform ctrl);
-        CreateRowLabel(rowRt, label);
-
-        // 값 표시 (오른쪽 끝)
-        var valueLabel = CreateLabel(ctrl, "Value", "", 22, TextAlignmentOptions.Right);
+        var valueLabel = CreateLabel(ctrl, "Value", "", 18, TextAlignmentOptions.Right);
         var vRt = valueLabel.rectTransform;
         vRt.anchorMin = new Vector2(1f, 0f);
         vRt.anchorMax = new Vector2(1f, 1f);
         vRt.pivot = new Vector2(1f, 0.5f);
-        vRt.sizeDelta = new Vector2(100f, 0f);
+        vRt.sizeDelta = new Vector2(SliderValueWidth, 0f);
         vRt.anchoredPosition = Vector2.zero;
-        valueLabel.color = Accent;
+        valueLabel.color = LabelColor;
 
-        // 슬라이더 (값 표시 왼쪽까지)
         var slider = CreateSlider(ctrl, min, max);
         var sRt = slider.GetComponent<RectTransform>();
-        sRt.anchorMin = new Vector2(0f, 0.5f);
-        sRt.anchorMax = new Vector2(1f, 0.5f);
-        sRt.pivot = new Vector2(0.5f, 0.5f);
-        sRt.offsetMin = new Vector2(0f, -14f);
-        sRt.offsetMax = new Vector2(-112f, 14f);
+        sRt.anchorMin = new Vector2(0f, 0f);
+        sRt.anchorMax = new Vector2(0f, 1f);
+        sRt.pivot = new Vector2(0f, 0.5f);
+        sRt.sizeDelta = new Vector2(SliderTrackWidth, 0f);
+        sRt.anchoredPosition = Vector2.zero;
 
         System.Action<float> updateLabel = v =>
             valueLabel.text = percent ? $"{Mathf.RoundToInt(v * 100f)}%" : $"{v:0.0}{suffix}";
@@ -515,63 +546,78 @@ public class SettingsPanelUI : MonoBehaviour
             slider.SetValueWithoutNotify(v);
             updateLabel(v);
         });
+        return y + RowHeight;
     }
 
-    // 켜고 끄는 한 줄. 상태가 글씨로 바로 보이도록 체크박스 대신 버튼을 쓴다.
-    private void CreateToggleRow(GameObject page, int row, string label,
-                                 System.Func<bool> getter, System.Action<bool> setter)
+    // 켜고 끄는 한 줄: [ 꺼짐 ][ 켜짐 ] 두 칸 중 지금 상태 쪽이 강조된다.
+    private float CreateToggleRow(GameObject page, float y, string label,
+                                  System.Func<bool> getter, System.Action<bool> setter)
     {
-        var rowRt = CreateRow(page, row, out RectTransform ctrl);
-        CreateRowLabel(rowRt, label);
+        var ctrl = CreateRow(page, y, label, ToggleSegWidth * 2f + ToggleSegGap);
 
-        var btn = CreateButton(ctrl, "Toggle", "",
-            new Vector2(0f, 0.5f), new Vector2(0f, 0.5f), new Vector2(0f, 0.5f),
-            Vector2.zero, new Vector2(170f, 42f), null, subtle: true);
-
-        var btnLabel = btn.GetComponentInChildren<TMP_Text>();
-        var btnBg = btn.GetComponent<Image>();
+        var off = CreateSegment(ctrl, "Off", "꺼짐", 0f, () => setter(false));
+        var on = CreateSegment(ctrl, "On", "켜짐", ToggleSegWidth + ToggleSegGap, () => setter(true));
 
         System.Action refresh = () =>
         {
-            bool on = getter();
-            btnLabel.text = on ? "켜짐" : "꺼짐";
-            btnLabel.color = on ? new Color(0.1f, 0.08f, 0.03f) : TextDim;
-            btnBg.color = on ? Accent : new Color(1f, 1f, 1f, 0.10f);
+            bool value = getter();
+            StyleSegment(off, !value);
+            StyleSegment(on, value);
         };
 
-        btn.onClick.RemoveAllListeners();
-        btn.onClick.AddListener(() =>
-        {
-            if (SettingsManager.Instance == null) return;
-            setter(!getter());
-            refresh();
-        });
-
+        off.onClick.AddListener(() => refresh());
+        on.onClick.AddListener(() => refresh());
         refreshActions.Add(refresh);
+        return y + RowHeight;
     }
 
-    // 목록에서 고르는 한 줄. 좌우 화살표로 넘긴다.
+    private Button CreateSegment(RectTransform parent, string name, string label, float x, System.Action apply)
+    {
+        var btn = CreateButton(parent, name, label, "Toggle_Off", new Color(0f, 0f, 0f, 0f), () =>
+        {
+            if (SettingsManager.Instance == null) return;
+            apply();
+        });
+        var rt = btn.GetComponent<RectTransform>();
+        rt.anchorMin = new Vector2(0f, 0f);
+        rt.anchorMax = new Vector2(0f, 1f);
+        rt.pivot = new Vector2(0f, 0.5f);
+        rt.sizeDelta = new Vector2(ToggleSegWidth, 0f);
+        rt.anchoredPosition = new Vector2(x, 0f);
+        btn.GetComponentInChildren<TMP_Text>().fontSize = 18;
+        return btn;
+    }
+
+    // 고른 칸: 채워진 칸 + 밝은 굵은 글자 / 안 고른 칸: 테두리만 + 흐린 글자
+    private void StyleSegment(Button seg, bool selected)
+    {
+        var img = seg.GetComponent<Image>();
+        SetImage(img, selected ? "Toggle_On" : "Toggle_Off", selected ? OnFillColor : new Color(0f, 0f, 0f, 0f));
+        var text = seg.GetComponentInChildren<TMP_Text>();
+        text.color = selected ? ActiveColor : DimColor;
+        text.fontStyle = selected ? FontStyles.Bold : FontStyles.Normal;
+    }
+
+    // 목록에서 고르는 한 줄: [◀]   보통   [▶]
     //
     // 드롭다운(TMP_Dropdown) 대신 화살표 방식을 쓰는 이유: 드롭다운은 펼침 목록을 코드로
     // 일일이 조립해야 하는데, 그 과정에서 목록이 화면 밖으로 삐져나가거나 잘리는 문제가
     // 잦았다. 항목이 서너 개뿐이라 화살표로 넘기는 편이 만들기도 간단하고 잘릴 일도 없다.
-    private void CreateOptionRow(GameObject page, int row, string label, string[] options,
-                                 System.Func<int> getter, System.Action<int> setter)
+    private float CreateOptionRow(GameObject page, float y, string label, string[] options,
+                                  System.Func<int> getter, System.Action<int> setter)
     {
-        var rowRt = CreateRow(page, row, out RectTransform ctrl);
-        CreateRowLabel(rowRt, label);
+        float arrowW = ControlHeight;
+        var ctrl = CreateRow(page, y, label, arrowW * 2f + OptionValueWidth);
 
-        const float arrowW = 46f;
-        const float valueW = 200f;
-
-        var valueLabel = CreateLabel(ctrl, "Value", "", 24, TextAlignmentOptions.Center);
+        var valueLabel = CreateLabel(ctrl, "Value", "", 20, TextAlignmentOptions.Center);
         var vRt = valueLabel.rectTransform;
-        vRt.anchorMin = new Vector2(0f, 0.5f);
-        vRt.anchorMax = new Vector2(0f, 0.5f);
+        vRt.anchorMin = new Vector2(0f, 0f);
+        vRt.anchorMax = new Vector2(0f, 1f);
         vRt.pivot = new Vector2(0f, 0.5f);
-        vRt.sizeDelta = new Vector2(valueW, 42f);
-        vRt.anchoredPosition = new Vector2(arrowW + 8f, 0f);
-        valueLabel.color = Accent;
+        vRt.sizeDelta = new Vector2(OptionValueWidth, 0f);
+        vRt.anchoredPosition = new Vector2(arrowW, 0f);
+        valueLabel.fontStyle = FontStyles.Bold;
+        valueLabel.color = ActiveColor;
 
         System.Action refresh = () =>
         {
@@ -579,31 +625,41 @@ public class SettingsPanelUI : MonoBehaviour
             valueLabel.text = options[i];
         };
 
-        CreateButton(ctrl, "Prev", "◀",
-            new Vector2(0f, 0.5f), new Vector2(0f, 0.5f), new Vector2(0f, 0.5f),
-            Vector2.zero, new Vector2(arrowW, 42f), () =>
-            {
-                if (SettingsManager.Instance == null) return;
-                setter((getter() - 1 + options.Length) % options.Length);
-                refresh();
-            }, subtle: true);
-
-        CreateButton(ctrl, "Next", "▶",
-            new Vector2(0f, 0.5f), new Vector2(0f, 0.5f), new Vector2(0f, 0.5f),
-            new Vector2(arrowW + 8f + valueW + 8f, 0f), new Vector2(arrowW, 42f), () =>
-            {
-                if (SettingsManager.Instance == null) return;
-                setter((getter() + 1) % options.Length);
-                refresh();
-            }, subtle: true);
+        CreateArrowButton(ctrl, "Prev", "◀", 0f, () =>
+        {
+            if (SettingsManager.Instance == null) return;
+            setter((getter() - 1 + options.Length) % options.Length);
+            refresh();
+        });
+        CreateArrowButton(ctrl, "Next", "▶", arrowW + OptionValueWidth, () =>
+        {
+            if (SettingsManager.Instance == null) return;
+            setter((getter() + 1) % options.Length);
+            refresh();
+        });
 
         refreshActions.Add(refresh);
+        return y + RowHeight;
     }
 
-    // 설명 문구 (조작 요소 없음). 두 줄까지 들어가도록 높이를 넉넉히 잡는다.
-    private TMP_Text CreateNoteRow(GameObject page, int row, string text)
+    private void CreateArrowButton(RectTransform parent, string name, string glyph, float x, UnityEngine.Events.UnityAction onClick)
     {
-        var go = new GameObject($"Note_{row}", typeof(RectTransform));
+        var btn = CreateButton(parent, name, glyph, "Option_ArrowBox", new Color(0f, 0f, 0f, 0f), onClick);
+        var rt = btn.GetComponent<RectTransform>();
+        rt.anchorMin = new Vector2(0f, 0f);
+        rt.anchorMax = new Vector2(0f, 1f);
+        rt.pivot = new Vector2(0f, 0.5f);
+        rt.sizeDelta = new Vector2(ControlHeight, 0f);
+        rt.anchoredPosition = new Vector2(x, 0f);
+        var text = btn.GetComponentInChildren<TMP_Text>();
+        text.fontSize = 14;
+        text.color = ButtonTextColor;
+    }
+
+    // 안내 문구 (조작 요소 없음). 두 줄까지 들어간다.
+    private TMP_Text CreateNoteRow(GameObject page, float y, string text)
+    {
+        var go = new GameObject("Note", typeof(RectTransform));
         go.transform.SetParent(page.transform, false);
 
         var rt = go.GetComponent<RectTransform>();
@@ -612,14 +668,14 @@ public class SettingsPanelUI : MonoBehaviour
         rt.pivot = new Vector2(0.5f, 1f);
         rt.offsetMin = Vector2.zero;
         rt.offsetMax = Vector2.zero;
-        rt.sizeDelta = new Vector2(0f, RowHeight + 12f);
-        rt.anchoredPosition = new Vector2(0f, -row * (RowHeight + RowGap) - 4f);
+        rt.sizeDelta = new Vector2(0f, NoteHeight);
+        rt.anchoredPosition = new Vector2(0f, -(y + 12f));
 
         var note = go.AddComponent<TextMeshProUGUI>();
         note.text = text;
-        note.fontSize = 19;
+        note.fontSize = 16;
         note.alignment = TextAlignmentOptions.TopLeft;
-        note.color = TextDim;
+        note.color = HintColor;
         note.raycastTarget = false;
         return note;
     }
@@ -667,13 +723,38 @@ public class SettingsPanelUI : MonoBehaviour
         {
             label.text = text;
             // 확인 단계에서는 붉은빛으로 바꿔 경고임을 알린다.
-            label.color = mainMenuConfirming ? new Color(1f, 0.55f, 0.45f) : TextMain;
+            label.color = mainMenuConfirming ? WarnColor : ButtonTextColor;
         }
     }
 
     // ---------------------------------------------------------------------------------
     // 기본 부품 만들기
     // ---------------------------------------------------------------------------------
+    private Sprite LoadSprite(string name)
+    {
+        if (spriteCache.TryGetValue(name, out var cached)) return cached;
+        var sprite = Resources.Load<Sprite>(ArtFolder + name);
+        spriteCache[name] = sprite;
+        return sprite;
+    }
+
+    // 그림이 있으면 그림을, 없으면 fallbackColor 색 도형을 쓴다.
+    // (그림이 없을 때 투명색이면 버튼 테두리가 안 보이므로 옅은 선 색으로 바꿔 준다)
+    private void SetImage(Image img, string spriteName, Color fallbackColor)
+    {
+        var sprite = LoadSprite(spriteName);
+        img.sprite = sprite;
+        img.type = Image.Type.Simple;
+        if (sprite != null)
+        {
+            img.color = Color.white;
+        }
+        else
+        {
+            img.color = fallbackColor.a > 0f ? fallbackColor : new Color(TrackColor.r, TrackColor.g, TrackColor.b, 0.35f);
+        }
+    }
+
     private TMP_Text CreateLabel(Transform parent, string name, string text,
                                  float fontSize, TextAlignmentOptions align)
     {
@@ -684,29 +765,20 @@ public class SettingsPanelUI : MonoBehaviour
         tmp.text = text;
         tmp.fontSize = fontSize;
         tmp.alignment = align;
-        tmp.color = TextMain;
+        tmp.color = LabelColor;
         tmp.raycastTarget = false;
         return tmp;
     }
 
-    // subtle=true면 배경이 옅은 보조 버튼, false면 조금 더 눈에 띄는 기본 버튼.
-    private Button CreateButton(Transform parent, string name, string label,
-                                Vector2 anchorMin, Vector2 anchorMax, Vector2 pivot,
-                                Vector2 anchoredPosition, Vector2 size,
-                                UnityEngine.Events.UnityAction onClick, bool subtle = false)
+    // 그림 한 장짜리 버튼. 마우스를 올리면 살짝 밝아지고 누르면 살짝 어두워진다.
+    private Button CreateButton(Transform parent, string name, string label, string spriteName, Color fallbackColor,
+                                UnityEngine.Events.UnityAction onClick)
     {
         var go = new GameObject(name, typeof(RectTransform), typeof(Image), typeof(Button));
         go.transform.SetParent(parent, false);
 
-        var rt = go.GetComponent<RectTransform>();
-        rt.anchorMin = anchorMin;
-        rt.anchorMax = anchorMax;
-        rt.pivot = pivot;
-        rt.anchoredPosition = anchoredPosition;
-        rt.sizeDelta = size;
-
         var bg = go.GetComponent<Image>();
-        bg.color = subtle ? new Color(1f, 1f, 1f, 0.10f) : new Color(1f, 1f, 1f, 0.22f);
+        SetImage(bg, spriteName, fallbackColor);
         bg.raycastTarget = true;   // 이게 꺼져 있으면 버튼이 눌리지 않는다
 
         var textGo = new GameObject("Text", typeof(RectTransform));
@@ -714,23 +786,27 @@ public class SettingsPanelUI : MonoBehaviour
         Stretch(textGo.GetComponent<RectTransform>());
         var tmp = textGo.AddComponent<TextMeshProUGUI>();
         tmp.text = label;
-        tmp.fontSize = 22;
+        tmp.fontSize = 19;
         tmp.alignment = TextAlignmentOptions.Center;
-        tmp.color = TextMain;
+        tmp.color = ButtonTextColor;
         tmp.raycastTarget = false;
 
         var btn = go.GetComponent<Button>();
         btn.targetGraphic = bg;
         btn.transition = Selectable.Transition.ColorTint;
         var colors = btn.colors;
-        colors.highlightedColor = new Color(1f, 0.95f, 0.78f);
-        colors.pressedColor = new Color(0.85f, 0.72f, 0.35f);
+        colors.normalColor = Color.white;
+        colors.highlightedColor = new Color(0.9f, 0.94f, 1f);
+        colors.selectedColor = Color.white;
+        colors.pressedColor = new Color(0.72f, 0.76f, 0.82f);
+        colors.colorMultiplier = 1f;
         btn.colors = colors;
 
         if (onClick != null) btn.onClick.AddListener(onClick);
         return btn;
     }
 
+    // 슬라이더: 가는 막대(Slider_Track) + 채워진 부분(Slider_Fill) + 동그란 손잡이(Slider_Knob).
     private Slider CreateSlider(Transform parent, float min, float max)
     {
         var go = new GameObject("Slider", typeof(RectTransform));
@@ -741,16 +817,17 @@ public class SettingsPanelUI : MonoBehaviour
         slider.maxValue = max;
         slider.direction = Slider.Direction.LeftToRight;
 
-        // 홈(배경)
+        // 막대
         var bg = new GameObject("Background", typeof(RectTransform), typeof(Image));
         bg.transform.SetParent(go.transform, false);
         var bgRt = bg.GetComponent<RectTransform>();
         bgRt.anchorMin = new Vector2(0f, 0.5f);
         bgRt.anchorMax = new Vector2(1f, 0.5f);
         bgRt.pivot = new Vector2(0.5f, 0.5f);
-        bgRt.sizeDelta = new Vector2(0f, 8f);
+        bgRt.sizeDelta = new Vector2(0f, 2f);
         bgRt.anchoredPosition = Vector2.zero;
-        bg.GetComponent<Image>().color = new Color(1f, 1f, 1f, 0.16f);
+        var bgImg = bg.GetComponent<Image>();
+        SetImage(bgImg, "Slider_Track", TrackColor);
 
         // 채워지는 부분
         var fillArea = new GameObject("Fill Area", typeof(RectTransform));
@@ -759,7 +836,7 @@ public class SettingsPanelUI : MonoBehaviour
         faRt.anchorMin = new Vector2(0f, 0.5f);
         faRt.anchorMax = new Vector2(1f, 0.5f);
         faRt.pivot = new Vector2(0.5f, 0.5f);
-        faRt.sizeDelta = new Vector2(-20f, 8f);
+        faRt.sizeDelta = new Vector2(0f, 2f);
         faRt.anchoredPosition = Vector2.zero;
 
         var fill = new GameObject("Fill", typeof(RectTransform), typeof(Image));
@@ -769,46 +846,54 @@ public class SettingsPanelUI : MonoBehaviour
         fRt.anchorMax = Vector2.one;
         fRt.offsetMin = Vector2.zero;
         fRt.offsetMax = Vector2.zero;
-        fill.GetComponent<Image>().color = Accent;
+        var fillImg = fill.GetComponent<Image>();
+        SetImage(fillImg, "Slider_Fill", Accent);
 
-        // 손잡이
+        // 손잡이 (막대 양 끝에서 손잡이 반지름만큼 안쪽까지 움직인다)
         var handleArea = new GameObject("Handle Slide Area", typeof(RectTransform));
         handleArea.transform.SetParent(go.transform, false);
         var haRt = handleArea.GetComponent<RectTransform>();
-        haRt.anchorMin = Vector2.zero;
-        haRt.anchorMax = Vector2.one;
-        haRt.offsetMin = new Vector2(10f, 0f);
-        haRt.offsetMax = new Vector2(-10f, 0f);
+        // 높이 0인 가로 띠로 둔다. Slider가 손잡이를 이 영역의 위아래 끝까지 세로로 늘리기 때문에,
+        // 영역 높이를 0으로 해야 손잡이가 sizeDelta(20x20) 그대로 동그랗게 나온다.
+        haRt.anchorMin = new Vector2(0f, 0.5f);
+        haRt.anchorMax = new Vector2(1f, 0.5f);
+        haRt.pivot = new Vector2(0.5f, 0.5f);
+        haRt.sizeDelta = Vector2.zero;
+        haRt.anchoredPosition = Vector2.zero;
 
         var handle = new GameObject("Handle", typeof(RectTransform), typeof(Image));
         handle.transform.SetParent(handleArea.transform, false);
-        handle.GetComponent<RectTransform>().sizeDelta = new Vector2(20f, 28f);
-        handle.GetComponent<Image>().color = Color.white;
+        var hRt = handle.GetComponent<RectTransform>();
+        hRt.anchorMin = new Vector2(0f, 0.5f);
+        hRt.anchorMax = new Vector2(0f, 0.5f);
+        hRt.sizeDelta = new Vector2(20f, 20f);
+        var hImg = handle.GetComponent<Image>();
+        SetImage(hImg, "Slider_Knob", TitleColor);
+        hImg.preserveAspect = true;
 
         slider.fillRect = fRt;
-        slider.handleRect = handle.GetComponent<RectTransform>();
-        slider.targetGraphic = handle.GetComponent<Image>();
+        slider.handleRect = hRt;
+        slider.targetGraphic = hImg;
 
         return slider;
     }
 
-    // 가로 구분선. y는 상자 위쪽 기준 오프셋(음수).
-    private void CreateDivider(Transform parent, float y)
+    // 패널 왼쪽 위 기준 (x, y)에 w x h 크기로 놓는다.
+    private static void PlaceTopLeft(RectTransform rt, float x, float y, float w, float h)
     {
-        var go = new GameObject("Divider", typeof(RectTransform), typeof(Image));
+        rt.anchorMin = rt.anchorMax = new Vector2(0f, 1f);
+        rt.pivot = new Vector2(0f, 1f);
+        rt.anchoredPosition = new Vector2(x, -y);
+        rt.sizeDelta = new Vector2(w, h);
+    }
+
+    private static void AddRect(Transform parent, string name, float x, float y, float w, float h, Color color)
+    {
+        var go = new GameObject(name, typeof(RectTransform), typeof(Image));
         go.transform.SetParent(parent, false);
-
-        var rt = go.GetComponent<RectTransform>();
-        rt.anchorMin = new Vector2(0f, 1f);
-        rt.anchorMax = new Vector2(1f, 1f);
-        rt.pivot = new Vector2(0.5f, 1f);
-        rt.offsetMin = new Vector2(ContentPadding, 0f);
-        rt.offsetMax = new Vector2(-ContentPadding, 0f);
-        rt.sizeDelta = new Vector2(rt.sizeDelta.x, 1.5f);
-        rt.anchoredPosition = new Vector2(0f, y);
-
+        PlaceTopLeft(go.GetComponent<RectTransform>(), x, y, w, h);
         var img = go.GetComponent<Image>();
-        img.color = LineColor;
+        img.color = color;
         img.raycastTarget = false;
     }
 
