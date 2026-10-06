@@ -247,13 +247,13 @@ public class NotePanelUI : MonoBehaviour
     {
         var go = new GameObject("Chapter", typeof(RectTransform), typeof(LayoutElement));
         go.transform.SetParent(listContent, false);
-        go.GetComponent<LayoutElement>().preferredHeight = 40f;
+        go.GetComponent<LayoutElement>().preferredHeight = 44f;
 
         var textGo = new GameObject("Text", typeof(RectTransform));
         textGo.transform.SetParent(go.transform, false);
         var text = textGo.AddComponent<TextMeshProUGUI>();
         text.text = chapter;
-        text.fontSize = 16;
+        text.fontSize = 18;
         text.fontStyle = FontStyles.Bold;
         text.characterSpacing = 10f;
         text.alignment = TextAlignmentOptions.BottomLeft;
@@ -276,8 +276,8 @@ public class NotePanelUI : MonoBehaviour
         lineRt.anchorMin = new Vector2(0f, 0f);
         lineRt.anchorMax = new Vector2(1f, 0f);
         lineRt.pivot = new Vector2(0f, 0f);
-        lineRt.offsetMin = new Vector2(textWidth + 14f, 14f);
-        lineRt.offsetMax = new Vector2(0f, 15f);
+        lineRt.offsetMin = new Vector2(textWidth + 14f, 16f);
+        lineRt.offsetMax = new Vector2(0f, 17f);
         var lineImg = line.GetComponent<Image>();
         lineImg.color = new Color(AccentColor.r, AccentColor.g, AccentColor.b, 0.35f);
         lineImg.raycastTarget = false;
@@ -294,7 +294,7 @@ public class NotePanelUI : MonoBehaviour
 
         var text = go.AddComponent<TextMeshProUGUI>();
         text.text = message;
-        text.fontSize = 21;
+        text.fontSize = 23;
         text.fontStyle = FontStyles.Normal;
         text.alignment = TextAlignmentOptions.TopLeft;
         text.color = FadedInkColor;
@@ -310,24 +310,24 @@ public class NotePanelUI : MonoBehaviour
         var go = new GameObject("Row", typeof(RectTransform), typeof(Image),
                                 typeof(Button), typeof(LayoutElement));
         go.transform.SetParent(listContent, false);
-        go.GetComponent<LayoutElement>().preferredHeight = 44f;
+        go.GetComponent<LayoutElement>().preferredHeight = 50f;
 
         var view = new RowView();
         view.background = go.GetComponent<Image>();
         view.background.raycastTarget = true;
 
-        // 번호 칸: 왼쪽 10px에서 30px 폭
-        view.number = AddRowText(go.transform, "Number", number.ToString("00"), 14, 10f, 30f, 0f);
+        // 번호 칸: 왼쪽 10px에서 36px 폭
+        view.number = AddRowText(go.transform, "Number", number.ToString("00"), 16, 10f, 36f, 0f);
         view.number.fontStyle = FontStyles.Bold;
 
-        // 제목 칸: 48px부터 오른쪽 화살표 자리(36px)를 남기고 끝까지
-        view.label = AddRowText(go.transform, "Label", NoteCatalog.TitleOf(entry), 21, 48f, 0f, -36f);
+        // 제목 칸: 56px부터 오른쪽 화살표 자리(36px)를 남기고 끝까지
+        view.label = AddRowText(go.transform, "Label", NoteCatalog.TitleOf(entry), 24, 56f, 0f, -36f);
         view.label.overflowMode = TextOverflowModes.Ellipsis;
         view.label.textWrappingMode = TextWrappingModes.NoWrap;
         view.label.color = InkColor;
 
         // 고른 줄 오른쪽 끝의 ▸
-        var arrow = AddRowText(go.transform, "Arrow", "▸", 18, 0f, 0f, 0f);
+        var arrow = AddRowText(go.transform, "Arrow", "▸", 20, 0f, 0f, 0f);
         var arrowRt = arrow.rectTransform;
         arrowRt.anchorMin = new Vector2(1f, 0f);
         arrowRt.anchorMax = new Vector2(1f, 1f);
@@ -455,8 +455,8 @@ public class NotePanelUI : MonoBehaviour
 
             // 글자는 탭 왼쪽 끝에서 20px 안쪽. 고른 탭은 왼쪽으로 20px 더 튀어나와 있다.
             float tabLeft = active ? 0f : TabIdleX - TabActiveX;
-            tab.index.anchoredPosition = new Vector2(tabLeft + TabTextInset, -16f);
-            tab.label.anchoredPosition = new Vector2(tabLeft + TabTextInset, -34f);
+            tab.index.anchoredPosition = new Vector2(tabLeft + TabTextInset, -12f);
+            tab.label.anchoredPosition = new Vector2(tabLeft + TabTextInset, -32f);
 
             tab.indexText.color = active ? AccentColor : TabIdleIndexColor;
             tab.labelText.color = active ? InkColor : TabIdleInkColor;
@@ -684,12 +684,12 @@ public class NotePanelUI : MonoBehaviour
             view.art.raycastTarget = false;
             view.art.enabled = false;
 
-            view.indexText = AddPlainText(go.transform, "Index", 0f, 0f, 120f, 18f, 13, FontStyles.Bold, TabIdleIndexColor);
+            view.indexText = AddPlainText(go.transform, "Index", 0f, 0f, 120f, 20f, 14, FontStyles.Bold, TabIdleIndexColor);
             view.indexText.text = (i + 1).ToString("00");
             view.indexText.characterSpacing = 15f;
             view.index = view.indexText.rectTransform;
 
-            view.labelText = AddPlainText(go.transform, "Label", 0f, 0f, 130f, 30f, 19, FontStyles.Normal, TabIdleInkColor);
+            view.labelText = AddPlainText(go.transform, "Label", 0f, 0f, 130f, 32f, 21, FontStyles.Normal, TabIdleInkColor);
             view.labelText.text = category;
             view.labelText.textWrappingMode = TextWrappingModes.NoWrap;
             view.label = view.labelText.rectTransform;
@@ -711,9 +711,9 @@ public class NotePanelUI : MonoBehaviour
     // 왼쪽 페이지: 머리말(영문 + 탭 이름 + 이중선) + 세로로 줄을 쌓는 스크롤 목록.
     private void BuildLeftPage(Transform bookTransform)
     {
-        pageKickerText = AddPlainText(bookTransform, "PageKicker", LeftPageX + 4f, PageTop, LeftPageWidth, 20f, 13, FontStyles.Bold, FadedInkColor);
+        pageKickerText = AddPlainText(bookTransform, "PageKicker", LeftPageX + 4f, PageTop - 4f, LeftPageWidth, 22f, 14, FontStyles.Bold, FadedInkColor);
         pageKickerText.characterSpacing = 38f;
-        pageTitleText = AddPlainText(bookTransform, "PageTitle", LeftPageX + 2f, PageTop + 18f, LeftPageWidth, 60f, 44, FontStyles.Bold, InkColor);
+        pageTitleText = AddPlainText(bookTransform, "PageTitle", LeftPageX + 2f, PageTop + 16f, LeftPageWidth, 66f, 46, FontStyles.Bold, InkColor);
         AddPlainImage(bookTransform, "HeadRule1", LeftPageX, 214f, LeftPageWidth, 2f, new Color(InkColor.r, InkColor.g, InkColor.b, 0.75f));
         AddPlainImage(bookTransform, "HeadRule2", LeftPageX, 220f, LeftPageWidth, 1f, new Color(InkColor.r, InkColor.g, InkColor.b, 0.35f));
 
@@ -754,20 +754,20 @@ public class NotePanelUI : MonoBehaviour
     // 오른쪽 페이지: 제목 + 분류 표기 + 구분선 + 본문(스크롤).
     private void BuildRightPage(Transform bookTransform)
     {
-        detailTitleText = AddPlainText(bookTransform, "DetailTitle", RightPageX, PageTop, RightPageWidth, 50f, 32, FontStyles.Bold, InkColor);
+        detailTitleText = AddPlainText(bookTransform, "DetailTitle", RightPageX, PageTop - 4f, RightPageWidth, 58f, 35, FontStyles.Bold, InkColor);
         detailTitleText.alignment = TextAlignmentOptions.BottomLeft;
         detailTitleText.overflowMode = TextOverflowModes.Ellipsis;
         detailTitleText.textWrappingMode = TextWrappingModes.NoWrap;
 
-        detailMetaText = AddPlainText(bookTransform, "DetailMeta", RightPageX + 2f, PageTop + 56f, RightPageWidth, 24f, 15, FontStyles.Normal, FadedInkColor);
+        detailMetaText = AddPlainText(bookTransform, "DetailMeta", RightPageX + 2f, PageTop + 60f, RightPageWidth, 26f, 17, FontStyles.Normal, FadedInkColor);
         detailMetaText.characterSpacing = 4f;
 
-        AddPlainImage(bookTransform, "DetailDivider", RightPageX, PageTop + 88f, RightPageWidth, 1f, RuleColor);
+        AddPlainImage(bookTransform, "DetailDivider", RightPageX, PageTop + 96f, RightPageWidth, 1f, RuleColor);
 
         var viewport = new GameObject("DetailViewport", typeof(RectTransform), typeof(Image), typeof(RectMask2D));
         viewport.transform.SetParent(bookTransform, false);
         var viewportRt = viewport.GetComponent<RectTransform>();
-        float bodyTop = PageTop + 106f;   // 제목/분류/구분선 아래
+        float bodyTop = PageTop + 114f;   // 제목/분류/구분선 아래
         Place(viewportRt, RightPageX, bodyTop, RightPageWidth, PageBottom - bodyTop);
         viewport.GetComponent<Image>().color = new Color(1f, 1f, 1f, 0.01f);
 
@@ -785,10 +785,10 @@ public class NotePanelUI : MonoBehaviour
 
         detailBodyText = content.AddComponent<TextMeshProUGUI>();
         detailBodyText.text = "";
-        detailBodyText.fontSize = 22;
+        detailBodyText.fontSize = 25;
         detailBodyText.alignment = TextAlignmentOptions.TopLeft;
         detailBodyText.color = InkColor;
-        detailBodyText.lineSpacing = 22f;
+        detailBodyText.lineSpacing = 18f;
         detailBodyText.raycastTarget = false;
         detailBodyText.richText = true;
         detailBodyText.overflowMode = TextOverflowModes.Overflow;   // 길어지면 아래로 이어진다
