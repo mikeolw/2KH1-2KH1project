@@ -444,7 +444,7 @@ public class DialogueSystem : MonoBehaviour
         img.raycastTarget = false;
     }
 
-    // LOG 버튼: 아래 화살표 키와 같은 조건(대사 진행 중, 다른 창이 없을 때)에서만 대사 기록을 연다.
+    // LOG 버튼: 위 화살표 키와 같은 조건(대사 진행 중, 다른 창이 없을 때)에서만 대사 기록을 연다.
     private void OpenDialogueLog()
     {
         if (DialogueLogController.Instance == null || !CanOpenOverlay) return;
@@ -584,7 +584,7 @@ public class DialogueSystem : MonoBehaviour
         skipAlreadyReadButton.onClick.AddListener(ToggleSkipAlreadyRead);
         skipForceButton.onClick.AddListener(ToggleSkipForce);
 
-        // LOG(대사 기록) 버튼 - 아래 화살표 키와 같은 일을 한다 (DialogueLogController 참고).
+        // LOG(대사 기록) 버튼 - 위 화살표 키와 같은 일을 한다 (DialogueLogController 참고).
         // 인스펙터에서 버튼을 직접 연결해 쓰는 경우에는 배치를 모르므로 만들지 않는다.
         if (created && logButton == null)
         {
@@ -1090,7 +1090,7 @@ public class DialogueSystem : MonoBehaviour
             TimeAttackController.Instance?.StopIfRunning();
         }
 
-        // ===== 4-1) 대화 로그(아래 화살표) 기록 =====
+        // ===== 4-1) 대화 로그(위 화살표) 기록 =====
         // 실제 대사(NormalDialogue/Narration)만 남긴다. EventTrigger는 대사가 없는 연출
         // 전용 줄이라 로그에 빈 줄만 남기 때문에 제외한다 (DialogueLogController.cs 참고).
         if (DialogueLogController.Instance != null &&
@@ -1411,7 +1411,9 @@ public class DialogueSystem : MonoBehaviour
         // AUTO를 켜둔 채 조사에 들어가면, 조사 안내문이 다 찍힐 때마다 여기서 자동 진행이
         // 예약되어 조사 화면이 떠 있는 채로 본편 대사가 혼자 계속 넘어갔다. 화면에는 조사
         // 오브젝트와 "조사 그만하기"가 그대로 남아 있는데 대화창만 저 앞으로 가버리는 상태.
-        if (skipMode == SkipMode.None && !IsInvestigationActive() &&
+        //
+        // 대화창을 숨겨둔 동안(아래 화살표)도 예약하지 않는다 - 다시 보이게 할 때 예약한다.
+        if (skipMode == SkipMode.None && !IsInvestigationActive() && !dialogueHidden &&
             SettingsManager.Instance != null && SettingsManager.Instance.Current.autoAdvance)
         {
             StopAutoAdvanceRoutine();
@@ -1763,9 +1765,74 @@ public class DialogueSystem : MonoBehaviour
         return false;
     }
 
-    // 다른 스크립트(DialogueLogController의 아래 화살표 처리 등)가 "지금 새 오버레이를 열어도
+    // 다른 스크립트(DialogueLogController의 위 화살표 처리 등)가 "지금 새 오버레이를 열어도
     // 안전한 상태인가"를 확인할 때 쓴다 - 암전 중이거나 이미 다른 팝업이 떠 있으면 안전하지 않다.
     public bool CanOpenOverlay => !isFading && !IsBlockedByOtherUI();
+
+    // ===== 대화창 숨기기 (아래 화살표) =====
+    // 대화창을 끄지(SetActive) 않고 CanvasGroup으로 투명하게만 만든다. 끄면 대사 진행/타이핑
+    // 코루틴과 다른 스크립트(조사 대사 등)가 보는 "대화창이 켜져 있나" 상태가 바뀌어 버린다.
+    private bool dialogueHidden;
+    private CanvasGroup dialogueCanvasGroup;
+
+    // true를 돌려주면 이번 프레임의 입력은 여기서 다 썼다는 뜻 (Update가 바로 끝난다).
+    private bool Update_HideDialogue()
+    {
+        if (dialogueHidden)
+        {
+            // 대화창이 꺼졌거나(장면 전환/조사 대사 닫힘) 다른 창이 열리면 숨김을 풀어 둔다.
+            // 그대로 두면 다음에 대화창이 켜질 때 투명한 채로 나온다.
+            bool panelGone = dialoguePanel == null || !dialoguePanel.activeInHierarchy;
+            if (panelGone || IsBlockedByOtherUI())
+            {
+                SetDialogueHidden(false);
+                return false;
+            }
+
+            bool anyKey = Input.GetKeyDown(KeyCode.DownArrow) || Input.GetKeyDown(KeyCode.Space) ||
+                          Input.GetKeyDown(KeyCode.Return) || Input.GetKeyDown(KeyCode.KeypadEnter) ||
+                          (Input.GetMouseButtonDown(0) && !IsPointerOverButton());
+            if (anyKey) SetDialogueHidden(false);
+            return true;   // 숨긴 동안은 대사를 넘기지 않는다
+        }
+
+        if (Input.GetKeyDown(KeyCode.DownArrow) && dialoguePanel != null &&
+            dialoguePanel.activeInHierarchy && !IsBlockedByOtherUI())
+        {
+            SetDialogueHidden(true);
+            return true;
+        }
+        return false;
+    }
+
+    private void SetDialogueHidden(bool hidden)
+    {
+        if (dialoguePanel == null) return;
+        if (dialogueCanvasGroup == null)
+        {
+            dialogueCanvasGroup = dialoguePanel.GetComponent<CanvasGroup>();
+            if (dialogueCanvasGroup == null) dialogueCanvasGroup = dialoguePanel.AddComponent<CanvasGroup>();
+        }
+
+        dialogueHidden = hidden;
+        dialogueCanvasGroup.alpha = hidden ? 0f : 1f;
+        dialogueCanvasGroup.blocksRaycasts = !hidden;   // 숨긴 동안 AUTO/SKIP 버튼이 눌리지 않게
+
+        // 긴 독백의 어두운 판도 같이 숨긴다 (그림을 보려고 숨기는 것이므로).
+        if (longMonologueDim != null) longMonologueDim.SetActive(!hidden && longMonologueLayout && dialoguePanel.activeInHierarchy);
+
+        if (hidden)
+        {
+            // 숨긴 동안 대사가 넘어가지 않도록 스킵/자동 진행 예약을 멈춘다.
+            if (skipMode != SkipMode.None) SetSkipMode(SkipMode.None);
+            StopAutoAdvanceRoutine();
+        }
+        else if (currentLine != null && !isTyping && autoAdvanceRoutine == null && !IsBlockedByOtherUI())
+        {
+            // 다시 보이게 했을 때 이미 다 찍힌 줄이면 자동 진행을 다시 예약한다 (AUTO가 켜져 있을 때만 실제로 예약됨).
+            OnPageFullyShown();
+        }
+    }
 
     void Update()
     {
@@ -1775,12 +1842,16 @@ public class DialogueSystem : MonoBehaviour
         // 큰 글자 화면의 어두운 판은 대화창이 숨겨지면(조사 대사를 닫았을 때 등) 같이 숨긴다.
         if (longMonologueDim != null && dialoguePanel != null)
         {
-            bool dimShouldShow = longMonologueLayout && dialoguePanel.activeInHierarchy;
+            bool dimShouldShow = longMonologueLayout && dialoguePanel.activeInHierarchy && !dialogueHidden;
             if (longMonologueDim.activeSelf != dimShouldShow) longMonologueDim.SetActive(dimShouldShow);
         }
 
         // 암전 연출(ShowLineWithFade) 진행 중엔 스페이스/클릭으로 건너뛰지 못하게 막는다.
         if (isFading) return;
+
+        // 아래 화살표: 대화창 숨기기/보이기 (일러스트를 가리지 않고 보고 싶을 때).
+        // 숨긴 동안은 대사가 넘어가지 않고, 아래 화살표/스페이스/엔터/클릭 중 아무거나 누르면 다시 보인다.
+        if (Update_HideDialogue()) return;
 
         // 선택지 패널이나 UIManager 팝업(조사기록/인벤토리/사진첩/핸드폰/설정), 자료 뷰어가
         // 열려있을 땐 스페이스바로도 대사가 넘어가면 안 된다.

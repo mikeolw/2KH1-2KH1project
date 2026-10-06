@@ -4,11 +4,11 @@ using UnityEngine.UI;
 using TMPro;
 
 // =====================================================================================
-// 대화 로그(백로그) - 아래 화살표 키를 누르면 지금까지 나온 대사를 다시 볼 수 있는 창
+// 대화 로그(백로그) - 위 화살표 키를 누르면 지금까지 나온 대사를 다시 볼 수 있는 창
 // =====================================================================================
 // ===== 언제 뜨나 =====
 // 순수하게 대사가 진행 중일 때(암전 중이 아니고, 선택지/조사/미니게임/설정 등 다른 팝업이
-// 안 떠 있을 때)만 아래 화살표 키로 열린다 - DialogueSystem.CanOpenOverlay 참고. 열려 있는
+// 안 떠 있을 때)만 위 화살표 키로 열린다 - DialogueSystem.CanOpenOverlay 참고. 열려 있는
 // 동안은 Esc로 닫는다. 자동진행/스킵도 이 창이 열려 있는 동안은 멈춘다(DialogueSystem이
 // IsBlockedByOtherUI()에서 이 창의 IsOpen을 같이 확인하기 때문).
 //
@@ -58,7 +58,7 @@ public class DialogueLogController : MonoBehaviour
             return;
         }
 
-        if (Input.GetKeyDown(KeyCode.DownArrow) &&
+        if (Input.GetKeyDown(KeyCode.UpArrow) &&
             DialogueSystem.Instance != null && DialogueSystem.Instance.CanOpenOverlay)
         {
             Open();
@@ -75,7 +75,7 @@ public class DialogueLogController : MonoBehaviour
 
         entries.Add(string.IsNullOrEmpty(speaker) ? sentence : $"<b>{speaker}</b>\n{sentence}");
 
-        // 열려 있는 동안에도 새 대사가 쌓일 수 있다(자동진행 중 아래 화살표 키를 누른 경우는
+        // 열려 있는 동안에도 새 대사가 쌓일 수 있다(자동진행 중 위 화살표 키를 누른 경우는
         // 이제 막혀 있지만, 만약을 대비해 열려 있으면 바로 반영해둔다).
         if (IsOpen) Refresh(scrollToBottom: true);
     }
