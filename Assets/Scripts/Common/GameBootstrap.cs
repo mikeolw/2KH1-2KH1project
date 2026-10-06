@@ -209,6 +209,9 @@ public static class GameBootstrap
                 quickBarRect.pivot = new Vector2(0f, 1f);
                 quickBarRect.anchoredPosition = new Vector2(20f, -20f);
             }
+
+            // 버튼 모양(아이콘 칸 + 마우스 올림/열림 표시)을 Figma 디자인으로 바꾼다 (QuickBarStyler.cs 참고).
+            if (quickBar.GetComponent<QuickBarStyler>() == null) quickBar.AddComponent<QuickBarStyler>();
         }
     }
 

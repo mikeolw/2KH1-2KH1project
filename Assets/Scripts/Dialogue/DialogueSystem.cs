@@ -210,24 +210,37 @@ public class DialogueSystem : MonoBehaviour
     private const float DialogueTopY = 760f;        // 대화창 위쪽 가장자리의 그림 속 y (검은 띠가 시작되는 곳)
     private const float DialogueLineTop = 65f;      // 흰 선의 대화창 위에서부터의 거리 (그림 속 y 825)
     private const float DialogueContentLeft = 174f; // 선 왼쪽 끝(그림 x 162)보다 살짝 안쪽
-    private const float DialogueContentRight = 169f; // 선 오른쪽 끝(그림 x 1283)보다 살짝 안쪽 (대화창 오른쪽 끝에서의 거리)
-    private const float DialogueTextTopInset = DialogueLineTop + 16f;   // 대사는 선 아래에서 시작
-    private const float DialogueTextBottomInset = 30f;
+    private const float DialogueContentRight = 174f; // 선 오른쪽 끝(그림 x 1278)보다 살짝 안쪽 (대화창 오른쪽 끝에서의 거리)
+    // 이름과 AUTO/SKIP은 흰 선 "아래" 한 줄에 놓는다. 선 위쪽은 띠가 옅어지는 구간이라
+    // 흰 배경(선화) 위에서 글자가 안 보였다.
+    private const float DialogueHeaderTop = DialogueLineTop + 12f;     // 이름/AUTO 줄의 위쪽 (선 아래 12px)
+    private const float DialogueTextTopInset = DialogueLineTop + 58f;  // 대사는 이름 줄 아래에서 시작
+    private const float DialogueTextBottomInset = 24f;
     // 조사 화면의 대사창: AUTO/SKIP 버튼은 항상 숨긴다.
     // 말하는 사람(이름)이 있으면 평소처럼 흰 선 있는 그림을 쓰고, 이름이 없는 조사 설명일 때만
     // 흰 선이 없는 같은 검은 띠 그림(InvestigationTextBox.png)을 쓴다. 이때는 선이 없으므로
     // 대사가 띠 맨 위쪽에서 시작한다.
     private const string InvestigationArtPath = "Illusts/UI/InvestigationTextBox";
-    private const float InvestigationTextTopInset = 30f;   // 선 없는 띠에서는 이름이 없으므로 대사가 띠 위쪽에서 바로 시작한다
+    private const float InvestigationTextTopInset = 70f;   // 선 없는 띠: 이름이 없으므로 띠가 충분히 진해지는 곳(선 자리)부터 대사를 시작한다
     private bool investigationBox;                   // 지금 조사 대사인지 (AUTO/SKIP 숨김)
     private bool linelessBox;                        // 지금 흰 선 없는 그림을 쓰는지 (이름 없는 조사 설명)
     private Sprite dialogueArtSprite;                // 평소 대화창 그림
     private Sprite investigationArtSprite;           // 조사 대화창 그림 (없으면 평소 그림을 그대로 쓴다)
     private GameObject dialogueArt;                  // 대화창 그림 (긴 독백 때는 숨긴다)
+    private Button logButton;                        // LOG(대사 기록) 버튼 - 코드로 만들 때만 생긴다
     private bool quickButtonsMadeByCode;             // AUTO/SKIP을 코드로 만들었는지 (그림이 있으면 글자만 보이게 한다)
     private const float SpeakerBoxHeight = 56f;     // 이름 칸 높이
-    private const float SentenceFontSize = 34f;     // 대사 글자 크기
-    private const float SpeakerFontSize = 30f;      // 이름 글자 크기
+    private const float SentenceFontSize = 28f;     // 대사 글자 크기 (Figma DialogueBox)
+    private const float SpeakerFontSize = 26f;      // 이름 글자 크기 (Figma DialogueBox)
+    private const float SentenceLineSpacing = 40f;  // 대사 줄 간격 (TMP em/100 단위, Figma의 줄 높이 160%에 맞춤)
+    private const float SpeakerAccentGap = 22f;     // 이름 앞 마름모 표시 자리
+
+    // ----- 대화창 색 (Figma DialogueBox 디자인 값, 청회색 테마) -----
+    private static readonly Color SpeakerNameColor = new Color32(0xC9, 0xD5, 0xE0, 0xFF);
+    private static readonly Color SentenceColor = new Color32(0xE4, 0xEA, 0xEF, 0xFF);
+    private static readonly Color ControlIdleColor = new Color32(0x66, 0x77, 0x87, 0xFF);
+    private static readonly Color ControlActiveColor = new Color32(0xD9, 0xE3, 0xEB, 0xFF);
+    private static readonly Color DialogueAccentColor = new Color32(0x8F, 0xA4, 0xB7, 0xFF);
 
     private void StyleDialogueBox()
     {
@@ -276,7 +289,8 @@ public class DialogueSystem : MonoBehaviour
                 if (dialogueArt != null)
                 {
                     // 그림의 흰 선 바로 위, 선 왼쪽 끝에 맞춘다.
-                    nameRect.anchoredPosition = new Vector2(DialogueContentLeft, -(DialogueLineTop - SpeakerBoxHeight - 4f));
+                    // 흰 선 아래 이름 줄. 앞에 마름모 표시가 붙으므로 그만큼 오른쪽에서 시작한다.
+                    nameRect.anchoredPosition = new Vector2(DialogueContentLeft + SpeakerAccentGap, -DialogueHeaderTop);
                 }
                 else
                 {
@@ -287,9 +301,14 @@ public class DialogueSystem : MonoBehaviour
 
             speakerText.fontStyle = TMPro.FontStyles.Bold;
             speakerText.fontSize = SpeakerFontSize;
-            // 그림이 있으면 흰색, 없으면 옅은 금색 - 대사와 구분되게
-            speakerText.color = dialogueArt != null ? new Color(0.96f, 0.96f, 0.94f) : new Color(1f, 0.86f, 0.45f);
-            speakerText.alignment = dialogueArt != null ? TMPro.TextAlignmentOptions.BottomLeft : TMPro.TextAlignmentOptions.Left;
+            // 그림이 있으면 옅은 청회색, 없으면 옅은 금색 - 대사와 구분되게
+            speakerText.color = dialogueArt != null ? SpeakerNameColor : new Color(1f, 0.86f, 0.45f);
+            if (dialogueArt != null)
+            {
+                speakerText.characterSpacing = 4f;
+                CreateSpeakerAccent();
+            }
+            speakerText.alignment = dialogueArt != null ? TMPro.TextAlignmentOptions.TopLeft : TMPro.TextAlignmentOptions.Left;
             speakerText.margin = Vector4.zero;
             speakerText.raycastTarget = false;
 
@@ -327,9 +346,10 @@ public class DialogueSystem : MonoBehaviour
 
             sentenceText.fontSize = SentenceFontSize;
             sentenceText.alignment = TMPro.TextAlignmentOptions.TopLeft;
-            sentenceText.color = new Color(0.96f, 0.96f, 0.94f);
+            sentenceText.color = dialogueArt != null ? SentenceColor : new Color(0.96f, 0.96f, 0.94f);
             sentenceText.margin = Vector4.zero;   // 여백은 위 offset으로 이미 줬다
-            sentenceText.lineSpacing = 14f;       // 한글은 줄을 조금 띄워야 읽기 편하다
+            // 한글은 줄을 조금 띄워야 읽기 편하다. 그림 대화창은 Figma 디자인처럼 더 넉넉하게.
+            sentenceText.lineSpacing = dialogueArt != null ? SentenceLineSpacing : 14f;
             sentenceText.raycastTarget = false;
 
             // 글자 크기를 자동으로 줄이는 기능은 꺼둔다.
@@ -386,6 +406,7 @@ public class DialogueSystem : MonoBehaviour
             if (autoButton != null) autoButton.gameObject.SetActive(!on);
             if (skipAlreadyReadButton != null) skipAlreadyReadButton.gameObject.SetActive(!on);
             if (skipForceButton != null) skipForceButton.gameObject.SetActive(!on);
+            if (logButton != null) logButton.gameObject.SetActive(!on);
         }
 
         bool lineless = on && !hasSpeaker;
@@ -405,6 +426,31 @@ public class DialogueSystem : MonoBehaviour
         }
     }
 
+    // 이름 앞의 작은 마름모 표시 (Figma DialogueBox). 이름 칸의 자식이라 이름이 숨으면 같이 숨는다.
+    private void CreateSpeakerAccent()
+    {
+        if (speakerText == null || speakerText.transform.Find("SpeakerAccent") != null) return;
+
+        var go = new GameObject("SpeakerAccent", typeof(RectTransform), typeof(Image));
+        go.transform.SetParent(speakerText.transform, false);
+        var rt = (RectTransform)go.transform;
+        rt.anchorMin = rt.anchorMax = new Vector2(0f, 1f);
+        rt.pivot = new Vector2(0.5f, 0.5f);
+        rt.sizeDelta = new Vector2(7f, 7f);
+        rt.anchoredPosition = new Vector2(-SpeakerAccentGap + 7f, -SpeakerFontSize * 0.62f);   // 이름 글자 세로 가운데쯤
+        rt.localRotation = Quaternion.Euler(0f, 0f, 45f);
+        var img = go.GetComponent<Image>();
+        img.color = DialogueAccentColor;
+        img.raycastTarget = false;
+    }
+
+    // LOG 버튼: 아래 화살표 키와 같은 조건(대사 진행 중, 다른 창이 없을 때)에서만 대사 기록을 연다.
+    private void OpenDialogueLog()
+    {
+        if (DialogueLogController.Instance == null || !CanOpenOverlay) return;
+        DialogueLogController.Instance.Open();
+    }
+
     // AUTO/SKIP 버튼 자리. 평소에는 그림의 흰 선 위 오른쪽에 글자만 놓고(그림 속 모습),
     // 긴 독백 큰 화면에서는 원래대로 왼쪽 아래에 둔다.
     private void LayoutQuickButtons(bool longMonologue)
@@ -415,6 +461,7 @@ public class DialogueSystem : MonoBehaviour
         PlaceQuickButton(autoButton, onLine, 0, 30f, 90f);
         PlaceQuickButton(skipAlreadyReadButton, onLine, 1, 130f, 90f);
         PlaceQuickButton(skipForceButton, onLine, 2, 230f, 120f);
+        PlaceQuickButton(logButton, onLine, 3, 360f, 80f);
     }
 
     private void PlaceQuickButton(Button button, bool onLine, int order, float bottomLeftX, float width)
@@ -424,14 +471,17 @@ public class DialogueSystem : MonoBehaviour
 
         if (onLine)
         {
-            // 오른쪽 끝부터 SKIP ALL / SKIP / AUTO 순으로 늘어놓는다 (왼쪽부터 AUTO, SKIP, SKIP ALL).
-            float[] widths = { 90f, 90f, 120f };
+            // 오른쪽 끝부터 LOG / SKIP ALL / SKIP / AUTO 순으로 늘어놓는다 (왼쪽부터 AUTO, SKIP, SKIP ALL, LOG).
+            // 그림 대화창에서는 버튼 배경 없이 작은 글자만 있으므로 폭을 글자에 맞춰 좁게 잡는다.
+            float[] widths = { 62f, 56f, 92f, 48f };
+            width = widths[order];
             float rightEdge = -DialogueContentRight;
-            for (int i = widths.Length - 1; i > order; i--) rightEdge -= widths[i] + 10f;
+            for (int i = widths.Length - 1; i > order; i--) rightEdge -= widths[i] + 16f;
             rt.anchorMin = rt.anchorMax = new Vector2(1f, 1f);
             rt.pivot = new Vector2(1f, 1f);
-            rt.anchoredPosition = new Vector2(rightEdge, -(DialogueLineTop - 44f));
-            rt.sizeDelta = new Vector2(width, 40f);
+            // 이름과 같은 줄(흰 선 아래). 높이 32 안에서 글자가 세로 가운데에 온다.
+            rt.anchoredPosition = new Vector2(rightEdge, -(DialogueHeaderTop + 1f));
+            rt.sizeDelta = new Vector2(width, 32f);
         }
         else
         {
@@ -509,7 +559,7 @@ public class DialogueSystem : MonoBehaviour
         continueIndicator.text = "▼";
         continueIndicator.fontSize = 22;
         continueIndicator.alignment = TMPro.TextAlignmentOptions.Center;
-        continueIndicator.color = new Color(1f, 0.86f, 0.45f, 0.9f);
+        continueIndicator.color = dialogueArt != null ? DialogueAccentColor : new Color(1f, 0.86f, 0.45f, 0.9f);
         continueIndicator.raycastTarget = false;
         continueIndicator.gameObject.SetActive(false);
     }
@@ -535,7 +585,29 @@ public class DialogueSystem : MonoBehaviour
         skipAlreadyReadButton.onClick.AddListener(ToggleSkipAlreadyRead);
         skipForceButton.onClick.AddListener(ToggleSkipForce);
 
+        // LOG(대사 기록) 버튼 - 아래 화살표 키와 같은 일을 한다 (DialogueLogController 참고).
+        // 인스펙터에서 버튼을 직접 연결해 쓰는 경우에는 배치를 모르므로 만들지 않는다.
+        if (created && logButton == null)
+        {
+            logButton = CreateQuickActionButton("LogButton", "LOG", buttonSprite, 360f, 80f);
+            logButton.onClick.AddListener(OpenDialogueLog);
+        }
+
         quickButtonsMadeByCode = created;
+
+        // 그림 대화창: 버튼 배경 없이 작고 자간 넓은 영문 글자만 (Figma DialogueBox Controls)
+        if (created && dialogueArt != null)
+        {
+            foreach (var b in new[] { autoButton, skipAlreadyReadButton, skipForceButton, logButton })
+            {
+                var t = b != null ? b.GetComponentInChildren<TMP_Text>() : null;
+                if (t == null) continue;
+                t.fontSize = 15;
+                t.characterSpacing = 15f;
+            }
+            SetButtonActiveVisual(logButton, false);
+        }
+
         LayoutQuickButtons(false);
         UpdateAutoButtonVisual();
         UpdateSkipButtonVisuals();
@@ -1515,10 +1587,14 @@ public class DialogueSystem : MonoBehaviour
         {
             if (dialogueArt != null && quickButtonsMadeByCode)
             {
-                // 그림 속 AUTO/SKIP은 버튼 배경 없이 글자만 있다 - 켜진 것만 금색 글자로 표시한다.
+                // 그림 속 AUTO/SKIP은 버튼 배경 없이 글자만 있다 - 켜진 것만 밝고 굵게 표시한다.
                 image.color = new Color(1f, 1f, 1f, 0f);
                 var label = button.GetComponentInChildren<TMP_Text>();
-                if (label != null) label.color = active ? toggleActiveColor : new Color(0.96f, 0.96f, 0.94f);
+                if (label != null)
+                {
+                    label.color = active ? ControlActiveColor : ControlIdleColor;
+                    label.fontStyle = active ? FontStyles.Bold : FontStyles.Normal;
+                }
             }
             else
             {
