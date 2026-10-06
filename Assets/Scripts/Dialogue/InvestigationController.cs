@@ -859,7 +859,11 @@ public class InvestigationController : MonoBehaviour
     {
         if (!inSession) return;
 
-        ClearHotspots();
+        // 오브젝트 그림은 바로 지우지 않는다 - 암전으로 화면이 다 어두워질 때까지 그 장면 그대로
+        // 남아 있어야 자연스럽다 (바로 지우면 암전 전에 오브젝트만 먼저 사라져 배경만 덩그러니 남았다).
+        // 버튼/화살표 같은 UI만 치우고 클릭을 막아 둔 뒤, DialogueSystem이 화면이 완전히
+        // 검어진 순간 ClearLeftoverHotspots()로 지운다.
+        FreezeHotspotsForExit();
         CorridorWatchController.Instance?.Stop();
 
         inSession = false;
@@ -1353,6 +1357,49 @@ public class InvestigationController : MonoBehaviour
         {
             Destroy(hotspotRoot);
             hotspotRoot = null;
+        }
+        ClearLeftoverHotspots();
+    }
+
+    // ===== 조사를 마친 뒤 잠깐 남겨 두는 오브젝트 그림 =====
+    // Exit() 직후 암전이 끝날 때까지 장면을 그대로 보여주기 위해 남겨 둔 것. 클릭은 막혀 있다.
+    private GameObject leftoverHotspotRoot;
+
+    private void FreezeHotspotsForExit()
+    {
+        ClearLeftoverHotspots();
+        if (hotspotRoot == null) return;
+
+        // 장면의 일부가 아닌 UI(조사 그만하기, 화살표, 마우스 올림 표시, 조사한 체크)는 바로 치운다.
+        foreach (var t in hotspotRoot.GetComponentsInChildren<Transform>(true))
+        {
+            if (t == null || t == hotspotRoot.transform) continue;
+            string n = t.name;
+            if (n == "Btn_ExitInvestigation" || n == "Btn_NextScreen" || n == "Btn_PrevScreen" ||
+                n == "__HotspotHover" || n == "CheckedBadge")
+            {
+                t.gameObject.SetActive(false);
+                Destroy(t.gameObject);
+            }
+        }
+
+        var group = hotspotRoot.GetComponent<CanvasGroup>();
+        if (group == null) group = hotspotRoot.AddComponent<CanvasGroup>();
+        group.interactable = false;
+        group.blocksRaycasts = false;   // 남아 있는 동안 눌리거나 마우스 올림 표시가 뜨지 않게
+
+        leftoverHotspotRoot = hotspotRoot;
+        hotspotRoot = null;
+    }
+
+    // DialogueSystem이 조사 직후 암전으로 화면이 완전히 검어진 순간(또는 암전 없이 다른
+    // 화면으로 넘어갈 때) 부른다. 남겨 둔 오브젝트 그림을 지운다.
+    public void ClearLeftoverHotspots()
+    {
+        if (leftoverHotspotRoot != null)
+        {
+            Destroy(leftoverHotspotRoot);
+            leftoverHotspotRoot = null;
         }
     }
 

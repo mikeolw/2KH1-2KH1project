@@ -852,6 +852,7 @@ public class DialogueSystem : MonoBehaviour
             nextLineFollowsInvestigation = false;
             SetLongMonologueLayout(false);   // 큰 독백 화면이 선택지 뒤에 남지 않게
             ShowDialoguePanel();             // 조사 직후라 꺼져 있을 수 있다 (InvestigationController.Exit 참고)
+            InvestigationController.Instance?.ClearLeftoverHotspots();   // 암전 없이 넘어가므로 남은 오브젝트도 바로 치운다
             ShowChoices();
             return;
         }
@@ -878,6 +879,7 @@ public class DialogueSystem : MonoBehaviour
         {
             SetLongMonologueLayout(false);   // 큰 독백 화면이 다른 화면 위에 남지 않게
             ShowDialoguePanel();             // 예전처럼 켜 둔다 (조사 줄이면 Enter()가 곧바로 다시 끈다)
+            InvestigationController.Instance?.ClearLeftoverHotspots();   // 다른 화면으로 넘어가므로 남은 오브젝트도 치운다
             ApplyLineAudio(sfxSource, line.sfxToPlay);
             ApplyLineAudio(bgmSource, line.bgmToPlay);
         }
@@ -1000,6 +1002,8 @@ public class DialogueSystem : MonoBehaviour
         {
             SetQuickBarHidden(true);
             yield return StartCoroutine(Fade(1f));
+            // 조사 오브젝트 그림은 암전이 다 될 때까지 남겨 두었다가 여기서 지운다 (InvestigationController.Exit 참고).
+            InvestigationController.Instance?.ClearLeftoverHotspots();
             ApplyLineStage(line, instant: true);
             yield return new WaitForSeconds(postInvestigationBlackHoldDuration);
             yield return StartCoroutine(Fade(0f));
