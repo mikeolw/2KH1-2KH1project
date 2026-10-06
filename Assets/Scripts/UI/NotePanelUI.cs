@@ -530,7 +530,7 @@ public class NotePanelUI : MonoBehaviour
         overlay.transform.SetParent(canvas.transform, false);
         Stretch(overlay.GetComponent<RectTransform>());
         var dim = overlay.GetComponent<Image>();
-        dim.color = new Color(0.02f, 0.03f, 0.043f, 0.62f);
+        dim.color = new Color(0f, 0f, 0f, 0.97f);   // 환경설정/가방과 같은 검은 막
         dim.raycastTarget = true;   // 뒤쪽 게임 화면이 눌리지 않게 막는다
 
         // ----- 펼친 책 -----

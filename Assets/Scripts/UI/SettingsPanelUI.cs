@@ -112,6 +112,23 @@ public class SettingsPanelUI : MonoBehaviour
         if (panel != null) panel.SetActive(false);
     }
 
+    // ===== Esc =====
+    //   확인 창이 떠 있으면 -> 확인 창만 닫는다 ([취소]와 같음)
+    //   아니면              -> 설정 화면을 닫는다 ([돌아가기]와 같음)
+    // UIManager도 Esc로 퀵바 창들을 닫으므로, 같은 프레임에 두 번 처리되지 않게 이번 프레임에
+    // Esc를 썼다는 표시(HandledEscapeThisFrame)를 남긴다.
+    private int escapeHandledFrame = -1;
+    public bool HandledEscapeThisFrame => escapeHandledFrame == Time.frameCount;
+
+    private void Update()
+    {
+        if (!Input.GetKeyDown(KeyCode.Escape) || !IsOpen) return;
+        escapeHandledFrame = Time.frameCount;
+
+        if (confirmDialog != null && confirmDialog.activeInHierarchy) confirmDialog.SetActive(false);
+        else Close();
+    }
+
     // ---------------------------------------------------------------------------------
     // 여닫기
     // ---------------------------------------------------------------------------------

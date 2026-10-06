@@ -42,6 +42,28 @@ public class UIManager : MonoBehaviour
         CloseAllPanels();
     }
 
+    // ===== Esc: 열려 있는 퀵바 창(수첩/핸드폰/가방/카메라/설정)을 닫는다 =====
+    // 위에 겹쳐 뜬 창이 있으면 그것부터 닫는다:
+    //   자료 뷰어(가방의 [자세히 보기] 등) -> 뷰어만 닫고 가방은 그대로
+    //   환경설정 -> SettingsPanelUI가 스스로 처리 (확인 창이 있으면 확인 창만)
+    //   세이브 창 -> 닫지 않는다 (세이브포인트에서 반드시 고르도록 뜨는 창이라)
+    void Update()
+    {
+        if (!Input.GetKeyDown(KeyCode.Escape)) return;
+
+        if (SaveSlotDialog.Instance != null && SaveSlotDialog.Instance.IsOpen) return;
+        if (SettingsPanelUI.Instance != null &&
+            (SettingsPanelUI.Instance.IsOpen || SettingsPanelUI.Instance.HandledEscapeThisFrame)) return;
+
+        if (DocumentViewerController.Instance != null && DocumentViewerController.Instance.IsOpen)
+        {
+            DocumentViewerController.Instance.Hide();
+            return;
+        }
+
+        if (IsAnyPanelOpen) CloseAllPanels();
+    }
+
     // 하단 퀵바 버튼에서 호출할 함수들
     public void ToggleInventory() => TogglePanel(inventoryPanel);
     public void TogglePhoto() => TogglePanel(photoPanel);
