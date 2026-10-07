@@ -25,8 +25,8 @@ public class SaveSlotDialog : MonoBehaviour
 
     // 창 전체. 이걸 켜고 끄는 것으로 여닫는다.
     private GameObject panel;
-    private TMP_Text titleLabel;
-    private TMP_Text[] slotLabels;
+    private TMP_Text titleLabel;          // 머리말 아래 안내 문구 ("[저장 지점] 저장할 슬롯을 고르세요")
+    private SaveSlotRow[] slotRows;
 
     // 다른 스크립트가 "지금 저장 창이 열려 있나?"를 확인할 때 쓴다.
     // 열려 있는 동안에는 대사가 클릭으로 넘어가면 안 된다.
@@ -79,23 +79,14 @@ public class SaveSlotDialog : MonoBehaviour
     }
 
     // 슬롯마다 "무엇이 저장되어 있는지"를 다시 읽어 표시한다.
+    // 이 창은 세이브포인트에 도착했을 때만 뜨므로 모든 칸에 저장할 수 있다(빈 칸 포함, 덮어쓰기).
     private void RefreshSlots()
     {
-        if (SaveManager.Instance == null) return;
+        if (SaveManager.Instance == null || slotRows == null) return;
 
-        for (int i = 0; i < slotLabels.Length; i++)
+        for (int i = 0; i < slotRows.Length; i++)
         {
-            SaveData data = SaveManager.Instance.Load(i);
-
-            if (data != null)
-            {
-                string playTime = SavePointManager.FormatPlayTime(data.playTimeSeconds);
-                slotLabels[i].text = $"{i + 1}. {data.chapterId}\n<size=70%>{data.timestamp} · {playTime}</size>";
-            }
-            else
-            {
-                slotLabels[i].text = $"{i + 1}. <color=#888888>비어 있음</color>";
-            }
+            slotRows[i].Set(SaveManager.Instance.Load(i), isSaveMode: true, locked: false, clickable: true);
         }
     }
 
@@ -117,8 +108,12 @@ public class SaveSlotDialog : MonoBehaviour
     }
 
     // ---------------------------------------------------------------------------------
-    // UI 만들기
+    // UI 만들기 (Figma "Screen / Save - 세이브포인트")
     // ---------------------------------------------------------------------------------
+    //   SAVE / 기록 남기기
+    //   [저장 지점] 저장할 슬롯을 고르세요
+    //   [01 │ #03 경찰서 ...]  x4  (SaveSlotRow.cs)
+    //   저장되는 것은 ... 저장 지점입니다.            [저장하지 않고 계속]
     private void BuildUI()
     {
         if (targetCanvas == null) targetCanvas = FindAnyObjectByType<Canvas>();
@@ -128,141 +123,28 @@ public class SaveSlotDialog : MonoBehaviour
             return;
         }
 
-        int slotCount = SaveManager.SlotCount;
-        slotLabels = new TMP_Text[slotCount];
-
-        // ----- 상자 안에 들어갈 내용 크기를 슬롯 개수에 맞춰 미리 계산 -----
-        // (슬롯이 몇 개든 상자가 딱 그만큼의 높이만 차지하게 하기 위함 - 예전엔 720으로
-        // 고정해뒀는데, 슬롯 개수가 줄어들면 아래쪽에 빈 검은 공간이 크게 남는 문제가 있었다)
-        const float headerHeight = 86f;     // 제목 영역 (listTop과 동일)
-        const float slotHeight = 60f;
-        const float slotGap = 8f;
-        const float footerGap = 24f;        // 마지막 슬롯과 버튼 사이 여백
-        const float skipButtonHeight = 48f;
-        const float bottomMargin = 18f;     // 버튼과 상자 맨 아래 사이 여백
-
-        float slotsHeight = slotCount * slotHeight + Mathf.Max(0, slotCount - 1) * slotGap;
-        float boxHeight = headerHeight + slotsHeight + footerGap + skipButtonHeight + bottomMargin;
-
-        // ----- 창 전체 (화면을 덮는 어두운 배경) -----
-        panel = new GameObject("SaveSlotDialog", typeof(RectTransform), typeof(Image));
-        panel.transform.SetParent(targetCanvas.transform, false);
-        Stretch(panel.GetComponent<RectTransform>());
-        panel.GetComponent<Image>().color = new Color(0f, 0f, 0f, 0.75f);
+        panel = SaveScreenUI.BuildFrame(targetCanvas.transform, "SaveSlotDialog", "SAVE", "기록 남기기",
+                                        out RectTransform box, out titleLabel);
         // 다른 UI보다 항상 위에 뜨도록 계층 맨 끝으로.
         panel.transform.SetAsLastSibling();
 
-        // ----- 가운데 상자 -----
-        var box = new GameObject("Box", typeof(RectTransform), typeof(Image));
-        box.transform.SetParent(panel.transform, false);
-        var boxRt = box.GetComponent<RectTransform>();
-        boxRt.anchorMin = new Vector2(0.5f, 0.5f);
-        boxRt.anchorMax = new Vector2(0.5f, 0.5f);
-        boxRt.pivot = new Vector2(0.5f, 0.5f);
-        boxRt.sizeDelta = new Vector2(760f, boxHeight);
-        box.GetComponent<Image>().color = new Color(0f, 0f, 0f, 0.97f);
-
-        // ----- 제목 -----
-        titleLabel = CreateText(box.transform, "Title",
-            new Vector2(0f, 1f), new Vector2(1f, 1f),
-            new Vector2(20f, -70f), new Vector2(-20f, -16f), 30, TextAlignmentOptions.Center);
-        titleLabel.fontStyle = FontStyles.Bold;
-        titleLabel.color = new Color(1f, 0.86f, 0.45f);
-
-        // ----- 슬롯 목록 -----
-        // 세이브포인트 개수만큼 세로로 쌓는다.
-        float listTop = -headerHeight;
-
+        int slotCount = SaveManager.SlotCount;
+        slotRows = new SaveSlotRow[slotCount];
         for (int i = 0; i < slotCount; i++)
         {
             int index = i;   // 람다가 반복 변수를 그대로 잡지 않도록 복사
-
-            var slot = new GameObject($"Slot_{i}", typeof(RectTransform), typeof(Image), typeof(Button));
-            slot.transform.SetParent(box.transform, false);
-
-            var rt = slot.GetComponent<RectTransform>();
-            rt.anchorMin = new Vector2(0f, 1f);
-            rt.anchorMax = new Vector2(1f, 1f);
-            rt.pivot = new Vector2(0.5f, 1f);
-            rt.offsetMin = new Vector2(24f, 0f);
-            rt.offsetMax = new Vector2(-24f, 0f);
-            rt.anchoredPosition = new Vector2(0f, listTop - i * (slotHeight + slotGap));
-            rt.sizeDelta = new Vector2(rt.sizeDelta.x, slotHeight);
-
-            var bg = slot.GetComponent<Image>();
-            bg.color = new Color(1f, 1f, 1f, 0.10f);
-            bg.raycastTarget = true;
-
-            var btn = slot.GetComponent<Button>();
-            btn.targetGraphic = bg;
-            btn.transition = Selectable.Transition.ColorTint;
-            var colors = btn.colors;
-            colors.highlightedColor = new Color(1f, 0.95f, 0.7f);
-            colors.pressedColor = new Color(0.8f, 0.7f, 0.35f);
-            btn.colors = colors;
-            btn.onClick.AddListener(() => OnClickSlot(index));
-
-            slotLabels[i] = CreateText(slot.transform, "Label",
-                Vector2.zero, Vector2.one,
-                new Vector2(16f, 0f), new Vector2(-16f, 0f), 20, TextAlignmentOptions.Left);
-
+            slotRows[i] = SaveSlotRow.Create(box, i, () => OnClickSlot(index));
         }
 
-        // ----- 저장 안 함 버튼 -----
-        var skip = new GameObject("Btn_Skip", typeof(RectTransform), typeof(Image), typeof(Button));
-        skip.transform.SetParent(box.transform, false);
-        var skipRt = skip.GetComponent<RectTransform>();
-        skipRt.anchorMin = new Vector2(0.5f, 0f);
-        skipRt.anchorMax = new Vector2(0.5f, 0f);
-        skipRt.pivot = new Vector2(0.5f, 0f);
-        skipRt.anchoredPosition = new Vector2(0f, bottomMargin);
-        skipRt.sizeDelta = new Vector2(220f, skipButtonHeight);
+        var note = SaveScreenUI.CreateText(box, "Note", "저장되는 것은 지금 이 순간이 아니라 방금 지나온 저장 지점입니다.",
+                                           15, FontStyles.Normal, SaveScreenUI.HintColor);
+        SaveScreenUI.PlaceTopLeft(note.rectTransform, SaveScreenUI.Pad, SaveScreenUI.FooterY + 16f, 560f, 24f);
 
-        var skipBg = skip.GetComponent<Image>();
-        skipBg.color = new Color(1f, 1f, 1f, 0.16f);
-        skipBg.raycastTarget = true;
-
-        var skipBtn = skip.GetComponent<Button>();
-        skipBtn.targetGraphic = skipBg;
-        skipBtn.onClick.AddListener(Close);
-
-        var skipLabel = CreateText(skip.transform, "Label",
-            Vector2.zero, Vector2.one, Vector2.zero, Vector2.zero, 22, TextAlignmentOptions.Center);
-        skipLabel.text = "저장하지 않고 계속";
+        SaveScreenUI.CreateButton(box, "Btn_Skip", "저장하지 않고 계속",
+                                  SaveScreenUI.BoxWidth - SaveScreenUI.Pad - 240f, 240f, Close);
 
         // 코드로 만든 글자는 기본 글꼴에 한글이 없어 깨지므로, 화면에서 한글이 잘 나오는
         // 글꼴을 찾아 물려준다 (UIFontHelper.cs 참고).
         UIFontHelper.ApplyToChildren(panel);
-    }
-
-    private TMP_Text CreateText(Transform parent, string name,
-                                Vector2 anchorMin, Vector2 anchorMax,
-                                Vector2 offsetMin, Vector2 offsetMax,
-                                float fontSize, TextAlignmentOptions align)
-    {
-        var go = new GameObject(name, typeof(RectTransform));
-        go.transform.SetParent(parent, false);
-
-        var rt = go.GetComponent<RectTransform>();
-        rt.anchorMin = anchorMin;
-        rt.anchorMax = anchorMax;
-        rt.offsetMin = offsetMin;
-        rt.offsetMax = offsetMax;
-
-        var tmp = go.AddComponent<TextMeshProUGUI>();
-        tmp.fontSize = fontSize;
-        tmp.alignment = align;
-        tmp.color = Color.white;
-        tmp.raycastTarget = false;
-        tmp.richText = true;
-        return tmp;
-    }
-
-    private void Stretch(RectTransform rt)
-    {
-        rt.anchorMin = Vector2.zero;
-        rt.anchorMax = Vector2.one;
-        rt.offsetMin = Vector2.zero;
-        rt.offsetMax = Vector2.zero;
     }
 }

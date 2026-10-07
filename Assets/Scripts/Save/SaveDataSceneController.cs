@@ -17,6 +17,14 @@ using TMPro;
 // 아직 하나도 지나지 않았다면 저장하기 모드로 들어와도 슬롯이 전부 잠긴다
 // (SavePointManager.CanSave 참고). 저장되는 것은 "지금 이 순간"이 아니라
 // "마지막으로 지나온 세이브포인트"이므로, 불러오면 항상 안전한 지점에서 다시 시작한다.
+//
+// ===== 화면 (Figma "Screen / Save - 이어하기") =====
+// 씬에 미리 배치된 슬롯/버튼/안내 문구는 숨기고, 세이브포인트 저장 창과 같은 모양
+// (SaveSlotRow.cs의 SaveScreenUI / SaveSlotRow)으로 캔버스 위에 코드로 새로 그린다.
+// 씬 파일은 건드리지 않는다(팀원끼리 씬 충돌 방지). 인스펙터 필드는 예전 배치를 숨기는 데만 쓴다.
+//   LOAD / 이어하기 (저장하기 모드면 SAVE / 기록 남기기)
+//   [01 │ #03 경찰서 ...]  x4
+//                                         [돌아가기]
 public class SaveDataSceneController : MonoBehaviour
 {
     // 이 화면이 어떤 용도로 열렸는지.
@@ -44,8 +52,15 @@ public class SaveDataSceneController : MonoBehaviour
     public string gameplaySceneName = "SampleScene";
     public string titleSceneName = "Title";
 
+    // 코드로 새로 그린 화면
+    private SaveSlotRow[] slotRows;
+    private TMP_Text subtitleText;
+
     private void Awake()
     {
+        if (BuildScreen()) return;
+
+        // 캔버스를 못 찾아 새 화면을 만들지 못했으면 예전처럼 씬에 배치된 UI를 그대로 쓴다.
         ExpandSlotsIfNeeded();
 
         if (backButton != null) backButton.onClick.AddListener(OnClickBack);
@@ -58,6 +73,50 @@ public class SaveDataSceneController : MonoBehaviour
                                // 되는 클로저 함정이 있어서, 로컬 변수로 복사해 캡처한다.
             slotButtons[i].onClick.AddListener(() => OnClickSlot(slotIndex));
         }
+    }
+
+    // 새 모양의 화면을 만들고 씬에 배치된 예전 UI를 숨긴다. 만들었으면 true.
+    private bool BuildScreen()
+    {
+        Canvas canvas = FindAnyObjectByType<Canvas>();
+        if (canvas == null) return false;
+
+        // 예전 배치 숨기기 (슬롯/버튼/안내 문구)
+        foreach (var b in slotButtons) if (b != null) b.gameObject.SetActive(false);
+        if (backButton != null) backButton.gameObject.SetActive(false);
+        if (headerText != null) headerText.gameObject.SetActive(false);
+
+        bool saveMode = OpenMode == Mode.Save;
+        var root = SaveScreenUI.BuildFrame(canvas.transform, "SaveDataScreen",
+                                           saveMode ? "SAVE" : "LOAD", saveMode ? "기록 남기기" : "이어하기",
+                                           out RectTransform box, out subtitleText);
+        root.transform.SetAsLastSibling();
+
+        slotRows = new SaveSlotRow[SaveManager.SlotCount];
+        for (int i = 0; i < slotRows.Length; i++)
+        {
+            int slotIndex = i;
+            slotRows[i] = SaveSlotRow.Create(box, i, () => OnClickSlot(slotIndex));
+        }
+
+        SaveScreenUI.CreateButton(box, "Btn_Back", "돌아가기",
+                                  SaveScreenUI.BoxWidth - SaveScreenUI.Pad - 200f, 200f, OnClickBack);
+
+        UIFontHelper.ApplyToChildren(root);
+        return true;
+    }
+
+    // Esc = 돌아가기
+    private void Update()
+    {
+        if (Input.GetKeyDown(KeyCode.Escape)) OnClickBack();
+    }
+
+    // 안내 문구: 새 화면이면 머리말 아래, 예전 화면이면 headerText.
+    private void SetHeader(string text)
+    {
+        if (subtitleText != null) subtitleText.text = text;
+        else if (headerText != null) headerText.text = text;
     }
 
     // 씬에 배치된 슬롯 수가 SaveManager.SlotCount보다 적으면, 마지막 슬롯을 템플릿 삼아
@@ -107,7 +166,8 @@ public class SaveDataSceneController : MonoBehaviour
         {
             Debug.LogWarning("[SaveDataSceneController] SaveManager가 없습니다. Title 씬부터 실행해 주세요.");
             foreach (var b in slotButtons) { if (b != null) b.interactable = false; }
-            if (headerText != null) headerText.text = "세이브 시스템을 불러올 수 없습니다. 타이틀부터 실행해 주세요.";
+            if (slotRows != null) foreach (var r in slotRows) r.Set(null, false, locked: true, clickable: false);
+            SetHeader("세이브 시스템을 불러올 수 없습니다. 타이틀부터 실행해 주세요.");
             return;
         }
 
@@ -116,14 +176,23 @@ public class SaveDataSceneController : MonoBehaviour
         // 저장하기 모드인데 아직 세이브포인트를 지나지 않았다면 저장할 수 없다.
         bool canSave = SavePointManager.Instance != null && SavePointManager.Instance.CanSave;
 
-        if (headerText != null)
+        if (!saveMode)
+            SetHeader("불러올 슬롯을 고르세요");
+        else if (canSave)
+            SetHeader($"[ {SavePointManager.Instance.LastSavePointId} ]  저장할 슬롯을 고르세요");
+        else
+            SetHeader("아직 저장할 수 있는 지점을 지나지 않았습니다");
+
+        // ----- 새 화면 -----
+        // 불러오기: 저장된 칸만 누를 수 있다 / 저장하기: 세이브포인트를 지났으면 전부(덮어쓰기), 아니면 전부 잠김.
+        if (slotRows != null)
         {
-            if (!saveMode)
-                headerText.text = "불러올 슬롯을 고르세요.";
-            else if (canSave)
-                headerText.text = $"저장할 슬롯을 고르세요.  (저장 지점: {SavePointManager.Instance.LastSavePointId})";
-            else
-                headerText.text = "아직 저장할 수 있는 지점을 지나지 않았습니다.";
+            for (int i = 0; i < slotRows.Length; i++)
+            {
+                SaveData data = SaveManager.Instance.Load(i);
+                slotRows[i].Set(data, saveMode, locked: saveMode && !canSave, clickable: saveMode ? canSave : data != null);
+            }
+            return;
         }
 
         for (int i = 0; i < slotButtons.Length; i++)
@@ -182,13 +251,13 @@ public class SaveDataSceneController : MonoBehaviour
         bool ok = SavePointManager.Instance.SaveToSlot(slotIndex);
         if (!ok)
         {
-            if (headerText != null) headerText.text = "아직 저장할 수 있는 지점을 지나지 않았습니다.";
+            SetHeader("아직 저장할 수 있는 지점을 지나지 않았습니다");
             return;
         }
 
         // 저장 후 목록을 갱신해 방금 저장된 내용이 바로 보이게 한다.
         RefreshSlots();
-        if (headerText != null) headerText.text = $"슬롯 {slotIndex + 1}에 저장했습니다.";
+        SetHeader($"슬롯 {slotIndex + 1}에 저장했습니다");
     }
 
     // ---------------------------------------------------------------------------------

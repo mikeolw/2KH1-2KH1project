@@ -85,7 +85,7 @@ public class DialogueSystem : MonoBehaviour
     public float blackHoldDuration = 1f; // 완전히 검게 된 채로 유지되는 시간(초)
     // 조사가 끝난 직후의 암전에 쓰는 검은 화면 유지 시간(초). 모든 조사는 끝나면 (다음 줄의
     // IsFadeOut 칸과 상관없이) 이 시간만큼 어둠을 유지한 뒤 다음 장면으로 넘어간다.
-    public float postInvestigationBlackHoldDuration = 4f;
+    public float postInvestigationBlackHoldDuration = 1f;
 
     // 조사 종료 콜백에서 켜고, 다음 줄을 보여줄 때 한 번 읽고 바로 끈다(ShowNextSentence 참고).
     private bool nextLineFollowsInvestigation;
@@ -444,7 +444,7 @@ public class DialogueSystem : MonoBehaviour
         img.raycastTarget = false;
     }
 
-    // LOG 버튼: 아래 화살표 키와 같은 조건(대사 진행 중, 다른 창이 없을 때)에서만 대사 기록을 연다.
+    // LOG 버튼: 위 화살표 키와 같은 조건(대사 진행 중, 다른 창이 없을 때)에서만 대사 기록을 연다.
     private void OpenDialogueLog()
     {
         if (DialogueLogController.Instance == null || !CanOpenOverlay) return;
@@ -584,7 +584,7 @@ public class DialogueSystem : MonoBehaviour
         skipAlreadyReadButton.onClick.AddListener(ToggleSkipAlreadyRead);
         skipForceButton.onClick.AddListener(ToggleSkipForce);
 
-        // LOG(대사 기록) 버튼 - 아래 화살표 키와 같은 일을 한다 (DialogueLogController 참고).
+        // LOG(대사 기록) 버튼 - 위 화살표 키와 같은 일을 한다 (DialogueLogController 참고).
         // 인스펙터에서 버튼을 직접 연결해 쓰는 경우에는 배치를 모르므로 만들지 않는다.
         if (created && logButton == null)
         {
@@ -851,6 +851,8 @@ public class DialogueSystem : MonoBehaviour
             // 잘못 뜬다.
             nextLineFollowsInvestigation = false;
             SetLongMonologueLayout(false);   // 큰 독백 화면이 선택지 뒤에 남지 않게
+            ShowDialoguePanel();             // 조사 직후라 꺼져 있을 수 있다 (InvestigationController.Exit 참고)
+            InvestigationController.Instance?.ClearLeftoverHotspots();   // 암전 없이 넘어가므로 남은 오브젝트도 바로 치운다
             ShowChoices();
             return;
         }
@@ -876,6 +878,8 @@ public class DialogueSystem : MonoBehaviour
         if (line.isMinigame || line.isInvestigation || line.isDeduction)
         {
             SetLongMonologueLayout(false);   // 큰 독백 화면이 다른 화면 위에 남지 않게
+            ShowDialoguePanel();             // 예전처럼 켜 둔다 (조사 줄이면 Enter()가 곧바로 다시 끈다)
+            InvestigationController.Instance?.ClearLeftoverHotspots();   // 다른 화면으로 넘어가므로 남은 오브젝트도 치운다
             ApplyLineAudio(sfxSource, line.sfxToPlay);
             ApplyLineAudio(bgmSource, line.bgmToPlay);
         }
@@ -972,6 +976,7 @@ public class DialogueSystem : MonoBehaviour
         }
         else
         {
+            ShowDialoguePanel();
             DisplayLine(line);
         }
     }
@@ -984,9 +989,37 @@ public class DialogueSystem : MonoBehaviour
         isFading = true;
         if (fadeCanvasGroup != null) fadeCanvasGroup.blocksRaycasts = true;
 
+        // ===== 조사 직후: 대화창 없이 암전 -> 밝아진 다음에 대화창과 대사를 띄운다 =====
+        // 조사가 끝날 때 대화창이 나오지 않게 해달라는 요청. InvestigationController.Exit()가
+        // 대화창을 꺼둔 채로 넘겨주므로, 어두워졌다 밝아지는 동안은 아무 글자도 보이지 않는다.
+        // 퀵바도 암전 동안은 숨긴다 (검은 화면 위에 퀵바만 떠 있으면 어색하다).
+        //
+        // ===== 다음 장면과 매끄럽게 이어지도록 =====
+        // 배경/소품/인물/소리는 화면이 완전히 검은 동안 미리 바꿔 둔다. 그래야 밝아지는 순간
+        // 이미 다음 장면이 보인다 (밝아진 뒤에 바꾸면 조사 화면이 잠깐 보였다가 툭 바뀐다).
+        // 대화창과 퀵바는 밝아진 뒤에 짧게 서서히 나타나게 해서 갑자기 튀어나오지 않게 한다.
+        if (followsInvestigation)
+        {
+            SetQuickBarHidden(true);
+            yield return StartCoroutine(Fade(1f));
+            // 조사 오브젝트 그림은 암전이 다 될 때까지 남겨 두었다가 여기서 지운다 (InvestigationController.Exit 참고).
+            InvestigationController.Instance?.ClearLeftoverHotspots();
+            ApplyLineStage(line, instant: true);
+            yield return new WaitForSeconds(postInvestigationBlackHoldDuration);
+            yield return StartCoroutine(Fade(0f));
+
+            if (fadeCanvasGroup != null) fadeCanvasGroup.blocksRaycasts = false;
+            ShowDialoguePanel();
+            DisplayLine(line);   // 무대는 이미 바뀌어 있어 다시 손대지 않는다. 세이브포인트 줄이면 여기서 세이브 창이 뜬다.
+            isFading = false;
+            yield return StartCoroutine(FadeInAfterInvestigation());
+            yield break;
+        }
+
+        ShowDialoguePanel();
         yield return StartCoroutine(Fade(1f));
         DisplayLine(line);
-        yield return new WaitForSeconds(followsInvestigation ? postInvestigationBlackHoldDuration : blackHoldDuration);
+        yield return new WaitForSeconds(blackHoldDuration);
 
         // ===== 세이브 창이 열려 있으면 닫힐 때까지 암전을 유지한다 =====
         // 이 줄이 세이브포인트(IsSavePoint=TRUE)이기도 하면 DisplayLine() 안에서
@@ -1004,6 +1037,81 @@ public class DialogueSystem : MonoBehaviour
 
         if (fadeCanvasGroup != null) fadeCanvasGroup.blocksRaycasts = false;
         isFading = false;
+    }
+
+    // 대화창이 꺼져 있으면 켠다. 조사가 끝날 때는 InvestigationController가 대화창을 꺼둔 채로
+    // 넘겨주므로(Exit 참고), 다음 대사를 실제로 보여주는 순간에 여기서 다시 켠다.
+    // 이 줄의 배경/소품/인물/소리를 적용한다.
+    // 값이 비어 있는 칸은 StageController가 "이전 상태 유지"로 처리하고, 같은 값이면 다시 손대지
+    // 않는다(각 Apply 함수 참고). instant면 배경 전환 효과(fade 등) 없이 바로 바꾼다 -
+    // 검은 화면 뒤에서 바꿀 때 쓴다.
+    private void ApplyLineStage(DialogueLine line, bool instant)
+    {
+        if (StageController.Instance != null)
+        {
+            // Transition/TransitionTime 칸이 비어 있으면 예전처럼 즉시 바뀐다(cut).
+            // "fade"라고 적으면 이전 배경이 녹아 사라지며 새 배경이 드러난다.
+            if (instant) StageController.Instance.ApplyBackground(line.backgroundName);
+            else StageController.Instance.ApplyBackground(line.backgroundName, line.transition, line.transitionTime);
+            // 소품은 스탠딩보다 먼저 올린다(배경 → 소품 → 스탠딩 순서로 겹쳐 보이게).
+            StageController.Instance.ApplyProps(line.propNames);
+            StageController.Instance.ApplyStandings(line.standingNames);
+        }
+
+        ApplyLineAudio(sfxSource, line.sfxToPlay);
+        ApplyLineAudio(bgmSource, line.bgmToPlay);
+    }
+
+    // 조사 직후 암전이 걷힌 뒤 대화창과 퀵바를 짧게 서서히 나타나게 한다.
+    // 대화창은 아래 화살표 숨기기와 같은 CanvasGroup을 쓰므로, 그 사이 플레이어가 숨기면 손대지 않는다.
+    private const float UiFadeInDuration = 0.3f;
+
+    private IEnumerator FadeInAfterInvestigation()
+    {
+        if (dialoguePanel == null) yield break;
+        if (dialogueCanvasGroup == null)
+        {
+            dialogueCanvasGroup = dialoguePanel.GetComponent<CanvasGroup>();
+            if (dialogueCanvasGroup == null) dialogueCanvasGroup = dialoguePanel.AddComponent<CanvasGroup>();
+        }
+        SetQuickBarHidden(false);   // 눌릴 수 있게 먼저 되돌리고, 투명도는 아래에서 0부터 올린다
+
+        float t = 0f;
+        while (t < UiFadeInDuration)
+        {
+            if (dialogueHidden) break;
+            float a = t / UiFadeInDuration;
+            dialogueCanvasGroup.alpha = a;
+            if (quickBarCanvasGroup != null) quickBarCanvasGroup.alpha = a;
+            t += Time.deltaTime;
+            yield return null;
+        }
+        if (!dialogueHidden) dialogueCanvasGroup.alpha = 1f;
+        if (quickBarCanvasGroup != null) quickBarCanvasGroup.alpha = 1f;
+    }
+
+    private void ShowDialoguePanel()
+    {
+        if (dialoguePanel != null && !dialoguePanel.activeSelf) dialoguePanel.SetActive(true);
+    }
+
+    // 퀵바(노트/가방/설정 등)를 잠깐 숨긴다. 끄지(SetActive) 않고 CanvasGroup으로 투명하게만
+    // 만들어서, 퀵바를 켜고 끄는 다른 스크립트(UIManager/QuickBarStyler)의 상태를 건드리지 않는다.
+    // 숨긴 동안은 눌리지도 않는다.
+    private CanvasGroup quickBarCanvasGroup;
+
+    private void SetQuickBarHidden(bool hidden)
+    {
+        if (quickBarCanvasGroup == null)
+        {
+            var bar = GameObject.Find("QuickBarPanel");
+            if (bar == null) return;
+            quickBarCanvasGroup = bar.GetComponent<CanvasGroup>();
+            if (quickBarCanvasGroup == null) quickBarCanvasGroup = bar.AddComponent<CanvasGroup>();
+        }
+        quickBarCanvasGroup.alpha = hidden ? 0f : 1f;
+        quickBarCanvasGroup.blocksRaycasts = !hidden;
+        quickBarCanvasGroup.interactable = !hidden;
     }
 
     private IEnumerator Fade(float targetAlpha)
@@ -1033,22 +1141,10 @@ public class DialogueSystem : MonoBehaviour
 
         SetSpeakerName(line.lineType == LineType.Narration ? "" : line.speaker);
 
-        // ===== 1) 배경 / 캐릭터 스탠딩 갱신 =====
-        // 값이 비어 있는 칸은 StageController가 "이전 상태 유지"로 처리하므로,
-        // 여기서 굳이 빈 값인지 검사할 필요가 없다.
-        if (StageController.Instance != null)
-        {
-            // Transition/TransitionTime 칸이 비어 있으면 예전처럼 즉시 바뀐다(cut).
-            // "fade"라고 적으면 이전 배경이 녹아 사라지며 새 배경이 드러난다.
-            StageController.Instance.ApplyBackground(line.backgroundName, line.transition, line.transitionTime);
-            // 소품은 스탠딩보다 먼저 올린다(배경 → 소품 → 스탠딩 순서로 겹쳐 보이게).
-            StageController.Instance.ApplyProps(line.propNames);
-            StageController.Instance.ApplyStandings(line.standingNames);
-        }
-
-        // ===== 2) 사운드 =====
-        ApplyLineAudio(sfxSource, line.sfxToPlay);
-        ApplyLineAudio(bgmSource, line.bgmToPlay);
+        // ===== 1) 배경 / 캐릭터 스탠딩 갱신 + 2) 사운드 =====
+        // (조사 직후 암전에서는 ShowLineWithFade가 검은 화면 동안 미리 적용해 둔다 - 같은 값이면
+        //  다시 손대지 않으므로 여기서 한 번 더 불려도 깜빡이지 않는다)
+        ApplyLineStage(line, instant: false);
 
         // ===== 3) 아이템 획득 =====
         // CSV의 Item 칸에 아이템 id가 적혀 있으면 이 줄이 표시되는 순간 가방에 들어간다.
@@ -1090,7 +1186,7 @@ public class DialogueSystem : MonoBehaviour
             TimeAttackController.Instance?.StopIfRunning();
         }
 
-        // ===== 4-1) 대화 로그(아래 화살표) 기록 =====
+        // ===== 4-1) 대화 로그(위 화살표) 기록 =====
         // 실제 대사(NormalDialogue/Narration)만 남긴다. EventTrigger는 대사가 없는 연출
         // 전용 줄이라 로그에 빈 줄만 남기 때문에 제외한다 (DialogueLogController.cs 참고).
         if (DialogueLogController.Instance != null &&
@@ -1411,7 +1507,9 @@ public class DialogueSystem : MonoBehaviour
         // AUTO를 켜둔 채 조사에 들어가면, 조사 안내문이 다 찍힐 때마다 여기서 자동 진행이
         // 예약되어 조사 화면이 떠 있는 채로 본편 대사가 혼자 계속 넘어갔다. 화면에는 조사
         // 오브젝트와 "조사 그만하기"가 그대로 남아 있는데 대화창만 저 앞으로 가버리는 상태.
-        if (skipMode == SkipMode.None && !IsInvestigationActive() &&
+        //
+        // 대화창을 숨겨둔 동안(아래 화살표)도 예약하지 않는다 - 다시 보이게 할 때 예약한다.
+        if (skipMode == SkipMode.None && !IsInvestigationActive() && !dialogueHidden &&
             SettingsManager.Instance != null && SettingsManager.Instance.Current.autoAdvance)
         {
             StopAutoAdvanceRoutine();
@@ -1763,9 +1861,74 @@ public class DialogueSystem : MonoBehaviour
         return false;
     }
 
-    // 다른 스크립트(DialogueLogController의 아래 화살표 처리 등)가 "지금 새 오버레이를 열어도
+    // 다른 스크립트(DialogueLogController의 위 화살표 처리 등)가 "지금 새 오버레이를 열어도
     // 안전한 상태인가"를 확인할 때 쓴다 - 암전 중이거나 이미 다른 팝업이 떠 있으면 안전하지 않다.
     public bool CanOpenOverlay => !isFading && !IsBlockedByOtherUI();
+
+    // ===== 대화창 숨기기 (아래 화살표) =====
+    // 대화창을 끄지(SetActive) 않고 CanvasGroup으로 투명하게만 만든다. 끄면 대사 진행/타이핑
+    // 코루틴과 다른 스크립트(조사 대사 등)가 보는 "대화창이 켜져 있나" 상태가 바뀌어 버린다.
+    private bool dialogueHidden;
+    private CanvasGroup dialogueCanvasGroup;
+
+    // true를 돌려주면 이번 프레임의 입력은 여기서 다 썼다는 뜻 (Update가 바로 끝난다).
+    private bool Update_HideDialogue()
+    {
+        if (dialogueHidden)
+        {
+            // 대화창이 꺼졌거나(장면 전환/조사 대사 닫힘) 다른 창이 열리면 숨김을 풀어 둔다.
+            // 그대로 두면 다음에 대화창이 켜질 때 투명한 채로 나온다.
+            bool panelGone = dialoguePanel == null || !dialoguePanel.activeInHierarchy;
+            if (panelGone || IsBlockedByOtherUI())
+            {
+                SetDialogueHidden(false);
+                return false;
+            }
+
+            bool anyKey = Input.GetKeyDown(KeyCode.DownArrow) || Input.GetKeyDown(KeyCode.Space) ||
+                          Input.GetKeyDown(KeyCode.Return) || Input.GetKeyDown(KeyCode.KeypadEnter) ||
+                          (Input.GetMouseButtonDown(0) && !IsPointerOverButton());
+            if (anyKey) SetDialogueHidden(false);
+            return true;   // 숨긴 동안은 대사를 넘기지 않는다
+        }
+
+        if (Input.GetKeyDown(KeyCode.DownArrow) && dialoguePanel != null &&
+            dialoguePanel.activeInHierarchy && !IsBlockedByOtherUI())
+        {
+            SetDialogueHidden(true);
+            return true;
+        }
+        return false;
+    }
+
+    private void SetDialogueHidden(bool hidden)
+    {
+        if (dialoguePanel == null) return;
+        if (dialogueCanvasGroup == null)
+        {
+            dialogueCanvasGroup = dialoguePanel.GetComponent<CanvasGroup>();
+            if (dialogueCanvasGroup == null) dialogueCanvasGroup = dialoguePanel.AddComponent<CanvasGroup>();
+        }
+
+        dialogueHidden = hidden;
+        dialogueCanvasGroup.alpha = hidden ? 0f : 1f;
+        dialogueCanvasGroup.blocksRaycasts = !hidden;   // 숨긴 동안 AUTO/SKIP 버튼이 눌리지 않게
+
+        // 긴 독백의 어두운 판도 같이 숨긴다 (그림을 보려고 숨기는 것이므로).
+        if (longMonologueDim != null) longMonologueDim.SetActive(!hidden && longMonologueLayout && dialoguePanel.activeInHierarchy);
+
+        if (hidden)
+        {
+            // 숨긴 동안 대사가 넘어가지 않도록 스킵/자동 진행 예약을 멈춘다.
+            if (skipMode != SkipMode.None) SetSkipMode(SkipMode.None);
+            StopAutoAdvanceRoutine();
+        }
+        else if (currentLine != null && !isTyping && autoAdvanceRoutine == null && !IsBlockedByOtherUI())
+        {
+            // 다시 보이게 했을 때 이미 다 찍힌 줄이면 자동 진행을 다시 예약한다 (AUTO가 켜져 있을 때만 실제로 예약됨).
+            OnPageFullyShown();
+        }
+    }
 
     void Update()
     {
@@ -1775,12 +1938,16 @@ public class DialogueSystem : MonoBehaviour
         // 큰 글자 화면의 어두운 판은 대화창이 숨겨지면(조사 대사를 닫았을 때 등) 같이 숨긴다.
         if (longMonologueDim != null && dialoguePanel != null)
         {
-            bool dimShouldShow = longMonologueLayout && dialoguePanel.activeInHierarchy;
+            bool dimShouldShow = longMonologueLayout && dialoguePanel.activeInHierarchy && !dialogueHidden;
             if (longMonologueDim.activeSelf != dimShouldShow) longMonologueDim.SetActive(dimShouldShow);
         }
 
         // 암전 연출(ShowLineWithFade) 진행 중엔 스페이스/클릭으로 건너뛰지 못하게 막는다.
         if (isFading) return;
+
+        // 아래 화살표: 대화창 숨기기/보이기 (일러스트를 가리지 않고 보고 싶을 때).
+        // 숨긴 동안은 대사가 넘어가지 않고, 아래 화살표/스페이스/엔터/클릭 중 아무거나 누르면 다시 보인다.
+        if (Update_HideDialogue()) return;
 
         // 선택지 패널이나 UIManager 팝업(조사기록/인벤토리/사진첩/핸드폰/설정), 자료 뷰어가
         // 열려있을 땐 스페이스바로도 대사가 넘어가면 안 된다.

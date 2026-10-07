@@ -45,6 +45,10 @@ public class InvestigationController : MonoBehaviour
     [Header("'조사 그만하기' 버튼 문구")]
     public string exitButtonLabel = "조사 그만하기";
 
+    // 조사 화면 UI 그림 (Figma "Export (Unity) / Investigation"). git 제외 - 드라이브로 공유.
+    // 그림이 없으면 예전 어두운 칸/글자로 대신 그린다.
+    private const string UiArtFolder = "Illusts/UI/Investigation/";
+
     // 이번 조사에서 만들어낸 오브젝트들을 담아두는 부모. 조사가 끝나면 통째로 지운다.
     private GameObject hotspotRoot;
 
@@ -855,14 +859,19 @@ public class InvestigationController : MonoBehaviour
     {
         if (!inSession) return;
 
-        ClearHotspots();
+        // 오브젝트 그림은 바로 지우지 않는다 - 암전으로 화면이 다 어두워질 때까지 그 장면 그대로
+        // 남아 있어야 자연스럽다 (바로 지우면 암전 전에 오브젝트만 먼저 사라져 배경만 덩그러니 남았다).
+        // 버튼/화살표 같은 UI만 치우고 클릭을 막아 둔 뒤, DialogueSystem이 화면이 완전히
+        // 검어진 순간 ClearLeftoverHotspots()로 지운다.
+        FreezeHotspotsForExit();
         CorridorWatchController.Instance?.Stop();
 
         inSession = false;
         IsShowingTalkLine = false;
 
-        // 조사가 끝나면 대화창을 다시 켜서 다음 대사가 보이게 한다.
-        SetDialogueVisible(true);
+        // 대화창은 여기서 켜지 않는다. 조사 직후 줄은 암전(ShowLineWithFade)으로 이어지는데,
+        // 여기서 켜면 암전이 진행되는 동안 직전 대사가 남은 대화창이 그대로 떠 있었다.
+        // 대화창은 다음 대사가 실제로 표시되는 순간 DialogueSystem.ShowDialoguePanel()이 켠다.
 
         // 이 조사에서 거쳐 간 화면을 전부 마쳤다는 사실을 조사기록(수첩)에 남긴다.
         // (NextScreen/PrevScreen 화살표로 여러 화면을 오갔을 수 있으므로 activeScreenId
@@ -1057,22 +1066,41 @@ public class InvestigationController : MonoBehaviour
         rt.anchorMax = new Vector2(edgeX, 0.5f);
         rt.pivot = new Vector2(edgeX, 0.5f);
         rt.anchoredPosition = new Vector2(isNext ? -24f : 24f, 0f);
-        rt.sizeDelta = new Vector2(64f, 96f);
+        rt.sizeDelta = new Vector2(56f, 128f);   // 세로로 긴 칸 (Figma "InvestigationNavArrow")
 
+        // 꺾쇠가 그려진 그림. 마우스를 올리면 밝은 그림으로 바꾼다 (Button의 SpriteSwap).
         var img = go.GetComponent<Image>();
-        img.color = new Color(0f, 0f, 0f, 0.55f);
+        var button = go.GetComponent<Button>();
+        string dir = isNext ? "Right" : "Left";
+        var normal = UISpriteUtil.Load(UiArtFolder + "NavArrow_" + dir);
+        var hover = UISpriteUtil.Load(UiArtFolder + "NavArrow_" + dir + "_Hover");
+        if (normal != null)
+        {
+            img.sprite = normal;
+            img.color = Color.white;
+            button.transition = Selectable.Transition.SpriteSwap;
+            var state = button.spriteState;
+            state.highlightedSprite = hover;
+            state.pressedSprite = hover;
+            state.selectedSprite = normal;
+            button.spriteState = state;
+        }
+        else
+        {
+            // 그림이 없을 때(드라이브에서 아직 안 받은 사람): 예전처럼 어두운 칸 + 글자
+            img.color = new Color(0f, 0f, 0f, 0.55f);
+            var textGo = new GameObject("Text", typeof(RectTransform));
+            textGo.transform.SetParent(go.transform, false);
+            StretchFull(textGo.GetComponent<RectTransform>());
+            var tmp = textGo.AddComponent<TMPro.TextMeshProUGUI>();
+            tmp.text = isNext ? ">" : "<";
+            tmp.fontSize = 40;
+            tmp.alignment = TMPro.TextAlignmentOptions.Center;
+            tmp.color = Color.white;
+            tmp.raycastTarget = false;
+        }
 
-        var textGo = new GameObject("Text", typeof(RectTransform));
-        textGo.transform.SetParent(go.transform, false);
-        StretchFull(textGo.GetComponent<RectTransform>());
-        var tmp = textGo.AddComponent<TMPro.TextMeshProUGUI>();
-        tmp.text = isNext ? ">" : "<";
-        tmp.fontSize = 40;
-        tmp.alignment = TMPro.TextAlignmentOptions.Center;
-        tmp.color = Color.white;
-        tmp.raycastTarget = false;
-
-        go.GetComponent<Button>().onClick.AddListener(() => NavigateToLinkedScreen(targetScreenId));
+        button.onClick.AddListener(() => NavigateToLinkedScreen(targetScreenId));
 
         // 코드로 만든 글자라 기본 글꼴에는 한글이 없다(여기선 '>' '<' 뿐이라 실제로는
         // 문제 없지만, 다른 버튼들과 같은 방식을 맞춰 둔다).
@@ -1142,6 +1170,50 @@ public class InvestigationController : MonoBehaviour
         }
 
         go.GetComponent<Button>().onClick.AddListener(io.OnClickInspect);
+
+        // 마우스를 올리면 네 모서리 괄호 + 이름표 (HotspotHoverFocus.cs 참고)
+        var hover = go.AddComponent<HotspotHoverFocus>();
+        hover.displayName = !string.IsNullOrEmpty(data.objectName) ? data.objectName : io.talkSpeaker;
+
+        // 이미 조사한 오브젝트면 작은 체크 표시
+        if (inspectedHotspots.Contains(TextKey(activeScreenId, data.key))) AddCheckedBadge(go);
+    }
+
+    // ===== 조사한 오브젝트 표시 =====
+    // 이번 플레이 동안 한 번이라도 누른 오브젝트를 기억해 두고, 오른쪽 위에 작은 체크를 붙인다.
+    // 무엇을 이미 봤는지 헷갈리지 않게 하려는 표시라 세이브에는 넣지 않는다
+    // (불러오기 하면 다시 비어 있는 상태로 시작한다).
+    private static readonly HashSet<string> inspectedHotspots = new HashSet<string>();
+
+    private void MarkInspected(InvestigatableObject obj)
+    {
+        if (obj == null || string.IsNullOrEmpty(activeScreenId)) return;
+        if (inspectedHotspots.Add(TextKey(activeScreenId, obj.gameObject.name))) AddCheckedBadge(obj.gameObject);
+    }
+
+    private void AddCheckedBadge(GameObject hotspot)
+    {
+        if (hotspot.transform.Find("CheckedBadge") != null) return;
+        var sprite = UISpriteUtil.Load(UiArtFolder + "Hotspot_Checked");
+        if (sprite == null) return;
+
+        var go = new GameObject("CheckedBadge", typeof(RectTransform), typeof(Image));
+        go.transform.SetParent(hotspot.transform, false);
+        var rt = (RectTransform)go.transform;
+        rt.anchorMin = rt.anchorMax = rt.pivot = new Vector2(1f, 1f);
+        rt.anchoredPosition = Vector2.zero;
+        rt.sizeDelta = new Vector2(26f, 26f);
+        // 오브젝트 그림이 커지거나 작아져도(배치표의 scale) 체크 크기는 그대로 보이게 되돌린다.
+        var s = hotspot.transform.lossyScale;
+        if (s.x > 0.0001f && s.y > 0.0001f)
+        {
+            var canvasScale = hotspot.GetComponentInParent<Canvas>() != null
+                ? hotspot.GetComponentInParent<Canvas>().transform.lossyScale : Vector3.one;
+            go.transform.localScale = new Vector3(canvasScale.x / s.x, canvasScale.y / s.y, 1f);
+        }
+        var img = go.GetComponent<Image>();
+        img.sprite = sprite;
+        img.raycastTarget = false;
     }
 
     // ---------------------------------------------------------------------------------
@@ -1207,22 +1279,72 @@ public class InvestigationController : MonoBehaviour
         rt.anchorMax = new Vector2(1f, 1f);
         rt.pivot = new Vector2(1f, 1f);
         rt.anchoredPosition = new Vector2(-24f, -24f);
-        rt.sizeDelta = new Vector2(180f, 52f);
+        rt.sizeDelta = new Vector2(196f, 52f);
 
+        // 어두운 칸 그림 + [나가기 아이콘] 조사 그만하기. 마우스를 올리면 칸/글자/아이콘이 밝아진다.
         var img = go.GetComponent<Image>();
-        img.color = new Color(0f, 0f, 0f, 0.82f);
+        var button = go.GetComponent<Button>();
+        bool hasArt = UISpriteUtil.ApplySliced(img, UiArtFolder + "ExitButton_Default", 6f);
+        if (hasArt)
+        {
+            var hoverSprite = UISpriteUtil.LoadSliced(UiArtFolder + "ExitButton_Hover", 6f);
+            button.transition = Selectable.Transition.SpriteSwap;
+            var state = button.spriteState;
+            state.highlightedSprite = hoverSprite;
+            state.pressedSprite = hoverSprite;
+            state.selectedSprite = img.sprite;
+            button.spriteState = state;
+        }
+        else
+        {
+            img.color = new Color(0f, 0f, 0f, 0.82f);
+        }
+
+        var row = new GameObject("Content", typeof(RectTransform), typeof(HorizontalLayoutGroup));
+        row.transform.SetParent(go.transform, false);
+        StretchFull(row.GetComponent<RectTransform>());
+        var layout = row.GetComponent<HorizontalLayoutGroup>();
+        layout.childAlignment = TextAnchor.MiddleCenter;
+        layout.spacing = 10f;
+        layout.childControlWidth = true;
+        layout.childControlHeight = true;
+        layout.childForceExpandWidth = false;
+        layout.childForceExpandHeight = false;
+
+        Image icon = null;
+        var iconSprite = UISpriteUtil.Load(UiArtFolder + "Icon_Exit");
+        if (iconSprite != null)
+        {
+            var iconGo = new GameObject("Icon", typeof(RectTransform), typeof(Image), typeof(LayoutElement));
+            iconGo.transform.SetParent(row.transform, false);
+            icon = iconGo.GetComponent<Image>();
+            icon.sprite = iconSprite;          // 흰 아이콘 - 색은 아래에서 입힌다
+            icon.preserveAspect = true;
+            icon.raycastTarget = false;
+            var le = iconGo.GetComponent<LayoutElement>();
+            le.preferredWidth = 20f;
+            le.preferredHeight = 20f;
+        }
 
         var textGo = new GameObject("Text", typeof(RectTransform));
-        textGo.transform.SetParent(go.transform, false);
-        StretchFull(textGo.GetComponent<RectTransform>());
+        textGo.transform.SetParent(row.transform, false);
         var tmp = textGo.AddComponent<TMPro.TextMeshProUGUI>();
         tmp.text = exitButtonLabel;
-        tmp.fontSize = 22;
+        tmp.fontSize = 18;
         tmp.alignment = TMPro.TextAlignmentOptions.Center;
-        tmp.color = Color.white;
+        tmp.textWrappingMode = TMPro.TextWrappingModes.NoWrap;
         tmp.raycastTarget = false;
 
-        go.GetComponent<Button>().onClick.AddListener(Exit);
+        var normalColor = hasArt ? new Color(0.663f, 0.729f, 0.788f) : Color.white;   // A9BAC9
+        var hoverColor = hasArt ? new Color(0.851f, 0.89f, 0.922f) : Color.white;     // D9E3EB
+        tmp.color = normalColor;
+        if (icon != null) icon.color = normalColor;
+        var tint = go.AddComponent<UIHoverTint>();
+        tint.targets = icon != null ? new Graphic[] { icon, tmp } : new Graphic[] { tmp };
+        tint.normalColor = normalColor;
+        tint.hoverColor = hoverColor;
+
+        button.onClick.AddListener(Exit);
 
         // 코드로 만든 글자는 기본 글꼴에 한글 글자 모양이 없어 깨져 보인다.
         // 화면에서 한글이 잘 나오는 글꼴을 찾아 물려준다 (UIFontHelper.cs 참고).
@@ -1236,6 +1358,49 @@ public class InvestigationController : MonoBehaviour
             Destroy(hotspotRoot);
             hotspotRoot = null;
         }
+        ClearLeftoverHotspots();
+    }
+
+    // ===== 조사를 마친 뒤 잠깐 남겨 두는 오브젝트 그림 =====
+    // Exit() 직후 암전이 끝날 때까지 장면을 그대로 보여주기 위해 남겨 둔 것. 클릭은 막혀 있다.
+    private GameObject leftoverHotspotRoot;
+
+    private void FreezeHotspotsForExit()
+    {
+        ClearLeftoverHotspots();
+        if (hotspotRoot == null) return;
+
+        // 장면의 일부가 아닌 UI(조사 그만하기, 화살표, 마우스 올림 표시, 조사한 체크)는 바로 치운다.
+        foreach (var t in hotspotRoot.GetComponentsInChildren<Transform>(true))
+        {
+            if (t == null || t == hotspotRoot.transform) continue;
+            string n = t.name;
+            if (n == "Btn_ExitInvestigation" || n == "Btn_NextScreen" || n == "Btn_PrevScreen" ||
+                n == "__HotspotHover" || n == "CheckedBadge")
+            {
+                t.gameObject.SetActive(false);
+                Destroy(t.gameObject);
+            }
+        }
+
+        var group = hotspotRoot.GetComponent<CanvasGroup>();
+        if (group == null) group = hotspotRoot.AddComponent<CanvasGroup>();
+        group.interactable = false;
+        group.blocksRaycasts = false;   // 남아 있는 동안 눌리거나 마우스 올림 표시가 뜨지 않게
+
+        leftoverHotspotRoot = hotspotRoot;
+        hotspotRoot = null;
+    }
+
+    // DialogueSystem이 조사 직후 암전으로 화면이 완전히 검어진 순간(또는 암전 없이 다른
+    // 화면으로 넘어갈 때) 부른다. 남겨 둔 오브젝트 그림을 지운다.
+    public void ClearLeftoverHotspots()
+    {
+        if (leftoverHotspotRoot != null)
+        {
+            Destroy(leftoverHotspotRoot);
+            leftoverHotspotRoot = null;
+        }
     }
 
     // ---------------------------------------------------------------------------------
@@ -1247,6 +1412,9 @@ public class InvestigationController : MonoBehaviour
     {
         // 이전 오브젝트의 이어지는 대사가 남아 있으면 버린다 (다른 오브젝트를 눌렀을 때 섞이지 않게).
         pendingFollowUps = null;
+
+        // 한 번이라도 누른 오브젝트에는 작은 체크를 붙인다 (CreateHotspot 아래 MarkInspected 참고).
+        MarkInspected(obj);
 
         // ===== "엉뚱한 곳" 페널티 =====
         // 다른 처리(아이템 지급, 선택지 등)와는 완전히 별개로, 눌린 오브젝트가 WrongHotspots에

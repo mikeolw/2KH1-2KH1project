@@ -22,10 +22,16 @@ public class ToastNotificationManager : MonoBehaviour
     private const float HoldDuration = 2.5f;
     private const float SlideOutDuration = 0.3f;
 
-    private const float ToastWidth = 320f;
+    private const float ToastWidth = 340f;
     private const float ToastHeight = 64f;
 
-    // 조사 화면의 "조사 그만하기" 버튼(우상단, -24/-24, 180x52) 바로 아래 자리.
+    // 알림 그림 (Figma "Toast" - 어두운 칸 + 왼쪽 청회색 막대). git 제외 - 드라이브로 공유.
+    // 그림이 없으면 예전 검은 칸으로 대신 그린다.
+    private const string ArtFolder = "Illusts/UI/Investigation/";
+    private static readonly Color KickerColor = new Color(0.435f, 0.518f, 0.588f);    // 6F8496
+    private static readonly Color MessageColor = new Color(0.851f, 0.89f, 0.922f);    // D9E3EB
+
+    // 조사 화면의 "조사 그만하기" 버튼(우상단, -24/-24, 196x52) 바로 아래 자리.
     // 그 버튼이 없는 화면(#07 등)에서도 항상 같은 위치를 쓴다 - 화면마다 위치가
     // 들쭉날쭉해지는 것을 막기 위해서다.
     private const float RightInset = 24f;
@@ -35,8 +41,9 @@ public class ToastNotificationManager : MonoBehaviour
 
     private struct ToastRequest
     {
+        public string kicker;    // 위쪽 작은 분류 글자 (ITEM / NOTE)
         public string message;
-        public Sprite icon;
+        public Sprite icon;      // 아이템 그림. 없으면 메모 아이콘을 쓴다.
     }
 
     private readonly Queue<ToastRequest> queue = new Queue<ToastRequest>();
@@ -83,20 +90,20 @@ public class ToastNotificationManager : MonoBehaviour
         ItemDatabase.ItemInfo info = ItemDatabase.Get(itemId);
         if (info == null) return;
 
-        Enqueue($"{info.displayName} 획득", info.GetIcon());
+        Enqueue("ITEM", $"{info.displayName} 획득", info.GetIcon());
     }
 
     private void OnNoteAdded()
     {
         // 메모 내용은 스포일러가 될 수 있어 보여주지 않고, 추가되었다는 사실만 알린다.
-        Enqueue("새 메모가 추가되었습니다", null);
+        Enqueue("NOTE", "새 메모가 추가되었습니다", null);
     }
 
-    private void Enqueue(string message, Sprite icon)
+    private void Enqueue(string kicker, string message, Sprite icon)
     {
         if (canvasTransform == null) return;
 
-        queue.Enqueue(new ToastRequest { message = message, icon = icon });
+        queue.Enqueue(new ToastRequest { kicker = kicker, message = message, icon = icon });
         if (!isShowing) StartCoroutine(ProcessQueue());
     }
 
@@ -126,45 +133,69 @@ public class ToastNotificationManager : MonoBehaviour
         rt.sizeDelta = new Vector2(ToastWidth, ToastHeight);
 
         var bg = go.GetComponent<Image>();
-        bg.color = new Color(0f, 0f, 0f, 0.82f);
+        bool hasArt = UISpriteUtil.ApplySliced(bg, ArtFolder + "Toast", 8f);
+        if (!hasArt) bg.color = new Color(0f, 0f, 0f, 0.82f);
         bg.raycastTarget = false;
 
-        float contentStartX = 16f;
-
-        if (request.icon != null)
+        // 아이콘: 아이템이면 아이템 그림(40px), 메모면 메모 아이콘(24px)
+        Sprite iconSprite = request.icon != null ? request.icon : UISpriteUtil.Load(ArtFolder + "Icon_Memo");
+        float contentStartX = 18f;
+        if (iconSprite != null)
         {
+            bool isItem = request.icon != null;
+            float size = isItem ? 40f : 24f;
             var iconGo = new GameObject("Icon", typeof(RectTransform), typeof(Image));
             iconGo.transform.SetParent(go.transform, false);
 
             var iconRt = iconGo.GetComponent<RectTransform>();
             iconRt.anchorMin = iconRt.anchorMax = new Vector2(0f, 0.5f);
             iconRt.pivot = new Vector2(0f, 0.5f);
-            iconRt.anchoredPosition = new Vector2(12f, 0f);
-            iconRt.sizeDelta = new Vector2(40f, 40f);
+            iconRt.anchoredPosition = new Vector2(isItem ? 14f : 20f, 0f);
+            iconRt.sizeDelta = new Vector2(size, size);
 
             var iconImg = iconGo.GetComponent<Image>();
-            iconImg.sprite = request.icon;
+            iconImg.sprite = iconSprite;
             iconImg.preserveAspect = true;
             iconImg.raycastTarget = false;
 
-            contentStartX = 64f;
+            contentStartX = isItem ? 64f : 58f;
         }
 
+        // 위: 작은 분류 글자 (ITEM / NOTE)
+        var kickerGo = new GameObject("Kicker", typeof(RectTransform));
+        kickerGo.transform.SetParent(go.transform, false);
+        var kickerRt = kickerGo.GetComponent<RectTransform>();
+        kickerRt.anchorMin = new Vector2(0f, 1f);
+        kickerRt.anchorMax = new Vector2(1f, 1f);
+        kickerRt.pivot = new Vector2(0f, 1f);
+        kickerRt.offsetMin = new Vector2(contentStartX, -28f);
+        kickerRt.offsetMax = new Vector2(-14f, -11f);
+        var kicker = kickerGo.AddComponent<TextMeshProUGUI>();
+        kicker.text = request.kicker;
+        kicker.fontSize = 11;
+        kicker.fontStyle = FontStyles.Bold;
+        kicker.characterSpacing = 30f;
+        kicker.alignment = TextAlignmentOptions.TopLeft;
+        kicker.color = hasArt ? KickerColor : new Color(1f, 1f, 1f, 0.6f);
+        kicker.raycastTarget = false;
+
+        // 아래: 알림 문구
         var textGo = new GameObject("Text", typeof(RectTransform));
         textGo.transform.SetParent(go.transform, false);
 
         var textRt = textGo.GetComponent<RectTransform>();
         textRt.anchorMin = Vector2.zero;
         textRt.anchorMax = Vector2.one;
-        textRt.offsetMin = new Vector2(contentStartX, 4f);
-        textRt.offsetMax = new Vector2(-12f, -4f);
+        textRt.offsetMin = new Vector2(contentStartX, 8f);
+        textRt.offsetMax = new Vector2(-14f, -27f);
 
         var tmp = textGo.AddComponent<TextMeshProUGUI>();
         tmp.text = request.message;
-        tmp.fontSize = 22;
-        tmp.alignment = TextAlignmentOptions.MidlineLeft;
-        tmp.color = Color.white;
+        tmp.fontSize = 17;
+        tmp.alignment = TextAlignmentOptions.TopLeft;
+        tmp.color = hasArt ? MessageColor : Color.white;
         tmp.overflowMode = TextOverflowModes.Ellipsis;
+        tmp.textWrappingMode = TextWrappingModes.NoWrap;
         tmp.raycastTarget = false;
 
         // 코드로 만든 글자는 기본 글꼴에 한글이 없어 깨져 보인다 (InvestigationController.CreateExitButton 참고).
