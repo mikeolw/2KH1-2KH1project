@@ -40,6 +40,8 @@ public class ItemModalController : MonoBehaviour
         if (itemDescriptionText != null) itemDescriptionText.text = description;
 
         panel.SetActive(true);
+        // 조사 상세는 퀵바/알림 등 다른 UI보다 항상 위에 (UITopLayer.cs 참고)
+        UITopLayer.MakeTopmost(panel, UITopLayer.InvestigationDetailOrder);
     }
 
     // 배경(반투명 검은 부분) 클릭이나 닫기 버튼의 OnClick에 연결한다.
