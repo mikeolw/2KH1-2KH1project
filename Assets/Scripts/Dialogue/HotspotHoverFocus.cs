@@ -45,6 +45,11 @@ public class HotspotHoverFocus : MonoBehaviour, IPointerEnterHandler, IPointerEx
     private static AudioClip hoverSfxClip;
     private static bool hoverSfxLoaded;
 
+    // 오브젝트 사이를 빠르게 훑으면 소리가 연달아 겹쳐 거슬리므로, 마지막으로 낸 뒤 이 시간(초)
+    // 안에 다시 올리면 소리를 내지 않는다. (괄호/이름표 표시는 그대로 바뀐다)
+    private const float HoverSfxMinInterval = 0.15f;
+    private static float lastHoverSfxTime = -1f;
+
     private static void PlayHoverSound()
     {
         if (!hoverSfxLoaded)
@@ -53,6 +58,8 @@ public class HotspotHoverFocus : MonoBehaviour, IPointerEnterHandler, IPointerEx
             hoverSfxLoaded = true;
         }
         if (hoverSfxClip == null) return;
+        if (lastHoverSfxTime >= 0f && Time.unscaledTime - lastHoverSfxTime < HoverSfxMinInterval) return;
+        lastHoverSfxTime = Time.unscaledTime;
 
         if (hoverSfxSource == null)   // 씬이 바뀌어 사라졌으면 다시 만든다
         {
