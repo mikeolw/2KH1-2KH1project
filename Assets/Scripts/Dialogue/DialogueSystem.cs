@@ -680,6 +680,8 @@ public class DialogueSystem : MonoBehaviour
     void Start()
     {
         StyleDialogueBox();
+        // 선택지 버튼 모양 (청회색 테마) - 대본/조사/추리 선택지 모두 이 패널을 같이 쓴다 (ChoicePanelStyle.cs 참고)
+        ChoicePanelStyle.Attach(choicePanel, choiceContainer, dialoguePanel);
 
         sfxSource = GetComponent<AudioSource>();
         if (sfxSource == null) sfxSource = gameObject.AddComponent<AudioSource>();
