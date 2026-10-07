@@ -33,6 +33,36 @@ public class HotspotHoverFocus : MonoBehaviour, IPointerEnterHandler, IPointerEx
         // 대사가 떠 있는 동안에는 표시하지 않는다 (대사를 읽는 중에 이름표가 깜빡이면 거슬린다).
         if (InvestigationController.Instance != null && InvestigationController.Instance.IsShowingTalkLine) return;
         Show();
+        PlayHoverSound();
+    }
+
+    // ===== 마우스를 올렸을 때 효과음 =====
+    // Assets/Resources/Sounds/SFX/HotspotHover_SFX.mp3 (git 제외 - 드라이브 공유). 없으면 소리 없이 넘어간다.
+    // 오브젝트마다 AudioSource를 두지 않고 하나만 만들어 같이 쓴다. 효과음 볼륨 설정을 따르도록
+    // AudioManager에 효과음으로 등록한다.
+    private const string HoverSfxPath = "Sounds/SFX/HotspotHover_SFX";
+    private static AudioSource hoverSfxSource;
+    private static AudioClip hoverSfxClip;
+    private static bool hoverSfxLoaded;
+
+    private static void PlayHoverSound()
+    {
+        if (!hoverSfxLoaded)
+        {
+            hoverSfxClip = Resources.Load<AudioClip>(HoverSfxPath);
+            hoverSfxLoaded = true;
+        }
+        if (hoverSfxClip == null) return;
+
+        if (hoverSfxSource == null)   // 씬이 바뀌어 사라졌으면 다시 만든다
+        {
+            var go = new GameObject("HotspotHoverSfx");
+            hoverSfxSource = go.AddComponent<AudioSource>();
+            hoverSfxSource.playOnAwake = false;
+            hoverSfxSource.spatialBlend = 0f;
+            AudioManager.RegisterSafe(hoverSfxSource, AudioManager.Channel.Sfx);
+        }
+        hoverSfxSource.PlayOneShot(hoverSfxClip);
     }
 
     public void OnPointerExit(PointerEventData eventData) => Hide();
