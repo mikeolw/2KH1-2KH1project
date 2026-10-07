@@ -36,6 +36,31 @@ public static class UISpriteUtil
         return sliced;
     }
 
+    // 가장자리 두께가 변마다 다를 때 (x=왼쪽, y=아래, z=오른쪽, w=위 - 그림 픽셀 기준).
+    // 예: 세이브 슬롯은 왼쪽 번호 칸(구분선 포함)을 통째로 유지해야 해서 왼쪽만 두껍다.
+    public static Sprite LoadSliced(string path, Vector4 border)
+    {
+        string key = path + "#" + border;
+        if (slicedCache.TryGetValue(key, out var cached) && cached != null) return cached;
+
+        var src = Load(path);
+        Sprite sliced = src == null ? null : Sprite.Create(src.texture, src.rect, new Vector2(0.5f, 0.5f), src.pixelsPerUnit,
+                                                           0, SpriteMeshType.FullRect, border);
+        slicedCache[key] = sliced;
+        return sliced;
+    }
+
+    public static bool ApplySliced(Image img, string path, Vector4 border)
+    {
+        var sprite = LoadSliced(path, border);
+        if (sprite == null) return false;
+        img.sprite = sprite;
+        img.type = Image.Type.Sliced;
+        img.pixelsPerUnitMultiplier = 2f;
+        img.color = Color.white;
+        return true;
+    }
+
     // @2x 그림을 가장자리 유지(Sliced)로 Image에 넣는다. 그림이 없으면 false.
     public static bool ApplySliced(Image img, string path, float border)
     {
