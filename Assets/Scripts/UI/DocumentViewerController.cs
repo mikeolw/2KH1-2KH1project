@@ -15,13 +15,20 @@ using TMPro;
 // 시나리오상 서류(사건 자료, 회의 기록, 계약서)나 사진(SD카드 속 현장 사진)은 글씨를 읽거나
 // 그림을 자세히 봐야 하는 자료라서, 작은 팝업이 아니라 전체 화면으로 봐야 한다.
 //
-// ===== 지금은 Placeholder다 =====
-// 정식 아트(서류 종이 질감, 사진 앨범 프레임 등)가 아직 없으므로, 지금은
-//   - 화면 전체를 덮는 어두운 배경
-//   - 그 위에 자료 그림 한 장을 크게
-//   - 여러 장이면 좌우에 "이전/다음" 버튼과 "2 / 4" 같은 쪽수 표시
-// 만 보여준다. 바깥(어두운 배경)을 클릭하면 닫힌다.
-// 나중에 아트가 나오면 이 스크립트는 그대로 두고 씬의 패널 모양만 꾸미면 된다.
+// ===== 화면 (Figma "Screen / Document Viewer" - 청회색 테마) =====
+//   ▬ EVIDENCE · DOCUMENT                          [🔍 100% | 원래대로] [X]
+//   유류품 목록                                                          ESC
+//   ──────────────────────────────────────────────────────────────────────
+//   ┌ ·                                                                · ┐
+//   │ [‹]                  [   자료 그림   ]                         [›] │
+//   └ ·                                                                · ┘
+//   ──────────────────────────────────────────────────────────────────────
+//   경찰서에 보관된 한성의 유류품 목록. …                        01 / 04
+//                                                                ▬ ▬ ▬ ▬
+//   ← → 넘기기 · 휠 확대·축소 · 끌어서 이동 · Esc 닫기
+//
+// 모양이 전부 선/상자뿐이라 그림 파일 없이 코드로 그린다 (드라이브에서 받을 것 없음).
+// 화면 좌표는 Figma 1440x1080 기준 그대로다.
 //
 // ===== 씬 배치 (유니티를 잘 모르는 팀원을 위한 설명) =====
 // 아래 필드들을 인스펙터에서 연결해도 되고, 비워두면 게임 시작 시 Canvas 아래에
@@ -35,7 +42,7 @@ public class DocumentViewerController : MonoBehaviour
     public GameObject panel;
     [Tooltip("자료 그림이 표시될 Image")]
     public Image pageImage;
-    [Tooltip("'2 / 4' 처럼 몇 번째 장인지 보여주는 텍스트")]
+    [Tooltip("'01' 처럼 몇 번째 장인지 보여주는 텍스트")]
     public TMP_Text pageLabel;
     [Tooltip("자료 제목(아이템 이름)")]
     public TMP_Text titleLabel;
@@ -50,9 +57,9 @@ public class DocumentViewerController : MonoBehaviour
 
     [Tooltip("자료 그림을 담는 틀. 확대했을 때 이 틀 밖으로 삐져나온 부분이 잘린다.")]
     public RectTransform pageViewport;
-    [Tooltip("자료 오른쪽 위 구석의 돋보기 버튼. 누르면 확대 모드가 켜진다.")]
+    [Tooltip("오른쪽 위 돋보기 칸. 누르면 원래 크기로 되돌린다.")]
     public Button zoomButton;
-    [Tooltip("확대 모드일 때 배율과 조작법을 알려주는 텍스트")]
+    [Tooltip("지금 확대 배율('100%')을 보여주는 텍스트")]
     public TMP_Text zoomLabel;
 
     [Header("자동 생성 시 사용할 캔버스 (비워두면 씬에서 찾는다)")]
@@ -62,10 +69,42 @@ public class DocumentViewerController : MonoBehaviour
     private readonly List<Sprite> pages = new List<Sprite>();
     private int pageIndex;
 
+    // 자동 생성한 화면에만 있는 것들 (머리말, 쪽수 막대, 넘김 화살표 모양)
+    private TMP_Text kickerLabel;
+    private TMP_Text pageTotalLabel;
+    private RectTransform pageSegmentRoot;
+    private readonly List<Image> pageSegments = new List<Image>();
+    private ArrowView prevArrow, nextArrow;
+
+    // ===== 색 (Figma 청회색 테마 - 대사 기록/세이브 화면과 같은 값) =====
+    private static readonly Color AccentColor   = Hex(0x8FA4B7);
+    private static readonly Color KickerColor   = Hex(0x6F8496);
+    private static readonly Color TitleColor    = Hex(0xE4EAEF);
+    private static readonly Color BodyColor     = Hex(0xD2DAE1);
+    private static readonly Color HintColor     = Hex(0x7B8A98);
+    private static readonly Color EscColor      = Hex(0x6C7C8B);
+    private static readonly Color IconColor     = Hex(0xA9BAC9);
+    private static readonly Color DividerColor  = Hex(0x2A3540);
+    private static readonly Color BoxLineColor  = Hex(0x34414D);
+    private static readonly Color BoxLineHover  = Hex(0x5A6B7B);
+    private static readonly Color ViewportColor = Hex(0x0B1015);
+    private static readonly Color ArrowFill     = new Color(0.063f, 0.086f, 0.114f, 0.85f);  // 10161D 85%
+    private static readonly Color ArrowLineOn   = Hex(0x3A4855);
+    private static readonly Color ArrowLineOff  = Hex(0x26303A);
+    private static readonly Color ChevronOn     = Hex(0xC3D0DC);
+    private static readonly Color ChevronOff    = Hex(0x3E4B57);
+
+    // ===== 배치 (Figma 1440x1080 기준, 왼쪽 위가 0,0) =====
+    private const float ScreenW = 1440f, ScreenH = 1080f;
+    private const float Margin = 120f;                         // 좌우 여백
+    private const float ContentW = ScreenW - Margin * 2f;      // 1200
+    private const float ViewportY = 160f, ViewportH = 700f;
+    private const float PageInsetX = 120f, PageInsetY = 24f;  // 자료 칸 안에서 그림이 차지하는 영역의 여백 (좌우 화살표 자리)
+
     // ===== 확대 / 축소 =====
     // 서류 글씨가 작아서 그냥 크게 띄우는 것만으로는 안 읽히는 경우가 있다. 뷰어가 열려 있는
     // 동안에는 언제나 휠로 확대/축소하고 끌어서 움직일 수 있다(창은 그대로, 그림만 커진다).
-    // 돋보기 버튼은 켜고 끄는 스위치가 아니라 "원래 크기로 되돌리기"다.
+    // 돋보기 칸은 켜고 끄는 스위치가 아니라 "원래 크기로 되돌리기"다.
     private const float ZoomMin = 1f;      // 1배 = 원래 크기
     private const float ZoomMax = 8f;      // 초근접
     private const float ZoomStep = 0.5f;   // 휠 한 칸
@@ -82,6 +121,14 @@ public class DocumentViewerController : MonoBehaviour
 
         EnsureUI();
         if (panel != null) panel.SetActive(false);
+    }
+
+    // ← → 로 장 넘기기. (Esc로 닫기는 UIManager가 한다)
+    private void Update()
+    {
+        if (!IsOpen) return;
+        if (Input.GetKeyDown(KeyCode.LeftArrow)) PrevPage();
+        else if (Input.GetKeyDown(KeyCode.RightArrow)) NextPage();
     }
 
     // ---------------------------------------------------------------------------------
@@ -119,12 +166,14 @@ public class DocumentViewerController : MonoBehaviour
             return false;
         }
 
-        Show(info.displayName, info.description, sprites);
+        string kicker = info.viewerType == ItemDatabase.ItemViewerType.Photo
+            ? "EVIDENCE  ·  PHOTO" : "EVIDENCE  ·  DOCUMENT";
+        Show(info.displayName, info.description, sprites, kicker);
         return true;
     }
 
     // 그림 목록을 직접 넘겨서 뷰어를 연다. (아이템이 아닌 자료를 보여줄 때도 쓸 수 있게 열어둠)
-    public void Show(string title, string description, List<Sprite> sprites)
+    public void Show(string title, string description, List<Sprite> sprites, string kicker = "EVIDENCE  ·  DOCUMENT")
     {
         if (panel == null) return;
 
@@ -134,8 +183,13 @@ public class DocumentViewerController : MonoBehaviour
 
         if (titleLabel != null) titleLabel.text = title;
         if (descriptionLabel != null) descriptionLabel.text = description;
+        if (kickerLabel != null) kickerLabel.text = kicker;
 
         panel.SetActive(true);
+        // 조사 상세는 퀵바/알림 등 다른 UI보다 항상 위에. 같은 Canvas 형제 순서만으로는
+        // 나중에 만들어진 UI가 다시 위로 올라오므로 정렬 순서를 따로 준다 (UITopLayer.cs 참고).
+        UITopLayer.MakeTopmost(panel, UITopLayer.InvestigationDetailOrder);
+        BuildPageSegments();
         RefreshPage();
     }
 
@@ -153,11 +207,11 @@ public class DocumentViewerController : MonoBehaviour
     // 뷰어가 열려 있는 동안에는 따로 켤 것 없이 언제나 쓸 수 있다.
     //   - 마우스 휠 : 확대 / 축소 (100% ~ 800%)
     //   - 끌기      : 확대한 그림을 움직여 원하는 곳을 본다
-    //   - 돋보기 버튼 : 원래 크기로 되돌리기
+    //   - 돋보기 칸 : 원래 크기로 되돌리기
     // 그래서 자료 그림이 마우스 입력을 직접 받는다(raycastTarget). "아무 데나 누르면 닫힌다"는
     // 기존 동작은 ZoomInputRelay.OnPointerClick이 대신 처리한다.
 
-    // 돋보기 버튼: 원래 크기(100%)로 되돌린다.
+    // 돋보기 칸: 원래 크기(100%)로 되돌린다.
     public void ResetZoom()
     {
         zoomScale = 1f;
@@ -196,11 +250,13 @@ public class DocumentViewerController : MonoBehaviour
     }
 
     // 그림을 너무 많이 끌어 화면 밖으로 사라지지 않게 가둔다.
+    // (그림 영역을 키운 만큼만 움직일 수 있다 - 커진 그림의 가장자리가 자료 칸 가장자리까지 오면 멈춤)
     private void ClampPan()
     {
         if (pageImage == null || pageViewport == null) return;
         Vector2 view = pageViewport.rect.size;
-        Vector2 limit = (view * zoomScale - view) * 0.5f;
+        Vector2 page = pageImage.rectTransform.rect.size;
+        Vector2 limit = (page * zoomScale - view) * 0.5f;
         limit = new Vector2(Mathf.Max(0f, limit.x), Mathf.Max(0f, limit.y));
         Vector2 pos = pageImage.rectTransform.anchoredPosition;
         pageImage.rectTransform.anchoredPosition =
@@ -210,10 +266,9 @@ public class DocumentViewerController : MonoBehaviour
     private void UpdateZoomLabel()
     {
         if (zoomLabel == null) return;
-        zoomLabel.gameObject.SetActive(true);
-        zoomLabel.text = IsZoomed
-            ? $"{Mathf.RoundToInt(zoomScale * 100)}%   휠: 확대·축소   끌기: 이동"
-            : "휠: 확대·축소";
+        zoomLabel.text = $"{Mathf.RoundToInt(zoomScale * 100)}%";
+        // 확대 중이면 배율 글자를 강조색으로 - "지금 커져 있다"는 걸 한눈에 알게
+        zoomLabel.color = IsZoomed ? AccentColor : BodyColor;
     }
 
     // ---------------------------------------------------------------------------------
@@ -261,22 +316,56 @@ public class DocumentViewerController : MonoBehaviour
         if (pageLabel != null)
         {
             pageLabel.gameObject.SetActive(multiPage);
-            pageLabel.text = $"{pageIndex + 1} / {pages.Count}";
+            // 자동 생성 화면은 "01" + "/ 04" 두 글자로 나눠 그린다. 인스펙터로 연결한 예전 화면은 한 줄로.
+            pageLabel.text = pageTotalLabel != null ? (pageIndex + 1).ToString("00") : $"{pageIndex + 1} / {pages.Count}";
+        }
+        if (pageTotalLabel != null)
+        {
+            pageTotalLabel.gameObject.SetActive(multiPage);
+            pageTotalLabel.text = "/ " + pages.Count.ToString("00");
+        }
+        if (pageSegmentRoot != null)
+        {
+            pageSegmentRoot.gameObject.SetActive(multiPage);
+            for (int i = 0; i < pageSegments.Count; i++)
+                pageSegments[i].color = i == pageIndex ? AccentColor : BoxLineColor;
         }
         if (prevButton != null)
         {
             prevButton.gameObject.SetActive(multiPage);
             prevButton.interactable = pageIndex > 0;
+            prevArrow?.Refresh();
         }
         if (nextButton != null)
         {
             nextButton.gameObject.SetActive(multiPage);
             nextButton.interactable = pageIndex < pages.Count - 1;
+            nextArrow?.Refresh();
+        }
+    }
+
+    // 쪽수 막대(▬ ▬ ▬ ▬)를 장 수만큼 만든다. 오른쪽 끝을 맞춰 왼쪽으로 늘어난다.
+    private void BuildPageSegments()
+    {
+        if (pageSegmentRoot == null) return;
+        foreach (var s in pageSegments) if (s != null) Destroy(s.gameObject);
+        pageSegments.Clear();
+
+        const float segW = 26f, segH = 3f, gap = 6f;
+        int count = pages.Count;
+        float total = count * segW + (count - 1) * gap;
+        for (int i = 0; i < count; i++)
+        {
+            var img = AddRect(pageSegmentRoot, "Seg" + i, 0f, 0f, segW, segH, BoxLineColor);
+            var rt = img.rectTransform;
+            rt.anchorMin = rt.anchorMax = rt.pivot = new Vector2(1f, 1f);
+            rt.anchoredPosition = new Vector2(-(total - segW - i * (segW + gap)), 0f);
+            pageSegments.Add(img);
         }
     }
 
     // ---------------------------------------------------------------------------------
-    // UI 자동 생성 (씬을 아직 안 꾸민 상태에서도 동작하게 하는 편의 기능)
+    // UI 자동 생성 (Figma "Screen / Document Viewer")
     // ---------------------------------------------------------------------------------
     private void EnsureUI()
     {
@@ -295,38 +384,88 @@ public class DocumentViewerController : MonoBehaviour
         panel = new GameObject("DocumentViewerPanel", typeof(RectTransform));
         panel.transform.SetParent(targetCanvas.transform, false);
         StretchFull(panel.GetComponent<RectTransform>());
-        // 다른 UI보다 항상 위에 뜨도록 계층의 맨 마지막으로 보낸다.
         panel.transform.SetAsLastSibling();
 
-        // 바깥 어두운 배경 (클릭하면 닫힘)
+        // 바깥 검은 막 (클릭하면 닫힘) - 퀵바 창/환경설정과 같은 97%
         var backdrop = new GameObject("Backdrop", typeof(RectTransform), typeof(Image), typeof(Button));
         backdrop.transform.SetParent(panel.transform, false);
         StretchFull(backdrop.GetComponent<RectTransform>());
-        backdrop.GetComponent<Image>().color = new Color(0f, 0f, 0f, 0.85f);
+        backdrop.GetComponent<Image>().color = new Color(0f, 0f, 0f, 0.97f);
         backdropButton = backdrop.GetComponent<Button>();
         backdropButton.transition = Selectable.Transition.None; // 눌렀을 때 색이 변하면 어색하다
         backdropButton.onClick.AddListener(Hide);
 
-        // ===== 자료 그림은 화면을 거의 꽉 채운다 =====
-        // 서류 그림은 A4 세로 비율(992x1403)이라 preserveAspect를 켜두면 세로 길이에 맞춰
-        // 들어간다. 예전에는 이 칸이 화면의 가로 36% x 세로 30%밖에 안 돼서, 1920x1080
-        // 기준으로 서류가 229x324로 줄어들어 글씨를 읽을 수 없었다. 세로를 81%까지 넓혀
-        // 875px 높이로 띄운다(약 2.7배). 가로를 넉넉히 준 것은 사진처럼 가로로 긴 자료도
-        // 같은 칸을 쓰기 때문이다 - 세로 자료는 preserveAspect가 알아서 가운데로 모아준다.
-        // 자료를 담는 틀. RectMask2D를 붙여두면 확대했을 때 이 틀 밖으로 나간 부분이 잘려서,
-        // 확대한 그림이 제목이나 설명 위를 덮지 않는다.
-        var viewGo = new GameObject("PageViewport", typeof(RectTransform), typeof(RectMask2D));
-        viewGo.transform.SetParent(panel.transform, false);
-        pageViewport = viewGo.GetComponent<RectTransform>();
-        pageViewport.anchorMin = new Vector2(0.06f, 0.13f);
-        pageViewport.anchorMax = new Vector2(0.94f, 0.94f);
-        pageViewport.offsetMin = Vector2.zero;
-        pageViewport.offsetMax = Vector2.zero;
+        // Figma 1440x1080 화면을 그대로 옮겨 놓을 틀 (화면 정가운데)
+        var boxGo = new GameObject("Box", typeof(RectTransform));
+        boxGo.transform.SetParent(panel.transform, false);
+        var box = (RectTransform)boxGo.transform;
+        box.anchorMin = box.anchorMax = box.pivot = new Vector2(0.5f, 0.5f);
+        box.sizeDelta = new Vector2(ScreenW, ScreenH);
 
+        // ----- 머리말 -----
+        AddRect(box, "TopAccent", Margin, 36f, 120f, 3f, AccentColor);
+        kickerLabel = CreateText(box, "Kicker", "EVIDENCE  ·  DOCUMENT", 14, FontStyles.Bold, KickerColor);
+        kickerLabel.characterSpacing = 20f;
+        PlaceTopLeft(kickerLabel.rectTransform, Margin, 52f, 600f, 20f);
+        titleLabel = CreateText(box, "TitleLabel", "", 36, FontStyles.Bold, TitleColor);
+        PlaceTopLeft(titleLabel.rectTransform, Margin, 68f, 900f, 54f);
+
+        // 돋보기 칸 [🔍 100% | 원래대로] - 누르면 원래 크기로
+        var zoomBox = CreateOutlinedButton(box, "ZoomButton", 1080f, 60f, 176f, 48f, ResetZoom, out var zoomBorder);
+        zoomButton = zoomBox;
+        var mag = new GameObject("Icon", typeof(RectTransform), typeof(Image));
+        mag.transform.SetParent(zoomBox.transform, false);
+        PlaceTopLeft((RectTransform)mag.transform, 14f, 12f, 24f, 24f);
+        var magImg = mag.GetComponent<Image>();
+        magImg.sprite = CreateMagnifierSprite();
+        magImg.color = IconColor;
+        magImg.raycastTarget = false;
+        zoomLabel = CreateText(zoomBox.transform, "ZoomLabel", "100%", 16, FontStyles.Bold, BodyColor);
+        zoomLabel.alignment = TextAlignmentOptions.MidlineLeft;
+        PlaceTopLeft(zoomLabel.rectTransform, 46f, 0f, 54f, 48f);
+        AddRect(zoomBox.transform, "Sep", 100f, 14f, 1f, 20f, BoxLineColor);
+        var reset = CreateText(zoomBox.transform, "ResetLabel", "원래대로", 14, FontStyles.Normal, HintColor);
+        reset.alignment = TextAlignmentOptions.MidlineLeft;
+        PlaceTopLeft(reset.rectTransform, 112f, 0f, 60f, 48f);
+        zoomBox.gameObject.AddComponent<HoverLine>().Init(zoomBorder, new Graphic[] { reset }, HintColor, IconColor);
+
+        // 닫기 X + ESC
+        var close = CreateOutlinedButton(box, "CloseButton", 1272f, 60f, 48f, 48f, Hide, out var closeBorder);
+        var crossA = AddRect(close.transform, "CrossA", 0f, 0f, 16f, 1.6f, IconColor);
+        var crossB = AddRect(close.transform, "CrossB", 0f, 0f, 16f, 1.6f, IconColor);
+        CenterRotated(crossA.rectTransform, Vector2.zero, 45f);
+        CenterRotated(crossB.rectTransform, Vector2.zero, -45f);
+        close.gameObject.AddComponent<HoverLine>().Init(closeBorder, new Graphic[] { crossA, crossB }, IconColor, TitleColor);
+        var esc = CreateText(box, "EscHint", "ESC", 11, FontStyles.Bold, EscColor);
+        esc.alignment = TextAlignmentOptions.Top;
+        esc.characterSpacing = 10f;
+        PlaceTopLeft(esc.rectTransform, 1272f, 114f, 48f, 16f);
+
+        AddRect(box, "HeadDivider", Margin, 136f, ContentW, 1f, DividerColor);
+
+        // ----- 자료 칸 -----
+        // RectMask2D: 확대했을 때 이 칸 밖으로 나간 부분을 잘라서 제목이나 설명 위를 덮지 않게 한다.
+        var viewGo = new GameObject("PageViewport", typeof(RectTransform), typeof(Image), typeof(RectMask2D));
+        viewGo.transform.SetParent(box, false);
+        pageViewport = (RectTransform)viewGo.transform;
+        PlaceTopLeft(pageViewport, Margin, ViewportY, ContentW, ViewportH);
+        var viewImg = viewGo.GetComponent<Image>();
+        viewImg.color = ViewportColor;
+        viewImg.raycastTarget = false;   // 그림 밖 빈 곳을 누르면 뒤의 검은 막이 받아서 닫힌다
+        AddBorder(pageViewport, DividerColor, 1f);
+
+        // ===== 자료 그림 =====
+        // 서류 그림은 A4 세로 비율(992x1403)이라 preserveAspect를 켜두면 세로 길이에 맞춰
+        // 들어간다(약 650px 높이). 가로를 넉넉히 준 것은 사진처럼 가로로 긴 자료도 같은 칸을
+        // 쓰기 때문이다 - 세로 자료는 preserveAspect가 알아서 가운데로 모아준다.
+        // 좌우 여백은 넘김 화살표 자리다.
         var pageGo = new GameObject("PageImage", typeof(RectTransform), typeof(Image));
         pageGo.transform.SetParent(viewGo.transform, false);
         var pageRt = pageGo.GetComponent<RectTransform>();
-        StretchFull(pageRt);
+        pageRt.anchorMin = Vector2.zero;
+        pageRt.anchorMax = Vector2.one;
+        pageRt.offsetMin = new Vector2(PageInsetX, PageInsetY);
+        pageRt.offsetMax = new Vector2(-PageInsetX, -PageInsetY);
         // 확대는 가운데를 기준으로 커져야 자연스럽다.
         pageRt.pivot = new Vector2(0.5f, 0.5f);
         pageImage = pageGo.GetComponent<Image>();
@@ -336,54 +475,70 @@ public class DocumentViewerController : MonoBehaviour
         // 아닐 때만 닫는다).
         pageImage.raycastTarget = true;
         pageGo.AddComponent<ZoomInputRelay>().owner = this;
+        // 그림 그림자 (종이가 떠 있는 느낌). 따로 상자를 깔면 확대/이동 때 그림과 따로 놀기
+        // 때문에, 그림 자체에 붙는 Shadow 효과를 쓴다.
+        var shadow = pageGo.AddComponent<Shadow>();
+        shadow.effectColor = new Color(0f, 0f, 0f, 0.55f);
+        shadow.effectDistance = new Vector2(0f, -8f);
 
-        // 제목 - 그림 위 맨 윗줄. 그림이 커진 만큼 위로 올렸다.
-        titleLabel = CreateLabel("TitleLabel", panel.transform,
-            new Vector2(0.05f, 0.945f), new Vector2(0.95f, 0.995f), 30, TextAlignmentOptions.Center);
+        // 네 모서리 괄호 (조사 화면의 마우스 올림 표시와 같은 모양)
+        const float bl = 28f, bt = 2f, inset = 16f;
+        var bracketColor = new Color(AccentColor.r, AccentColor.g, AccentColor.b, 0.9f);
+        for (int i = 0; i < 4; i++)
+        {
+            bool right = i % 2 == 1, bottom = i >= 2;
+            float x = right ? ContentW - inset - bl : inset;
+            float y = bottom ? ViewportH - inset - bt : inset;
+            AddRect(pageViewport, "Bracket" + i + "H", x, y, bl, bt, bracketColor);
+            float vx = right ? ContentW - inset - bt : inset;
+            float vy = bottom ? ViewportH - inset - bl : inset;
+            AddRect(pageViewport, "Bracket" + i + "V", vx, vy, bt, bl, bracketColor);
+        }
 
-        // 설명(ItemData.csv의 Description) - 그림 아래 한 줄. 자리를 그림에 내줬으므로
-        // 글자를 조금 줄이고 높이를 얇게 잡는다.
-        descriptionLabel = CreateLabel("DescriptionLabel", panel.transform,
-            new Vector2(0.06f, 0.065f), new Vector2(0.94f, 0.128f), 20, TextAlignmentOptions.Center);
+        // 좌우 넘김 화살표 (자료 칸 안, 세로 가운데)
+        prevButton = CreateArrow(pageViewport, "PrevButton", 40f, true, PrevPage, out prevArrow);
+        nextButton = CreateArrow(pageViewport, "NextButton", ContentW - 40f - 56f, false, NextPage, out nextArrow);
 
-        // 쪽수
-        pageLabel = CreateLabel("PageLabel", panel.transform,
-            new Vector2(0.42f, 0.012f), new Vector2(0.58f, 0.062f), 24, TextAlignmentOptions.Center);
+        // ----- 아래쪽 -----
+        AddRect(box, "FootDivider", Margin, 884f, ContentW, 1f, DividerColor);
 
-        // 이전/다음 버튼
-        prevButton = CreateNavButton("PrevButton", panel.transform, "◀",
-            new Vector2(0.10f, 0.012f), new Vector2(0.20f, 0.062f), PrevPage);
-        nextButton = CreateNavButton("NextButton", panel.transform, "▶",
-            new Vector2(0.80f, 0.012f), new Vector2(0.90f, 0.062f), NextPage);
+        descriptionLabel = CreateText(box, "DescriptionLabel", "", 20, FontStyles.Normal, BodyColor);
+        descriptionLabel.textWrappingMode = TextWrappingModes.Normal;
+        descriptionLabel.overflowMode = TextOverflowModes.Ellipsis;
+        descriptionLabel.lineSpacing = 20f;
+        PlaceTopLeft(descriptionLabel.rectTransform, Margin, 904f, 900f, 100f);
 
-        // ===== 돋보기 버튼 - 자료 오른쪽 위 구석 =====
-        var zoomGo = new GameObject("ZoomButton", typeof(RectTransform), typeof(Image), typeof(Button));
-        zoomGo.transform.SetParent(panel.transform, false);
-        var zoomRt = zoomGo.GetComponent<RectTransform>();
-        zoomRt.anchorMin = new Vector2(0.865f, 0.865f);
-        zoomRt.anchorMax = new Vector2(0.930f, 0.930f);
-        zoomRt.offsetMin = Vector2.zero;
-        zoomRt.offsetMax = Vector2.zero;
-        var zoomImg = zoomGo.GetComponent<Image>();
-        zoomImg.sprite = CreateMagnifierSprite();
-        zoomImg.color = new Color(1f, 1f, 1f, 0.85f);
-        zoomImg.preserveAspect = true;
-        zoomButton = zoomGo.GetComponent<Button>();
-        zoomButton.onClick.AddListener(ResetZoom);   // 스위치가 아니라 "원래 크기로"
+        // 쪽수 "01 / 04" - 오른쪽 끝 맞춤
+        pageTotalLabel = CreateText(box, "PageTotal", "/ 01", 16, FontStyles.Bold, KickerColor);
+        pageTotalLabel.alignment = TextAlignmentOptions.BottomRight;
+        PlaceTopLeft(pageTotalLabel.rectTransform, ScreenW - Margin - 60f, 900f, 60f, 36f);
+        pageLabel = CreateText(box, "PageLabel", "01", 28, FontStyles.Bold, TitleColor);
+        pageLabel.alignment = TextAlignmentOptions.BottomRight;
+        PlaceTopLeft(pageLabel.rectTransform, ScreenW - Margin - 60f - 8f - 80f, 898f, 80f, 40f);
 
-        // 확대 중일 때만 뜨는 안내 (배율 + 조작법).
-        // 자료 칸 위쪽에 겹쳐 띄운다 - 아래쪽 설명 글과 부딪히지 않고, 돋보기 버튼(0.865~)
-        // 왼쪽에서 끝나도록 가로 범위를 잡았다.
-        zoomLabel = CreateLabel("ZoomLabel", panel.transform,
-            new Vector2(0.07f, 0.885f), new Vector2(0.85f, 0.935f), 20, TextAlignmentOptions.Left);
-        zoomLabel.gameObject.SetActive(false);
+        var segGo = new GameObject("PageSegments", typeof(RectTransform));
+        segGo.transform.SetParent(box, false);
+        pageSegmentRoot = (RectTransform)segGo.transform;
+        PlaceTopLeft(pageSegmentRoot, Margin, 948f, ContentW, 3f);
+
+        var hint = CreateText(box, "FootHint", "← → 넘기기   ·   휠 확대·축소   ·   끌어서 이동   ·   Esc 닫기",
+                              15, FontStyles.Normal, HintColor);
+        PlaceTopLeft(hint.rectTransform, Margin, 1020f, ContentW, 22f);
+
+        UpdateZoomLabel();
 
         // 코드로 만든 글자는 기본 글꼴에 한글 글자 모양이 없어 깨져 보인다.
         // 화면에서 한글이 잘 나오는 글꼴을 찾아 물려준다 (UIFontHelper.cs 참고).
         UIFontHelper.ApplyToChildren(panel);
     }
 
-    private void StretchFull(RectTransform rt)
+    // ---------------------------------------------------------------------------------
+    // 만들기 도우미
+    // ---------------------------------------------------------------------------------
+    private static Color Hex(int rgb) =>
+        new Color(((rgb >> 16) & 0xFF) / 255f, ((rgb >> 8) & 0xFF) / 255f, (rgb & 0xFF) / 255f);
+
+    private static void StretchFull(RectTransform rt)
     {
         rt.anchorMin = Vector2.zero;
         rt.anchorMax = Vector2.one;
@@ -391,53 +546,116 @@ public class DocumentViewerController : MonoBehaviour
         rt.offsetMax = Vector2.zero;
     }
 
-    private TMP_Text CreateLabel(string name, Transform parent, Vector2 anchorMin, Vector2 anchorMax,
-                                 float fontSize, TextAlignmentOptions align)
+    // Figma 좌표(부모 왼쪽 위 기준, 아래로 +)로 놓는다.
+    private static void PlaceTopLeft(RectTransform rt, float x, float y, float w, float h)
     {
-        var go = new GameObject(name, typeof(RectTransform));
-        go.transform.SetParent(parent, false);
-
-        var rt = go.GetComponent<RectTransform>();
-        rt.anchorMin = anchorMin;
-        rt.anchorMax = anchorMax;
-        rt.offsetMin = Vector2.zero;
-        rt.offsetMax = Vector2.zero;
-
-        var tmp = go.AddComponent<TextMeshProUGUI>();
-        tmp.fontSize = fontSize;
-        tmp.alignment = align;
-        tmp.color = Color.white;
-        tmp.raycastTarget = false; // 글자가 클릭을 가로채지 않게
-        return tmp;
+        rt.anchorMin = rt.anchorMax = new Vector2(0f, 1f);
+        rt.pivot = new Vector2(0f, 1f);
+        rt.anchoredPosition = new Vector2(x, -y);
+        rt.sizeDelta = new Vector2(w, h);
     }
 
-    private Button CreateNavButton(string name, Transform parent, string label,
-                                   Vector2 anchorMin, Vector2 anchorMax, UnityEngine.Events.UnityAction onClick)
+    // 부모 가운데 기준으로 놓고 돌린다 (X / 꺾쇠 선 그리기용).
+    private static void CenterRotated(RectTransform rt, Vector2 offset, float angle)
+    {
+        rt.anchorMin = rt.anchorMax = rt.pivot = new Vector2(0.5f, 0.5f);
+        rt.anchoredPosition = offset;
+        rt.localEulerAngles = new Vector3(0f, 0f, angle);
+    }
+
+    private static Image AddRect(Transform parent, string name, float x, float y, float w, float h, Color color)
+    {
+        var go = new GameObject(name, typeof(RectTransform), typeof(Image));
+        go.transform.SetParent(parent, false);
+        PlaceTopLeft((RectTransform)go.transform, x, y, w, h);
+        var img = go.GetComponent<Image>();
+        img.color = color;
+        img.raycastTarget = false;
+        return img;
+    }
+
+    // 상자 테두리를 얇은 선 4개로 그린다. 색을 바꿀 수 있게 4개를 돌려준다.
+    private static Image[] AddBorder(RectTransform target, Color color, float t)
+    {
+        var lines = new Image[4];
+        for (int i = 0; i < 4; i++)
+        {
+            var go = new GameObject("Border" + i, typeof(RectTransform), typeof(Image));
+            go.transform.SetParent(target, false);
+            var rt = (RectTransform)go.transform;
+            switch (i)
+            {
+                case 0: rt.anchorMin = new Vector2(0, 1); rt.anchorMax = new Vector2(1, 1); rt.pivot = new Vector2(0.5f, 1); rt.sizeDelta = new Vector2(0, t); break; // 위
+                case 1: rt.anchorMin = new Vector2(0, 0); rt.anchorMax = new Vector2(1, 0); rt.pivot = new Vector2(0.5f, 0); rt.sizeDelta = new Vector2(0, t); break; // 아래
+                case 2: rt.anchorMin = new Vector2(0, 0); rt.anchorMax = new Vector2(0, 1); rt.pivot = new Vector2(0, 0.5f); rt.sizeDelta = new Vector2(t, 0); break; // 왼쪽
+                default: rt.anchorMin = new Vector2(1, 0); rt.anchorMax = new Vector2(1, 1); rt.pivot = new Vector2(1, 0.5f); rt.sizeDelta = new Vector2(t, 0); break; // 오른쪽
+            }
+            rt.anchoredPosition = Vector2.zero;
+            lines[i] = go.GetComponent<Image>();
+            lines[i].color = color;
+            lines[i].raycastTarget = false;
+        }
+        return lines;
+    }
+
+    // 테두리만 있는 버튼 (돋보기 칸, 닫기). 클릭은 투명한 바탕이 받는다.
+    private static Button CreateOutlinedButton(Transform parent, string name, float x, float y, float w, float h,
+                                               UnityEngine.Events.UnityAction onClick, out Image[] border)
     {
         var go = new GameObject(name, typeof(RectTransform), typeof(Image), typeof(Button));
         go.transform.SetParent(parent, false);
-
-        var rt = go.GetComponent<RectTransform>();
-        rt.anchorMin = anchorMin;
-        rt.anchorMax = anchorMax;
-        rt.offsetMin = Vector2.zero;
-        rt.offsetMax = Vector2.zero;
-
-        go.GetComponent<Image>().color = new Color(1f, 1f, 1f, 0.15f);
-
-        var textGo = new GameObject("Text", typeof(RectTransform));
-        textGo.transform.SetParent(go.transform, false);
-        StretchFull(textGo.GetComponent<RectTransform>());
-        var tmp = textGo.AddComponent<TextMeshProUGUI>();
-        tmp.text = label;
-        tmp.fontSize = 28;
-        tmp.alignment = TextAlignmentOptions.Center;
-        tmp.color = Color.white;
-        tmp.raycastTarget = false;
-
+        var rt = (RectTransform)go.transform;
+        PlaceTopLeft(rt, x, y, w, h);
+        var bg = go.GetComponent<Image>();
+        bg.color = new Color(0f, 0f, 0f, 0f);   // 클릭만 받는 투명 바탕 (Linear 색 공간이라 0.01도 회색으로 보인다 → 0)
+        border = AddBorder(rt, BoxLineColor, 1f);
         var btn = go.GetComponent<Button>();
+        btn.transition = Selectable.Transition.None;   // 마우스 올림은 HoverLine이 테두리/글자 색으로 보여준다
         btn.onClick.AddListener(onClick);
         return btn;
+    }
+
+    // 넘김 화살표 56x128 (조사 화면 양옆 화살표와 같은 크기).
+    private static Button CreateArrow(RectTransform viewport, string name, float x, bool left,
+                                      UnityEngine.Events.UnityAction onClick, out ArrowView view)
+    {
+        var go = new GameObject(name, typeof(RectTransform), typeof(Image), typeof(Button));
+        go.transform.SetParent(viewport, false);
+        var rt = (RectTransform)go.transform;
+        PlaceTopLeft(rt, x, (ViewportH - 128f) * 0.5f, 56f, 128f);
+        var bg = go.GetComponent<Image>();
+        bg.color = ArrowFill;
+        var border = AddBorder(rt, ArrowLineOn, 1f);
+
+        // 꺾쇠 ‹ › 를 짧은 선 두 개로
+        float dir = left ? -1f : 1f;
+        var a = AddRect(rt, "ChevronA", 0f, 0f, 12f, 2f, ChevronOn);
+        var b = AddRect(rt, "ChevronB", 0f, 0f, 12f, 2f, ChevronOn);
+        CenterRotated(a.rectTransform, new Vector2(0f, 4f), dir * -45f);
+        CenterRotated(b.rectTransform, new Vector2(0f, -4f), dir * 45f);
+
+        var btn = go.GetComponent<Button>();
+        btn.transition = Selectable.Transition.None;
+        btn.onClick.AddListener(onClick);
+        view = go.AddComponent<ArrowView>();
+        view.Init(btn, border, new Graphic[] { a, b });
+        return btn;
+    }
+
+    private static TMP_Text CreateText(Transform parent, string name, string text, float size, FontStyles style, Color color)
+    {
+        var go = new GameObject(name, typeof(RectTransform));
+        go.transform.SetParent(parent, false);
+        var tmp = go.AddComponent<TextMeshProUGUI>();
+        tmp.text = text;
+        tmp.fontSize = size;
+        tmp.fontStyle = style;
+        tmp.color = color;
+        tmp.alignment = TextAlignmentOptions.TopLeft;
+        tmp.textWrappingMode = TextWrappingModes.NoWrap;
+        tmp.overflowMode = TextOverflowModes.Ellipsis;
+        tmp.raycastTarget = false; // 글자가 클릭을 가로채지 않게
+        return tmp;
     }
 
     // ===== 돋보기 아이콘을 코드로 그린다 =====
@@ -491,6 +709,57 @@ public class DocumentViewerController : MonoBehaviour
         tex.filterMode = FilterMode.Bilinear;
         magnifierSprite = Sprite.Create(tex, new Rect(0, 0, S, S), new Vector2(0.5f, 0.5f));
         return magnifierSprite;
+    }
+
+    // ===== 마우스를 올리면 테두리와 글자/아이콘을 밝게 (돋보기 칸, 닫기) =====
+    private class HoverLine : MonoBehaviour, IPointerEnterHandler, IPointerExitHandler
+    {
+        private Image[] border;
+        private Graphic[] marks;
+        private Color markNormal, markHover;
+
+        public void Init(Image[] border, Graphic[] marks, Color markNormal, Color markHover)
+        {
+            this.border = border; this.marks = marks; this.markNormal = markNormal; this.markHover = markHover;
+        }
+
+        public void OnPointerEnter(PointerEventData e) => Apply(true);
+        public void OnPointerExit(PointerEventData e) => Apply(false);
+        private void OnDisable() => Apply(false);   // 닫았다 열 때 밝은 색이 남지 않게
+
+        private void Apply(bool hover)
+        {
+            if (border != null) foreach (var l in border) if (l != null) l.color = hover ? BoxLineHover : BoxLineColor;
+            if (marks != null) foreach (var m in marks) if (m != null) m.color = hover ? markHover : markNormal;
+        }
+    }
+
+    // ===== 넘김 화살표 모양 (켜짐 / 꺼짐 / 마우스 올림) =====
+    // 첫 장에서는 ‹ 가, 마지막 장에서는 › 가 흐려진다.
+    private class ArrowView : MonoBehaviour, IPointerEnterHandler, IPointerExitHandler
+    {
+        private Button button;
+        private Image[] border;
+        private Graphic[] chevron;
+        private bool hover;
+
+        public void Init(Button button, Image[] border, Graphic[] chevron)
+        {
+            this.button = button; this.border = border; this.chevron = chevron;
+        }
+
+        public void OnPointerEnter(PointerEventData e) { hover = true; Refresh(); }
+        public void OnPointerExit(PointerEventData e) { hover = false; Refresh(); }
+        private void OnDisable() { hover = false; Refresh(); }
+
+        public void Refresh()
+        {
+            bool on = button != null && button.interactable;
+            Color line = !on ? ArrowLineOff : hover ? BoxLineHover : ArrowLineOn;
+            Color mark = !on ? ChevronOff : hover ? TitleColor : ChevronOn;
+            if (border != null) foreach (var l in border) if (l != null) l.color = line;
+            if (chevron != null) foreach (var c in chevron) if (c != null) c.color = mark;
+        }
     }
 
     // ===== 자료 그림 위의 휠 / 끌기 / 클릭을 컨트롤러로 넘겨주는 부품 =====
