@@ -1434,8 +1434,14 @@ public class InvestigationController : MonoBehaviour
         // 단, 증거를 전부 모은 뒤에는 검사하지 않는다. 그 시점의 문 클릭은 "다시 들어갈
         // 필요는 없을 것 같다"는 안내만 띄우는 것이 목적이라(아래 자료실 재입장 처리 참고),
         // 여기서 먼저 잡아버리면 조사를 다 끝낸 플레이어가 무심코 문을 눌렀다가 죽는다.
-        if (activeScreenId == ResourceRoomDoorScreenId &&
-            obj.gameObject.name == ResourceRoomDoorHotspotKey &&
+        //
+        // 문을 누르는 순간 복도 인물을 그 자리에서 멈춘다(Freeze). 멈춘 그림이 위험 그룹이면
+        // 아래 판정에 그대로 걸려 배드엔딩이 된다.
+        bool isResourceRoomDoor = activeScreenId == ResourceRoomDoorScreenId &&
+                                  obj.gameObject.name == ResourceRoomDoorHotspotKey;
+        if (isResourceRoomDoor) CorridorWatchController.Instance?.Freeze();
+
+        if (isResourceRoomDoor &&
             !HasAllResourceRoomClues() &&
             CorridorWatchController.Instance != null && CorridorWatchController.Instance.IsDangerous)
         {

@@ -73,7 +73,7 @@ public class CorridorWatchController : MonoBehaviour
         get
         {
             if (!IsRunning || current == null) return false;
-            if (Time.time - lastChangeTime < graceSeconds) return false;
+            if (!frozen && Time.time - lastChangeTime < graceSeconds) return false;
             return current.dangerous;
         }
     }
@@ -84,6 +84,7 @@ public class CorridorWatchController : MonoBehaviour
     public string CurrentCaption => current != null ? current.caption : "";
 
     private CorridorGroup current;
+    private bool frozen;      // 문을 누른 뒤 true: 그룹 교체를 멈추고 유예 없이 판정한다
     private int currentIndex = -1;
     private float lastChangeTime;
     private float nextChangeTime;
@@ -129,6 +130,7 @@ public class CorridorWatchController : MonoBehaviour
     public void Begin()
     {
         if (!EnsureUI()) return;
+        frozen = false;
         IsRunning = true;
         root.SetActive(true);
         PlaceAboveStage();      // 배경보다 앞, 조사 오브젝트보다 뒤
@@ -151,8 +153,18 @@ public class CorridorWatchController : MonoBehaviour
         root.transform.SetSiblingIndex(stageTop + 1);
     }
 
+    // 자료실 문을 누른 순간에 부른다. 복도 그림은 그대로 보여주되 더 이상 바뀌지 않게 멈춘다.
+    // 멈춘 그림이 위험 그룹이면 IsDangerous가 true로 남아 배드엔딩 판정에 걸린다.
+    // 멈춘 뒤에는 유예 시간(graceSeconds)을 적용하지 않는다: 눈앞에 멈춰 있는 그림이
+    // 곧 판정 기준이어야 하기 때문이다. 다음 Begin()에서 다시 풀린다.
+    public void Freeze()
+    {
+        frozen = true;
+    }
+
     public void Stop()
     {
+        frozen = false;
         IsRunning = false;
         current = null;
         currentIndex = -1;
@@ -161,7 +173,7 @@ public class CorridorWatchController : MonoBehaviour
 
     private void Update()
     {
-        if (!IsRunning) return;
+        if (!IsRunning || frozen) return;
         if (Time.time < nextChangeTime) return;
         PickNext();
     }
