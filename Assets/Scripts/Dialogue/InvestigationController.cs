@@ -1587,6 +1587,20 @@ public class InvestigationController : MonoBehaviour
         {
             bool hasWrittenNote = NoteManager.Instance.OnHotspotInspected(activeScreenId, obj.gameObject.name);
 
+            // 이 오브젝트로 얻는 아이템에 수첩 메모(TriggerType=Item)가 따로 적혀 있으면, 그 메모가
+            // 아이템을 얻는 순간 들어가므로 조사 문장을 또 옮겨 적지 않는다 (같은 내용이 두 번 적히던 문제).
+            if (!hasWrittenNote && obj.type == HotspotType.Item)
+            {
+                var noteItems = ParseItemList(obj.itemId);
+                if (noteItems != null)
+                {
+                    foreach (string id in noteItems)
+                    {
+                        if (NoteManager.Instance.HasEntryFor("Item", id)) { hasWrittenNote = true; break; }
+                    }
+                }
+            }
+
             // 선택지가 달린 오브젝트(예: OBJ_07_Manager, 자료실 문)는 질문 문장만으로는 아직
             // 확정된 사실이 아니다 - 플레이어가 무엇을 고르느냐에 따라 결과가 갈리므로,
             // 질문 자체를 수첩에 자동으로 옮겨 적지 않는다. (꼭 남겨야 하면 NoteEntries.csv에

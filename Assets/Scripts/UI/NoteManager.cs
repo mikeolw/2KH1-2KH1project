@@ -200,6 +200,22 @@ public class NoteManager : MonoBehaviour
         return AddEntriesMatching("Hotspot", investigationId + "|" + hotspotKey);
     }
 
+    // NoteEntries.csv에 이 TriggerType/TriggerKey로 적어둔 메모가 하나라도 있는지 (추가하지는 않는다).
+    public bool HasEntryFor(string triggerType, string triggerKey)
+    {
+        if (allEntries == null || string.IsNullOrWhiteSpace(triggerKey)) return false;
+        foreach (var pair in allEntries)
+        {
+            var entry = pair.Value;
+            if (string.Equals(entry.triggerType, triggerType, System.StringComparison.OrdinalIgnoreCase) &&
+                string.Equals(entry.triggerKey, triggerKey.Trim(), System.StringComparison.OrdinalIgnoreCase))
+            {
+                return true;
+            }
+        }
+        return false;
+    }
+
     // =================================================================================
     // 조사한 내용을 그때그때 자동으로 적어두기
     // =================================================================================
