@@ -45,6 +45,13 @@ public class InvestigationController : MonoBehaviour
     [Header("'조사 그만하기' 버튼 문구")]
     public string exitButtonLabel = "조사 그만하기";
 
+    [Header("아직 안 본 오브젝트가 있을 때 '조사 그만하기'를 누르면 대화창에 띄울 문장")]
+    public string exitWarningText = "아직 살펴볼 곳이 있는 것 같다.";
+
+    // 이번 조사에서 위 경고를 이미 한 번 보여줬는지. 보여준 뒤 다시 누르면 그대로 나간다
+    // (경고만 하고 막지는 않는다 - 다 보지 않고 넘어가는 것도 플레이어의 선택이다).
+    private bool exitWarningShown;
+
     // 조사 화면 UI 그림 (Figma "Export (Unity) / Investigation"). git 제외 - 드라이브로 공유.
     // 그림이 없으면 예전 어두운 칸/글자로 대신 그린다.
     private const string UiArtFolder = "Illusts/UI/Investigation/";
@@ -766,6 +773,7 @@ public class InvestigationController : MonoBehaviour
         // 이번 조사에서 거쳐 간 화면을 새로 센다 (화면 이동 중 조사 완료 기록용).
         visitedScreenIds.Clear();
         visitedScreenIds.Add(activeScreenId);
+        exitWarningShown = false;
 
         EnterScreen(activeScreenId, screen);
     }
@@ -852,6 +860,48 @@ public class InvestigationController : MonoBehaviour
             // 안내문이 없으면 대화창은 비워둔다(조사 화면을 가리지 않게).
             SetDialogueVisible(false);
         }
+    }
+
+    // "조사 그만하기" 버튼을 눌렀을 때.
+    // 이번 조사에서 둘러본 화면에 아직 한 번도 안 누른 오브젝트가 있으면, 처음 한 번은 나가지 않고
+    // 대화창에 "아직 살펴볼 곳이 있는 것 같다."를 띄운다. 그 뒤에 다시 누르면 그대로 나간다.
+    // 추리 파트의 단서는 조사에서 얻는데 추리는 한 번 틀리면 바로 배드엔딩이라, 단서를 놓친 채
+    // 넘어가 억울하게 지는 일을 줄이려는 것이다.
+    private void OnExitButtonClicked()
+    {
+        if (!inSession) return;
+
+        // 다른 대사(선택지·후속 처리가 걸려 있을 수 있음)가 떠 있는 중에는 끼어들지 않고 예전처럼 나간다.
+        if (!exitWarningShown && !IsShowingTalkLine && CountUninspectedHotspots() > 0)
+        {
+            exitWarningShown = true;
+            ShowLineInDialogue("", exitWarningText);
+            return;
+        }
+
+        Exit();
+    }
+
+    // 이번 조사에서 거쳐 간 화면들(지금 화면 포함)에서 아직 한 번도 누르지 않은 조사 오브젝트 수.
+    // 장식(스탠딩/소품)과, 그림도 배치 좌표도 없어 화면에 만들어지지 않는 오브젝트는 세지 않는다
+    // (CreateHotspot과 같은 기준).
+    private int CountUninspectedHotspots()
+    {
+        int count = 0;
+        var screens = new HashSet<string>(visitedScreenIds);
+        if (!string.IsNullOrEmpty(activeScreenId)) screens.Add(activeScreenId);
+
+        foreach (string id in screens)
+        {
+            if (!screenData.TryGetValue(id, out ScreenData screen) || screen.hotspots == null) continue;
+            foreach (var data in screen.hotspots)
+            {
+                if (data.type == HotspotType.Standing || data.type == HotspotType.Prop) continue;
+                if (string.IsNullOrEmpty(data.spriteName) && !IllustLayout.TryGet(data.key, id, out _)) continue;
+                if (!inspectedHotspots.Contains(TextKey(id, data.key))) count++;
+            }
+        }
+        return count;
     }
 
     // "조사 그만하기" 버튼이 호출한다.
@@ -1344,7 +1394,7 @@ public class InvestigationController : MonoBehaviour
         tint.normalColor = normalColor;
         tint.hoverColor = hoverColor;
 
-        button.onClick.AddListener(Exit);
+        button.onClick.AddListener(OnExitButtonClicked);
 
         // 코드로 만든 글자는 기본 글꼴에 한글 글자 모양이 없어 깨져 보인다.
         // 화면에서 한글이 잘 나오는 글꼴을 찾아 물려준다 (UIFontHelper.cs 참고).
