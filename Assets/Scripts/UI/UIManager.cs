@@ -61,6 +61,9 @@ public class UIManager : MonoBehaviour
             return;
         }
 
+        // 핸드폰 앱 화면/전화 걸기 중이면 Esc는 메인 메뉴로 돌아가기만 한다 (PhonePanelUI.HandleEscape).
+        if (PhonePanelUI.Instance != null && PhonePanelUI.Instance.HandleEscape()) return;
+
         if (IsAnyPanelOpen) CloseAllPanels();
     }
 
