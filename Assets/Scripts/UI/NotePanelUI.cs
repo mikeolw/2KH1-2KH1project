@@ -69,10 +69,12 @@ public class NotePanelUI : MonoBehaviour
     // 목록 한 줄. 고를 때 배경색/굵기/화살표만 바꾸려고 들고 있는다.
     private class RowView
     {
+        public string entryId;
         public Image background;
         public TMP_Text number;
         public TMP_Text label;
         public GameObject arrow;
+        public GameObject newTag;   // 아직 안 읽은 메모의 "NEW" (NewContentTracker)
     }
 
     // 왼쪽 페이지 머리말 (EVIDENCE / 증거) 과 오른쪽 페이지 분류 표기.
@@ -313,6 +315,7 @@ public class NotePanelUI : MonoBehaviour
         go.GetComponent<LayoutElement>().preferredHeight = 50f;
 
         var view = new RowView();
+        view.entryId = entry.entryId;
         view.background = go.GetComponent<Image>();
         view.background.raycastTarget = true;
 
@@ -338,6 +341,20 @@ public class NotePanelUI : MonoBehaviour
         arrow.color = AccentColor;
         arrow.alignment = TextAlignmentOptions.Right;
         view.arrow = arrow.gameObject;
+
+        // 아직 안 읽은 메모: 제목 오른쪽 끝(▸ 자리 앞)에 작은 "NEW"
+        var newTag = AddRowText(go.transform, "New", "NEW", 13, 0f, 0f, 0f);
+        var newRt = newTag.rectTransform;
+        newRt.anchorMin = new Vector2(1f, 0f);
+        newRt.anchorMax = new Vector2(1f, 1f);
+        newRt.pivot = new Vector2(1f, 0.5f);
+        newRt.offsetMin = new Vector2(-80f, 0f);
+        newRt.offsetMax = new Vector2(-36f, 0f);
+        newTag.fontStyle = FontStyles.Bold;
+        newTag.color = AccentColor;
+        newTag.alignment = TextAlignmentOptions.Right;
+        newTag.characterSpacing = 6f;
+        view.newTag = newTag.gameObject;
 
         string id = entry.entryId;
         var button = go.GetComponent<Button>();
@@ -383,6 +400,10 @@ public class NotePanelUI : MonoBehaviour
     // 고른 줄: 형광펜 같은 옅은 청회색 바탕 + 굵게 + 번호 강조색 + ▸ 표시.
     private void ApplyRowVisual(RowView view, bool selected)
     {
+        bool isNew = NewContentTracker.IsNew(NewContentTracker.Kind.Note, view.entryId);
+        view.newTag.SetActive(isNew);
+        // NEW가 붙은 줄은 제목이 NEW와 겹치지 않게 오른쪽 끝을 그만큼 비운다.
+        view.label.rectTransform.offsetMax = new Vector2(isNew ? -84f : -36f, 0f);
         view.background.color = selected ? RowSelectedColor : RowIdleColor;
         view.label.fontStyle = selected ? FontStyles.Bold : FontStyles.Normal;
         view.number.color = selected ? AccentColor : RowNumberColor;
@@ -415,6 +436,13 @@ public class NotePanelUI : MonoBehaviour
     private void ShowDetail(NoteManager.NoteEntry entry)
     {
         if (detailTitleText == null || detailBodyText == null) return;
+
+        // 펼쳐 본 메모는 읽은 것으로 친다 -> 목록의 NEW를 지운다.
+        if (entry != null && NewContentTracker.IsNew(NewContentTracker.Kind.Note, entry.entryId))
+        {
+            NewContentTracker.MarkSeen(NewContentTracker.Kind.Note, entry.entryId);
+            if (rowViews.TryGetValue(entry.entryId, out var seenRow)) ApplyRowVisual(seenRow, entry.entryId == selectedEntryId);
+        }
 
         detailTitleText.text = entry != null ? NoteCatalog.TitleOf(entry) : "";
         detailBodyText.text = entry != null ? NoteCatalog.BodyOf(entry) : "";

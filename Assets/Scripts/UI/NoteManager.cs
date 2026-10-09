@@ -84,6 +84,9 @@ public class NoteManager : MonoBehaviour
         if (Instance == null) Instance = this;
         else { Destroy(gameObject); return; }
 
+        // 새 씬(새 게임/이어하기)에서는 "새 메모" 표시를 비우고 시작한다 (NewContentTracker 참고).
+        NewContentTracker.Reset(NewContentTracker.Kind.Note);
+
         LoadEntries();
         AddInitialEntries();
     }
@@ -299,6 +302,7 @@ public class NoteManager : MonoBehaviour
         }
 
         recordedEntryIds.Add(entryId);
+        NewContentTracker.Add(NewContentTracker.Kind.Note, entryId);   // 수첩 NEW 표시 / 퀵바 숫자
         OnNoteChanged?.Invoke();
         OnNoteAdded?.Invoke();
     }
@@ -348,7 +352,10 @@ public class NoteManager : MonoBehaviour
 
         foreach (string id in deferredEntryIds)
         {
-            if (!recordedEntryIds.Contains(id)) recordedEntryIds.Add(id);
+            if (recordedEntryIds.Contains(id)) continue;
+            recordedEntryIds.Add(id);
+            // 알림(토스트)은 한꺼번에 쏟아지지 않게 생략하지만, NEW 표시와 퀵바 숫자는 남긴다.
+            NewContentTracker.Add(NewContentTracker.Kind.Note, id);
         }
         deferredEntryIds.Clear();
         realtimeUpdateEnabled = true;
@@ -451,6 +458,7 @@ public class NoteManager : MonoBehaviour
     //  NoteManager가 시작할 때 넣어둔 초기 메모까지 같이 날아갔기 때문이다.)
     public void RestoreEntries(List<string> entryIds)
     {
+        NewContentTracker.Reset(NewContentTracker.Kind.Note);   // 불러온 직후에는 새 메모 없음
         recordedEntryIds.Clear();
         deferredEntryIds.Clear();
         realtimeUpdateEnabled = true;
