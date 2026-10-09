@@ -196,10 +196,16 @@ public class DocumentViewerController : MonoBehaviour
     // 뷰어를 닫는다. 바깥 어두운 영역 클릭이나 닫기 버튼에 연결된다.
     public void Hide()
     {
+        bool wasOpen = IsOpen;
         ResetZoom();   // 확대한 채로 닫으면 다음에 열 때도 확대되어 있다
         if (panel != null) panel.SetActive(false);
         pages.Clear();
+        if (wasOpen) OnHidden?.Invoke();
     }
+
+    // 뷰어가 닫힐 때 발생. 조사 화면이 "자료를 다 본 뒤" 대사를 이어 붙일 때 쓴다
+    // (InvestigationController.ScheduleCombineHint 참고).
+    public event System.Action OnHidden;
 
     // ---------------------------------------------------------------------------------
     // 돋보기 (확대 / 축소)

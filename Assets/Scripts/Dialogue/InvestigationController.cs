@@ -1657,6 +1657,8 @@ public class InvestigationController : MonoBehaviour
             string viewerItemId = grantedItemIds != null && grantedItemIds.Count > 0 ? grantedItemIds[0] : obj.itemId;
             if (TryOpenDocumentViewer(viewerItemId))
             {
+                if (grantedAnyItem) ScheduleCombineHint(viewerItemId);
+
                 // 뷰어는 화면 전환과 무관하게 항상 볼 수 있으므로, 자동 이동 조건을
                 // 곧바로 검사해도 된다(예전과 동일한 순서).
                 if (grantedAnyItem) CheckAutoExit();
@@ -1897,6 +1899,34 @@ public class InvestigationController : MonoBehaviour
                 ForceExit();
                 GameFlowManager.Instance?.TriggerEnding(EndingType.Bad_C);
             });
+    }
+
+    // ===== 조합 힌트 대사 =====
+    // 가방에서 두 물건을 "조합"해야 나오는 단서(예: SD카드 + 카메라 -> 현장 사진)는, 조합을
+    // 떠올리지 못하면 추리에 쓰이는 단서를 통째로 놓친다. 그래서 조합 재료를 주웠을 때 짝이 되는
+    // 물건을 이미 갖고 있으면, 자료 뷰어를 닫은 직후 주인공이 한마디 해서 조합을 떠올리게 한다.
+    //   주운 아이템 -> (짝 아이템, 화자, 대사)
+    private static readonly Dictionary<string, (string partner, string speaker, string line)> CombineHintLines =
+        new Dictionary<string, (string, string, string)>(StringComparer.OrdinalIgnoreCase)
+        {
+            { "sd_card", ("camera", "재훈", "카메라에 꽂아 보자.") },
+        };
+
+    private void ScheduleCombineHint(string itemId)
+    {
+        if (string.IsNullOrEmpty(itemId) || !CombineHintLines.TryGetValue(itemId.Trim(), out var hint)) return;
+        if (InventoryManager.Instance == null || !InventoryManager.Instance.HasItem(hint.partner)) return;
+        if (DocumentViewerController.Instance == null) return;
+
+        System.Action handler = null;
+        handler = () =>
+        {
+            DocumentViewerController.Instance.OnHidden -= handler;
+            // 그 사이 조사가 끝났거나 다른 대사가 떠 있으면 끼어들지 않는다.
+            if (!inSession || IsShowingTalkLine) return;
+            ShowLineInDialogue(hint.speaker, hint.line);
+        };
+        DocumentViewerController.Instance.OnHidden += handler;
     }
 
     private bool TryOpenDocumentViewer(string itemId)

@@ -650,6 +650,15 @@ public class InventoryPanelUI : MonoBehaviour
             if (rule != null)
             {
                 selectedItemId = rule.resultItem;
+
+                // 결과물에 펼쳐 볼 자료(문서/사진)가 있으면 자료 뷰어를 바로 한 번 띄운다.
+                // 예) SD카드 + 카메라 -> 현장 사진. 조사 화면에서 자료를 주울 때 뷰어가 자동으로
+                // 뜨는 것과 같은 이유다 - 가방을 다시 열어 [자세히 보기]까지 누르는 플레이어는 드물어서,
+                // 추리에 쓰이는 단서를 못 보고 지나치기 쉽다. 닫으면 가방 화면으로 돌아온다.
+                bool shownInViewer = DocumentViewerController.Instance != null &&
+                                     DocumentViewerController.Instance.ShowItem(rule.resultItem);
+                if (shownInViewer) NewContentTracker.MarkSeen(NewContentTracker.Kind.Item, rule.resultItem);
+
                 ShowSelectedItem(rule.resultItem);
             }
         }
