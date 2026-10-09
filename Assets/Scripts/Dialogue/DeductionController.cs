@@ -217,6 +217,7 @@ public class DeductionController : MonoBehaviour
         }
 
         panel.SetActive(true);
+        ShowClueTools(true);
 
         // 이전 문제의 버튼을 지운다.
         foreach (Transform child in container) Destroy(child.gameObject);
@@ -244,6 +245,7 @@ public class DeductionController : MonoBehaviour
     {
         GameObject panel = choicePanel != null ? choicePanel : GetDialoguePanel();
         if (panel != null) panel.SetActive(false);
+        ShowClueTools(false);
 
         // 고른 보기에 대한 반응 문장을 대사창에 보여준다.
         if (!string.IsNullOrWhiteSpace(choice.resultText) && DialogueSystem.Instance != null)
@@ -287,6 +289,7 @@ public class DeductionController : MonoBehaviour
     {
         IsActive = false;
         currentSteps = null;
+        ShowClueTools(false);
 
         GameObject panel = choicePanel != null ? choicePanel : GetDialoguePanel();
         if (panel != null) panel.SetActive(false);
@@ -297,6 +300,113 @@ public class DeductionController : MonoBehaviour
         onSuccessCallback = null;
 
         if (success) callback?.Invoke();
+    }
+
+    // ---------------------------------------------------------------------------------
+    // 단서 다시 보기 (수첩 / 가방)
+    // ---------------------------------------------------------------------------------
+    // 추리는 한 문제라도 틀리면 바로 배드엔딩이라, 문제를 푸는 동안 모은 단서를 다시 볼 수
+    // 있어야 한다. 문제(보기)가 떠 있는 동안 화면 위쪽 가운데에 안내 문구와 [수첩 보기]
+    // [가방 보기] 버튼을 띄운다. 수첩/가방을 열었다 닫으면 같은 문제로 돌아온다
+    // (보기 패널은 그대로 켜져 있고, 수첩/가방 화면이 그 위를 덮을 뿐이다).
+    // 씬을 건드리지 않고 캔버스 아래에 코드로 만든다 (NotePanelUI 등과 같은 방식).
+    private const string ClueToolsName = "__DeductionClueTools";
+    private static readonly Color ToolsPanelColor = new Color(0x0C / 255f, 0x11 / 255f, 0x17 / 255f, 0.96f);
+    private static readonly Color ToolsHintColor = new Color32(0x9F, 0xB2, 0xC3, 0xFF);
+    private static readonly Color ToolsButtonColor = new Color32(0x1A, 0x23, 0x2D, 0xFF);
+    private static readonly Color ToolsButtonHover = new Color32(0x26, 0x33, 0x40, 0xFF);
+    private static readonly Color ToolsButtonText = new Color32(0xD9, 0xE3, 0xEB, 0xFF);
+    private GameObject clueTools;
+
+    private void ShowClueTools(bool show)
+    {
+        if (show && clueTools == null) BuildClueTools();
+        if (clueTools == null) return;
+        clueTools.SetActive(show);
+        if (show) clueTools.transform.SetAsLastSibling();
+    }
+
+    private void BuildClueTools()
+    {
+        Canvas canvas = FindAnyObjectByType<Canvas>();
+        if (canvas == null) return;
+
+        clueTools = new GameObject(ClueToolsName, typeof(RectTransform), typeof(Image),
+                                   typeof(HorizontalLayoutGroup), typeof(ContentSizeFitter));
+        clueTools.transform.SetParent(canvas.transform, false);
+        var rt = (RectTransform)clueTools.transform;
+        // 위쪽 가운데. 왼쪽 위 퀵바(높이 84 + 이름표) 아래로 내려서 겹치지 않게 한다.
+        rt.anchorMin = rt.anchorMax = new Vector2(0.5f, 1f);
+        rt.pivot = new Vector2(0.5f, 1f);
+        rt.anchoredPosition = new Vector2(0f, -140f);
+        clueTools.GetComponent<Image>().color = ToolsPanelColor;
+
+        var layout = clueTools.GetComponent<HorizontalLayoutGroup>();
+        layout.padding = new RectOffset(20, 12, 10, 10);
+        layout.spacing = 12f;
+        layout.childAlignment = TextAnchor.MiddleCenter;
+        layout.childControlWidth = true;    // 자식의 LayoutElement/글자 폭을 읽으려면 true여야 한다
+        layout.childControlHeight = true;
+        layout.childForceExpandWidth = false;
+        layout.childForceExpandHeight = false;
+        var fitter = clueTools.GetComponent<ContentSizeFitter>();
+        fitter.horizontalFit = ContentSizeFitter.FitMode.PreferredSize;
+        fitter.verticalFit = ContentSizeFitter.FitMode.PreferredSize;
+
+        var hintGo = new GameObject("Hint", typeof(RectTransform));
+        hintGo.transform.SetParent(clueTools.transform, false);
+        var hint = hintGo.AddComponent<TextMeshProUGUI>();
+        hint.text = "수첩과 가방에서 단서를 다시 확인할 수 있다.";
+        hint.fontSize = 20;
+        hint.color = ToolsHintColor;
+        hint.alignment = TextAlignmentOptions.MidlineLeft;
+        hint.textWrappingMode = TextWrappingModes.NoWrap;
+        hint.raycastTarget = false;
+        var hintLe = hintGo.AddComponent<LayoutElement>();
+        hintLe.minHeight = 48f;
+
+        AddClueButton("수첩 보기", () => { if (UIManager.Instance != null) UIManager.Instance.ToggleNote(); });
+        AddClueButton("가방 보기", () => { if (UIManager.Instance != null) UIManager.Instance.ToggleInventory(); });
+
+        UIFontHelper.ApplyToChildren(clueTools);
+        clueTools.SetActive(false);
+    }
+
+    private void AddClueButton(string label, UnityEngine.Events.UnityAction onClick)
+    {
+        var go = new GameObject("Btn_" + label, typeof(RectTransform), typeof(Image), typeof(Button), typeof(LayoutElement));
+        go.transform.SetParent(clueTools.transform, false);
+        var le = go.GetComponent<LayoutElement>();
+        le.minWidth = le.preferredWidth = 136f;
+        le.minHeight = le.preferredHeight = 48f;
+
+        var img = go.GetComponent<Image>();
+        img.color = Color.white;
+        var button = go.GetComponent<Button>();
+        button.targetGraphic = img;
+        var colors = ColorBlock.defaultColorBlock;
+        colors.normalColor = ToolsButtonColor;
+        colors.highlightedColor = ToolsButtonHover;
+        colors.pressedColor = ToolsButtonHover;
+        colors.selectedColor = ToolsButtonColor;
+        colors.fadeDuration = 0.06f;
+        button.colors = colors;
+        button.onClick.AddListener(onClick);
+
+        var textGo = new GameObject("Label", typeof(RectTransform));
+        textGo.transform.SetParent(go.transform, false);
+        var trt = (RectTransform)textGo.transform;
+        trt.anchorMin = Vector2.zero;
+        trt.anchorMax = Vector2.one;
+        trt.offsetMin = trt.offsetMax = Vector2.zero;
+        var text = textGo.AddComponent<TextMeshProUGUI>();
+        text.text = label;
+        text.fontSize = 20;
+        text.fontStyle = FontStyles.Bold;
+        text.color = ToolsButtonText;
+        text.alignment = TextAlignmentOptions.Center;
+        text.textWrappingMode = TextWrappingModes.NoWrap;
+        text.raycastTarget = false;
     }
 
     // ---------------------------------------------------------------------------------

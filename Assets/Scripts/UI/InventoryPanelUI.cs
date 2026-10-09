@@ -80,6 +80,7 @@ public class InventoryPanelUI : MonoBehaviour
         public Image background;
         public TMP_Text name;
         public GameObject badge;   // "재료 1"
+        public GameObject newTag;  // 아직 안 눌러 본 아이템의 "NEW" (NewContentTracker)
     }
     private readonly Dictionary<string, SlotView> slotViews = new Dictionary<string, SlotView>();
     private bool codeBuiltUI;
@@ -318,6 +319,7 @@ public class InventoryPanelUI : MonoBehaviour
         {
             var view = new SlotView { background = go.GetComponent<Image>(), name = label };
             view.badge = CreateBadge(go.transform);
+            view.newTag = CreateNewTag(go.transform);
             slotViews[info.itemId] = view;
         }
 
@@ -374,6 +376,35 @@ public class InventoryPanelUI : MonoBehaviour
         return badge;
     }
 
+    // 칸 오른쪽 위의 작은 "NEW" 딱지 (칸 안쪽).
+    private GameObject CreateNewTag(Transform slot)
+    {
+        var tag = new GameObject("NewTag", typeof(RectTransform), typeof(Image));
+        tag.transform.SetParent(slot, false);
+        var rt = tag.GetComponent<RectTransform>();
+        rt.anchorMin = rt.anchorMax = new Vector2(1f, 1f);
+        rt.pivot = new Vector2(1f, 1f);
+        rt.anchoredPosition = new Vector2(-8f, -8f);
+        rt.sizeDelta = new Vector2(40f, 18f);
+        var img = tag.GetComponent<Image>();
+        img.color = ActiveColor;
+        img.raycastTarget = false;
+
+        var textGo = new GameObject("Text", typeof(RectTransform));
+        textGo.transform.SetParent(tag.transform, false);
+        Stretch(textGo.GetComponent<RectTransform>());
+        var t = textGo.AddComponent<TextMeshProUGUI>();
+        t.text = "NEW";
+        t.fontSize = 11;
+        t.fontStyle = FontStyles.Bold;
+        t.alignment = TextAlignmentOptions.Center;
+        t.color = PrimaryBadgeText;
+        t.raycastTarget = false;
+
+        tag.SetActive(false);
+        return tag;
+    }
+
     // 칸 모양: 조합 재료 > 고른 칸 > 기본.
     private void UpdateSlotVisuals()
     {
@@ -392,6 +423,7 @@ public class InventoryPanelUI : MonoBehaviour
                 view.name.fontStyle = isSource || isSelected ? FontStyles.Bold : FontStyles.Normal;
             }
             if (view.badge != null) view.badge.SetActive(isSource);
+            if (view.newTag != null) view.newTag.SetActive(NewContentTracker.IsNew(NewContentTracker.Kind.Item, pair.Key));
         }
     }
 
@@ -401,10 +433,14 @@ public class InventoryPanelUI : MonoBehaviour
 
     private void OnItemClicked(string itemId)
     {
+        // 눌러 본 아이템은 NEW를 지운다 (칸 모양은 아래 ShowSelectedItem/조합 처리에서 다시 그린다).
+        NewContentTracker.MarkSeen(NewContentTracker.Kind.Item, itemId);
+
         // 조합 모드라면: 지금 누른 아이템을 두 번째 재료로 보고 합쳐본다.
         if (combineMode && !string.IsNullOrEmpty(combineSourceItemId))
         {
             TryCombineWith(itemId);
+            UpdateSlotVisuals();   // 조합에 실패해도 방금 눌러 본 칸의 NEW는 지운다
             return;
         }
 
@@ -614,6 +650,15 @@ public class InventoryPanelUI : MonoBehaviour
             if (rule != null)
             {
                 selectedItemId = rule.resultItem;
+
+                // 결과물에 펼쳐 볼 자료(문서/사진)가 있으면 자료 뷰어를 바로 한 번 띄운다.
+                // 예) SD카드 + 카메라 -> 현장 사진. 조사 화면에서 자료를 주울 때 뷰어가 자동으로
+                // 뜨는 것과 같은 이유다 - 가방을 다시 열어 [자세히 보기]까지 누르는 플레이어는 드물어서,
+                // 추리에 쓰이는 단서를 못 보고 지나치기 쉽다. 닫으면 가방 화면으로 돌아온다.
+                bool shownInViewer = DocumentViewerController.Instance != null &&
+                                     DocumentViewerController.Instance.ShowItem(rule.resultItem);
+                if (shownInViewer) NewContentTracker.MarkSeen(NewContentTracker.Kind.Item, rule.resultItem);
+
                 ShowSelectedItem(rule.resultItem);
             }
         }

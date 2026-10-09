@@ -31,6 +31,9 @@ public class InventoryManager : MonoBehaviour
     {
         if (Instance == null) Instance = this;
         else Destroy(gameObject);
+
+        // 새 씬(새 게임/이어하기)에서는 "새 아이템" 표시를 비우고 시작한다 (NewContentTracker 참고).
+        if (Instance == this) NewContentTracker.Reset(NewContentTracker.Kind.Item);
     }
 
     // InvestigationController.Inspect()가 Item 타입 오브젝트를 클릭했을 때 호출한다.
@@ -44,6 +47,8 @@ public class InventoryManager : MonoBehaviour
 
         if (acquiredItemIds.Add(itemId))
         {
+            NewContentTracker.Add(NewContentTracker.Kind.Item, itemId);   // 가방 NEW 표시 / 퀵바 숫자
+
             // 아이템 획득 알림(토스트)이 관련 메모 알림보다 먼저 뜨도록, 수첩 연동보다 먼저 발생시킨다.
             OnItemAdded?.Invoke(itemId);
 
@@ -98,11 +103,12 @@ public class InventoryManager : MonoBehaviour
         // rule.itemA / rule.itemB는 CSV에 적힌 순서이고, 호출자가 넘긴 순서와 다를 수 있다.
         // ItemDatabase.FindCombination이 순서를 바꿔서도 찾아주기 때문이다.
         // 그래서 "누가 A였는지"는 rule 쪽 이름을 기준으로 판단해야 한다.
-        if (rule.consumeA) acquiredItemIds.Remove(rule.itemA);
-        if (rule.consumeB) acquiredItemIds.Remove(rule.itemB);
+        if (rule.consumeA) { acquiredItemIds.Remove(rule.itemA); NewContentTracker.Forget(NewContentTracker.Kind.Item, rule.itemA); }
+        if (rule.consumeB) { acquiredItemIds.Remove(rule.itemB); NewContentTracker.Forget(NewContentTracker.Kind.Item, rule.itemB); }
 
         // 결과 아이템 획득. AddItem을 거치므로 수첩 메모도 자동으로 연동된다.
         acquiredItemIds.Add(rule.resultItem);
+        NewContentTracker.Add(NewContentTracker.Kind.Item, rule.resultItem);
         if (NoteManager.Instance != null) NoteManager.Instance.OnItemAcquired(rule.resultItem);
 
         LastCombinationMessage = string.IsNullOrEmpty(rule.resultMessage)
@@ -128,6 +134,7 @@ public class InventoryManager : MonoBehaviour
     // 로드용: 세이브에서 읽어온 목록으로 통째로 되돌린다.
     public void RestoreItems(List<string> itemIds)
     {
+        NewContentTracker.Reset(NewContentTracker.Kind.Item);   // 불러온 직후에는 새 아이템 없음
         acquiredItemIds.Clear();
         if (itemIds != null)
         {
@@ -142,6 +149,7 @@ public class InventoryManager : MonoBehaviour
     // 새 게임을 시작할 때 가방을 비운다.
     public void ClearAll()
     {
+        NewContentTracker.Reset(NewContentTracker.Kind.Item);
         acquiredItemIds.Clear();
         OnInventoryChanged?.Invoke();
     }

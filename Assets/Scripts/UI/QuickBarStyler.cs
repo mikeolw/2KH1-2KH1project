@@ -13,6 +13,8 @@ using TMPro;
 //   Default : 84x84 어두운 칸 + 얇은 청회색 테두리 + 선 아이콘. 이름은 숨김.
 //   Hover   : 테두리/아이콘이 밝아지고 칸 아래에 이름(수첩/휴대폰/...)이 나타남.
 //   Active  : 그 버튼이 여는 패널이 열려 있는 동안 아이콘 아래에 짧은 밝은 막대.
+//   숫자    : 수첩/가방 아이콘 오른쪽 위에, 그 창을 마지막으로 연 뒤 새로 생긴 메모/아이템 개수
+//             (NewContentTracker). 창을 열면 사라진다.
 //
 // 그림: Assets/Resources/Illusts/UI/QuickBar/ (QuickButton_Box, Icon_Note, Icon_Phone,
 // Icon_Inven, Icon_Settings). 전부 흰색 128px이라 Image.color로 색을 입힌다.
@@ -35,6 +37,9 @@ public class QuickBarStyler : MonoBehaviour
     internal static readonly Color IconColor = new Color32(0xA9, 0xBA, 0xC9, 0xFF);
     internal static readonly Color IconHoverColor = new Color32(0xEE, 0xF3, 0xF7, 0xFF);
     internal static readonly Color LabelColor = new Color32(0xD9, 0xE3, 0xEB, 0xFF);
+    internal static readonly Color BadgeColor = new Color32(0xD9, 0xE3, 0xEB, 0xFF);       // 밝은 청회색 동그라미
+    internal static readonly Color BadgeTextColor = new Color32(0x12, 0x19, 0x20, 0xFF);   // 어두운 숫자
+    private const float BadgeSize = 30f;
 
     // 씬 버튼 이름 -> (아이콘 파일, 이름표)
     private static readonly (string button, string icon, string label)[] Buttons =
@@ -81,7 +86,7 @@ public class QuickBarStyler : MonoBehaviour
                 Debug.LogWarning("[QuickBarStyler] 아이콘 그림이 없어 이 버튼은 예전 모양 그대로 둡니다: " + iconName);
                 continue;
             }
-            StyleButton(t.gameObject, box, icon, label, PanelFor(buttonName));
+            StyleButton(t.gameObject, box, icon, label, PanelFor(buttonName), BadgeKindFor(buttonName));
         }
     }
 
@@ -99,7 +104,18 @@ public class QuickBarStyler : MonoBehaviour
         }
     }
 
-    private static void StyleButton(GameObject go, Sprite box, Sprite icon, string label, GameObject panel)
+    // 새 항목 숫자를 띄울 버튼. 휴대폰은 아직 내용이 없어서 뺀다.
+    private static NewContentTracker.Kind? BadgeKindFor(string buttonName)
+    {
+        switch (buttonName)
+        {
+            case "Btn_Note": return NewContentTracker.Kind.Note;
+            case "Btn_Inventory": return NewContentTracker.Kind.Item;
+            default: return null;
+        }
+    }
+
+    private static void StyleButton(GameObject go, Sprite box, Sprite icon, string label, GameObject panel, NewContentTracker.Kind? badgeKind)
     {
         var le = go.GetComponent<LayoutElement>();
         if (le == null) le = go.AddComponent<LayoutElement>();
@@ -160,9 +176,36 @@ public class QuickBarStyler : MonoBehaviour
             text.gameObject.SetActive(false);
         }
 
+        // 새 항목 숫자 (칸 안쪽 오른쪽 위 모서리의 동그라미)
+        TMP_Text badgeText = null;
+        GameObject badge = null;
+        if (badgeKind.HasValue)
+        {
+            var badgeImg = NewImage("NewBadge", go.transform, CircleSprite(), BadgeColor);
+            var bdr = badgeImg.rectTransform;
+            bdr.anchorMin = bdr.anchorMax = new Vector2(1f, 1f);
+            bdr.pivot = new Vector2(0.5f, 0.5f);
+            bdr.sizeDelta = new Vector2(BadgeSize, BadgeSize);
+            bdr.anchoredPosition = new Vector2(-(BadgeSize / 2f + 3f), -(BadgeSize / 2f + 3f));   // 칸 안쪽 오른쪽 위 모서리 (칸 밖으로 넘치지 않게)
+            badge = badgeImg.gameObject;
+
+            var countGo = new GameObject("Count", typeof(RectTransform));
+            countGo.transform.SetParent(badge.transform, false);
+            Stretch((RectTransform)countGo.transform);
+            badgeText = countGo.AddComponent<TextMeshProUGUI>();
+            badgeText.fontSize = 16;
+            badgeText.fontStyle = FontStyles.Bold;
+            badgeText.alignment = TextAlignmentOptions.Center;
+            badgeText.color = BadgeTextColor;
+            badgeText.raycastTarget = false;
+            UIFontHelper.Apply(badgeText);
+            badge.SetActive(false);
+        }
+
         var view = go.GetComponent<QuickButtonView>();
         if (view == null) view = go.AddComponent<QuickButtonView>();
         view.Init(bg, frame, ico, bar.gameObject, text != null ? text.gameObject : null, panel);
+        if (badgeKind.HasValue) view.InitBadge(badgeKind.Value, badge, badgeText);
     }
 
     private static Image NewImage(string name, Transform parent, Sprite sprite, Color color)
@@ -175,6 +218,31 @@ public class QuickBarStyler : MonoBehaviour
         img.raycastTarget = false;
         img.preserveAspect = sprite != null;
         return img;
+    }
+
+    // 숫자 동그라미용 원 그림 (에셋 없이 코드로, 가장자리를 부드럽게).
+    private static Sprite circleSprite;
+    private static Sprite CircleSprite()
+    {
+        if (circleSprite != null) return circleSprite;
+        const int size = 64;
+        var tex = new Texture2D(size, size, TextureFormat.RGBA32, false);
+        tex.wrapMode = TextureWrapMode.Clamp;
+        var pixels = new Color32[size * size];
+        float r = size / 2f;
+        for (int y = 0; y < size; y++)
+        {
+            for (int x = 0; x < size; x++)
+            {
+                float d = Vector2.Distance(new Vector2(x + 0.5f, y + 0.5f), new Vector2(r, r));
+                float a = Mathf.Clamp01(r - d + 0.5f);
+                pixels[y * size + x] = new Color32(255, 255, 255, (byte)Mathf.RoundToInt(a * 255f));
+            }
+        }
+        tex.SetPixels32(pixels);
+        tex.Apply();
+        circleSprite = Sprite.Create(tex, new Rect(0, 0, size, size), new Vector2(0.5f, 0.5f));
+        return circleSprite;
     }
 
     private static void Stretch(RectTransform rt)

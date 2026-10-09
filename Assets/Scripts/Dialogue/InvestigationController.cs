@@ -45,6 +45,13 @@ public class InvestigationController : MonoBehaviour
     [Header("'조사 그만하기' 버튼 문구")]
     public string exitButtonLabel = "조사 그만하기";
 
+    [Header("아직 안 본 오브젝트가 있을 때 '조사 그만하기'를 누르면 대화창에 띄울 문장")]
+    public string exitWarningText = "아직 살펴볼 곳이 있는 것 같다.";
+
+    // 이번 조사에서 위 경고를 이미 한 번 보여줬는지. 보여준 뒤 다시 누르면 그대로 나간다
+    // (경고만 하고 막지는 않는다 - 다 보지 않고 넘어가는 것도 플레이어의 선택이다).
+    private bool exitWarningShown;
+
     // 조사 화면 UI 그림 (Figma "Export (Unity) / Investigation"). git 제외 - 드라이브로 공유.
     // 그림이 없으면 예전 어두운 칸/글자로 대신 그린다.
     private const string UiArtFolder = "Illusts/UI/Investigation/";
@@ -766,6 +773,7 @@ public class InvestigationController : MonoBehaviour
         // 이번 조사에서 거쳐 간 화면을 새로 센다 (화면 이동 중 조사 완료 기록용).
         visitedScreenIds.Clear();
         visitedScreenIds.Add(activeScreenId);
+        exitWarningShown = false;
 
         EnterScreen(activeScreenId, screen);
     }
@@ -852,6 +860,48 @@ public class InvestigationController : MonoBehaviour
             // 안내문이 없으면 대화창은 비워둔다(조사 화면을 가리지 않게).
             SetDialogueVisible(false);
         }
+    }
+
+    // "조사 그만하기" 버튼을 눌렀을 때.
+    // 이번 조사에서 둘러본 화면에 아직 한 번도 안 누른 오브젝트가 있으면, 처음 한 번은 나가지 않고
+    // 대화창에 "아직 살펴볼 곳이 있는 것 같다."를 띄운다. 그 뒤에 다시 누르면 그대로 나간다.
+    // 추리 파트의 단서는 조사에서 얻는데 추리는 한 번 틀리면 바로 배드엔딩이라, 단서를 놓친 채
+    // 넘어가 억울하게 지는 일을 줄이려는 것이다.
+    private void OnExitButtonClicked()
+    {
+        if (!inSession) return;
+
+        // 다른 대사(선택지·후속 처리가 걸려 있을 수 있음)가 떠 있는 중에는 끼어들지 않고 예전처럼 나간다.
+        if (!exitWarningShown && !IsShowingTalkLine && CountUninspectedHotspots() > 0)
+        {
+            exitWarningShown = true;
+            ShowLineInDialogue("", exitWarningText);
+            return;
+        }
+
+        Exit();
+    }
+
+    // 이번 조사에서 거쳐 간 화면들(지금 화면 포함)에서 아직 한 번도 누르지 않은 조사 오브젝트 수.
+    // 장식(스탠딩/소품)과, 그림도 배치 좌표도 없어 화면에 만들어지지 않는 오브젝트는 세지 않는다
+    // (CreateHotspot과 같은 기준).
+    private int CountUninspectedHotspots()
+    {
+        int count = 0;
+        var screens = new HashSet<string>(visitedScreenIds);
+        if (!string.IsNullOrEmpty(activeScreenId)) screens.Add(activeScreenId);
+
+        foreach (string id in screens)
+        {
+            if (!screenData.TryGetValue(id, out ScreenData screen) || screen.hotspots == null) continue;
+            foreach (var data in screen.hotspots)
+            {
+                if (data.type == HotspotType.Standing || data.type == HotspotType.Prop) continue;
+                if (string.IsNullOrEmpty(data.spriteName) && !IllustLayout.TryGet(data.key, id, out _)) continue;
+                if (!inspectedHotspots.Contains(TextKey(id, data.key))) count++;
+            }
+        }
+        return count;
     }
 
     // "조사 그만하기" 버튼이 호출한다.
@@ -1344,7 +1394,7 @@ public class InvestigationController : MonoBehaviour
         tint.normalColor = normalColor;
         tint.hoverColor = hoverColor;
 
-        button.onClick.AddListener(Exit);
+        button.onClick.AddListener(OnExitButtonClicked);
 
         // 코드로 만든 글자는 기본 글꼴에 한글 글자 모양이 없어 깨져 보인다.
         // 화면에서 한글이 잘 나오는 글꼴을 찾아 물려준다 (UIFontHelper.cs 참고).
@@ -1537,6 +1587,20 @@ public class InvestigationController : MonoBehaviour
         {
             bool hasWrittenNote = NoteManager.Instance.OnHotspotInspected(activeScreenId, obj.gameObject.name);
 
+            // 이 오브젝트로 얻는 아이템에 수첩 메모(TriggerType=Item)가 따로 적혀 있으면, 그 메모가
+            // 아이템을 얻는 순간 들어가므로 조사 문장을 또 옮겨 적지 않는다 (같은 내용이 두 번 적히던 문제).
+            if (!hasWrittenNote && obj.type == HotspotType.Item)
+            {
+                var noteItems = ParseItemList(obj.itemId);
+                if (noteItems != null)
+                {
+                    foreach (string id in noteItems)
+                    {
+                        if (NoteManager.Instance.HasEntryFor("Item", id)) { hasWrittenNote = true; break; }
+                    }
+                }
+            }
+
             // 선택지가 달린 오브젝트(예: OBJ_07_Manager, 자료실 문)는 질문 문장만으로는 아직
             // 확정된 사실이 아니다 - 플레이어가 무엇을 고르느냐에 따라 결과가 갈리므로,
             // 질문 자체를 수첩에 자동으로 옮겨 적지 않는다. (꼭 남겨야 하면 NoteEntries.csv에
@@ -1607,6 +1671,8 @@ public class InvestigationController : MonoBehaviour
             string viewerItemId = grantedItemIds != null && grantedItemIds.Count > 0 ? grantedItemIds[0] : obj.itemId;
             if (TryOpenDocumentViewer(viewerItemId))
             {
+                if (grantedAnyItem) ScheduleCombineHint(viewerItemId);
+
                 // 뷰어는 화면 전환과 무관하게 항상 볼 수 있으므로, 자동 이동 조건을
                 // 곧바로 검사해도 된다(예전과 동일한 순서).
                 if (grantedAnyItem) CheckAutoExit();
@@ -1847,6 +1913,34 @@ public class InvestigationController : MonoBehaviour
                 ForceExit();
                 GameFlowManager.Instance?.TriggerEnding(EndingType.Bad_C);
             });
+    }
+
+    // ===== 조합 힌트 대사 =====
+    // 가방에서 두 물건을 "조합"해야 나오는 단서(예: SD카드 + 카메라 -> 현장 사진)는, 조합을
+    // 떠올리지 못하면 추리에 쓰이는 단서를 통째로 놓친다. 그래서 조합 재료를 주웠을 때 짝이 되는
+    // 물건을 이미 갖고 있으면, 자료 뷰어를 닫은 직후 주인공이 한마디 해서 조합을 떠올리게 한다.
+    //   주운 아이템 -> (짝 아이템, 화자, 대사)
+    private static readonly Dictionary<string, (string partner, string speaker, string line)> CombineHintLines =
+        new Dictionary<string, (string, string, string)>(StringComparer.OrdinalIgnoreCase)
+        {
+            { "sd_card", ("camera", "재훈", "카메라에 꽂아 보자.") },
+        };
+
+    private void ScheduleCombineHint(string itemId)
+    {
+        if (string.IsNullOrEmpty(itemId) || !CombineHintLines.TryGetValue(itemId.Trim(), out var hint)) return;
+        if (InventoryManager.Instance == null || !InventoryManager.Instance.HasItem(hint.partner)) return;
+        if (DocumentViewerController.Instance == null) return;
+
+        System.Action handler = null;
+        handler = () =>
+        {
+            DocumentViewerController.Instance.OnHidden -= handler;
+            // 그 사이 조사가 끝났거나 다른 대사가 떠 있으면 끼어들지 않는다.
+            if (!inSession || IsShowingTalkLine) return;
+            ShowLineInDialogue(hint.speaker, hint.line);
+        };
+        DocumentViewerController.Instance.OnHidden += handler;
     }
 
     private bool TryOpenDocumentViewer(string itemId)
