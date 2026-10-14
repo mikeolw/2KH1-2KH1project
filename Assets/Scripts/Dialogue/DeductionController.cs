@@ -250,7 +250,7 @@ public class DeductionController : MonoBehaviour
         // 고른 보기에 대한 반응 문장을 대사창에 보여준다.
         if (!string.IsNullOrWhiteSpace(choice.resultText) && DialogueSystem.Instance != null)
         {
-            DialogueSystem.Instance.ShowInvestigationLine("재훈", choice.resultText);
+            DialogueSystem.Instance.ShowInvestigationLine("차재훈", choice.resultText);
         }
 
         if (!choice.isCorrect)

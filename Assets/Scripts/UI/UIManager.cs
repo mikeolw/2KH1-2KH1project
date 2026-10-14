@@ -91,16 +91,42 @@ public class UIManager : MonoBehaviour
     }
     public void TogglePhone()
     {
+        if (!IsPhoneUnlocked) return;   // 아직 핸드폰을 줍지 않았다 (아래 잠금 설명 참고)
         bool willOpen = !phonePanel.activeSelf;
         TogglePanel(phonePanel);
         if (willOpen && phoneOpenSfx != null) sfxSource.PlayOneShot(phoneOpenSfx);
     }
     public void ToggleNote()
     {
+        if (!IsNoteUnlocked) return;    // 아직 메모장을 줍지 않았다
         bool willOpen = !notePanel.activeSelf;
         TogglePanel(notePanel);
         if (willOpen && noteOpenSfx != null) sfxSource.PlayOneShot(noteOpenSfx);
     }
+
+    // ---------------------------------------------------------------------------------
+    // 수첩 / 핸드폰 잠금
+    // ---------------------------------------------------------------------------------
+    // ===== 왜 잠그는가? =====
+    // 게임을 켜자마자 수첩과 핸드폰을 열 수 있으면, #01 사무실 조사에서 그 둘을 "발견하는"
+    // 장면의 의미가 없어진다. 그래서 주인공이 실제로 그 물건을 손에 넣기 전까지는 퀵바에서
+    // 버튼 자체를 숨기고(QuickBarStyler), 혹시 다른 경로로 열리더라도 여기서 막는다.
+    //
+    // ===== 판정 기준을 "아이템 소지"로 잡은 이유 =====
+    // 가방에 들어온 아이템 목록은 세이브에 그대로 저장된다(SaveData.acquiredItemIds).
+    // 그래서 따로 저장할 값을 늘리지 않아도, 불러오기 한 판에서도 잠금 상태가 알아서 맞는다.
+    // "그 오브젝트를 눌러봤는가"로 판정하면 그 기록은 저장되지 않아서, 불러오기만 하면
+    // 다시 잠겨버린다(InvestigationController.inspectedHotspots는 저장 대상이 아니다).
+    //
+    // 두 물건 모두 #01 사무실(BG_01_MyDesk)의 조사 오브젝트에서 얻는다.
+    public const string NoteUnlockItemId = "notepad_pen";          // 메모장과 볼펜
+    public const string PhoneUnlockItemId = "01_mydesk_cellphone"; // 핸드폰
+
+    public static bool IsNoteUnlocked =>
+        InventoryManager.Instance != null && InventoryManager.Instance.HasItem(NoteUnlockItemId);
+
+    public static bool IsPhoneUnlocked =>
+        InventoryManager.Instance != null && InventoryManager.Instance.HasItem(PhoneUnlockItemId);
     public void ToggleSettings() => TogglePanel(settingsPanel);
 
     // ===== 인게임 환경설정 =====

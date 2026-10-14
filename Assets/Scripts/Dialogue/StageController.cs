@@ -30,11 +30,11 @@ using UnityEngine.UI;
 //                  - none 이라고 적으면 아무도 입을 움직이지 않는다(나레이션 등).
 //
 // ===== 화자 자동 인식 (Characters.csv) =====
-// CSV의 Speaker 칸에는 "한성", "재훈" 같은 한글 이름이 적히는데, 스탠딩 파일 이름은
+// CSV의 Speaker 칸에는 "유한성", "차재훈" 같은 한글 이름이 적히는데, 스탠딩 파일 이름은
 // "STD_Past01_Hansung_Default" 처럼 영문이다. 이 둘을 이어주기 위해
 // Assets/Resources/Dialogues/Characters.csv 에 "한글 이름 -> 영문 토큰" 표를 적어둔다.
-//   예) 한성,Hansung
-// 그러면 Speaker가 "한성"인 줄에서는, 화면에 올라와 있는 스탠딩 중 파일 이름에 "Hansung"이
+//   예) 유한성,Hansung
+// 그러면 Speaker가 "유한성"인 줄에서는, 화면에 올라와 있는 스탠딩 중 파일 이름에 "Hansung"이
 // 들어간 캐릭터를 찾아 그 캐릭터만 입을 움직인다. 표에 없는 이름이면 아무도 입을 안 움직인다.
 //
 // ===== 씬 배치에 대해 (유니티를 잘 모르는 팀원을 위한 설명) =====
@@ -69,7 +69,7 @@ public class StageController : MonoBehaviour
     private const int SlotRight = 2;
 
     // Characters.csv에서 읽어온 "한글 화자 이름 -> 스탠딩 파일 이름 속 영문 토큰" 표.
-    // 예: "한성" -> "Hansung"
+    // 예: "유한성" -> "Hansung"
     private Dictionary<string, string> speakerTokenMap;
 
     // 지금 화면에 배경이 무엇인지 기억해둔다. 같은 배경을 다시 지정해도 다시 로드하지 않게 하기 위함.
@@ -571,7 +571,7 @@ public class StageController : MonoBehaviour
     }
 
     // 지금 말하고 있는 캐릭터만 입을 움직이게 한다.
-    //   speaker    : CSV의 Speaker 칸 (예: "한성")
+    //   speaker    : CSV의 Speaker 칸 (예: "유한성")
     //   talkerSpec : CSV의 Talker 칸. "L"/"C"/"R"로 직접 지정하거나, "none"이면 아무도 안 움직임.
     //                비어 있으면 speaker 이름으로 자동으로 찾는다.
     //   talking    : 대사 타이핑이 진행 중이면 true, 끝났으면 false
@@ -615,7 +615,7 @@ public class StageController : MonoBehaviour
         if (!speakerTokenMap.TryGetValue(speaker.Trim(), out string token)) return -1;
 
         // 화면에 올라와 있는 스탠딩 중 파일 이름에 그 토큰이 들어간 자리를 찾는다.
-        // 예: 화자 "한성" -> 토큰 "Hansung" -> "STD_Past01_Hansung_Default"가 올라온 자리
+        // 예: 화자 "유한성" -> 토큰 "Hansung" -> "STD_Past01_Hansung_Default"가 올라온 자리
         for (int i = 0; i < standingSlots.Length; i++)
         {
             string current = standingSlots[i] != null ? standingSlots[i].CurrentFileName : null;

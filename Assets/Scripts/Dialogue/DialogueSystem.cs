@@ -910,6 +910,28 @@ public class DialogueSystem : MonoBehaviour
                 }
             }
 
+            // ===== 미니게임 3: 번호 입력(금고 키패드) =====
+            // 이 행에 MinigameAnswer가 적혀 있으면 스텁 대신 키패드를 띄운다
+            // (KeypadMinigameController.cs 참고). 틀려도 계속 다시 칠 수 있는 구조라
+            // 실패 콜백이 없고, 맞히면 다음 줄로 이어진다.
+            if (!string.IsNullOrWhiteSpace(line.minigameAnswer))
+            {
+                if (KeypadMinigameController.Instance == null)
+                {
+                    Debug.LogWarning("[DialogueSystem] KeypadMinigameController가 없어 번호 입력 미니게임을 건너뜁니다.");
+                    ShowNextSentence();
+                    return;
+                }
+
+                KeypadMinigameController.Instance.StartGame(
+                    line.minigameLabel,
+                    line.minigameAnswer,
+                    line.minigameHint,
+                    onSuccessCallback: () => ShowNextSentence()
+                );
+                return;
+            }
+
             // 미니게임 담당이 씬에 없으면(팀원이 아직 만들지 않은 구간 등) 게임이 멈추는
             // 대신 그냥 다음 대사로 넘어간다. 조사/추리 쪽과 같은 방침이다.
             if (MinigameController.Instance == null)
@@ -1808,10 +1830,10 @@ public class DialogueSystem : MonoBehaviour
                 choicePanel.SetActive(false);
 
                 // 고른 선택지도 대화 로그에 남긴다 - 안 남기면 로그만 봤을 때 대사 흐름이
-                // 뚝뚝 끊겨 보인다. 화자는 항상 주인공(재훈)이다 (선택지는 재훈의 결정이므로).
+                // 뚝뚝 끊겨 보인다. 화자는 항상 주인공(차재훈)이다 (선택지는 차재훈의 결정이므로).
                 if (DialogueLogController.Instance != null && !string.IsNullOrWhiteSpace(pickedText))
                 {
-                    DialogueLogController.Instance.AddEntry("재훈", pickedText);
+                    DialogueLogController.Instance.AddEntry("차재훈", pickedText);
                 }
 
                 if (isEnding)
@@ -1856,6 +1878,7 @@ public class DialogueSystem : MonoBehaviour
         if (choicePanel != null && choicePanel.activeSelf) return true;
         if (UIManager.Instance != null && UIManager.Instance.IsAnyPanelOpen) return true;
         if (MinigameController.Instance != null && MinigameController.Instance.IsActive) return true;
+        if (KeypadMinigameController.Instance != null && KeypadMinigameController.Instance.IsActive) return true;
         if (DocumentViewerController.Instance != null && DocumentViewerController.Instance.IsOpen) return true;
         if (DeductionController.Instance != null && DeductionController.Instance.IsActive) return true;
         if (SaveSlotDialog.Instance != null && SaveSlotDialog.Instance.IsOpen) return true;
@@ -2202,6 +2225,11 @@ public class DialogueSystem : MonoBehaviour
                         Debug.LogWarning($"[DialogueSystem] Minigame 행의 MinigameTimeLimit '{timeLimitStr}'이 숫자가 아닙니다. (CSV: {csvFileName}, 행: {i + 2})");
                     }
                 }
+                // 미니게임 3(번호 입력) 전용 칸. 비어 있으면 예전처럼 스텁 미니게임이 뜬다
+                // (DialogueLine.cs의 minigameAnswer 주석 참고).
+                minigameLine.minigameAnswer = GetField(data[i], "MinigameAnswer").Trim();
+                minigameLine.minigameHint = GetField(data[i], "MinigameHint");
+
                 // 이 줄의 BGM/SFX 칸도 읽어둔다 (ApplySoundColumns() 상단 주석 참고 - 원래
                 // 여기가 빠져 있어서 미니게임 줄에서 세이브를 불러오면 BGM이 안 나오는 버그가 있었다).
                 ApplySoundColumns(minigameLine, data[i]);

@@ -50,9 +50,44 @@ public class QuickBarStyler : MonoBehaviour
         ("Btn_Settings", "Icon_Settings", "설정"),
     };
 
+    // ----- 잠겨 있는 버튼 -----
+    // 수첩과 휴대폰은 #01 사무실 조사에서 그 물건을 줍기 전까지 아예 숨긴다
+    // (잠금 조건은 UIManager.IsNoteUnlocked / IsPhoneUnlocked 참고).
+    // 버튼을 끄면 HorizontalLayoutGroup이 남은 버튼을 자동으로 당겨 빈자리를 메우므로,
+    // 잠긴 칸이 구멍으로 보이지 않는다(퀵바의 카메라 버튼을 숨긴 것과 같은 방식).
+    //
+    // 모양 입히기(Apply)가 그림이 없어 중간에 멈추더라도 잠금은 걸려야 하므로,
+    // 버튼을 찾아두는 일은 Apply와 따로 한다.
+    private GameObject noteButton, phoneButton;
+
     private void Start()
     {
+        var noteT = transform.Find("Btn_Note");
+        var phoneT = transform.Find("Btn_Phone");
+        noteButton = noteT != null ? noteT.gameObject : null;
+        phoneButton = phoneT != null ? phoneT.gameObject : null;
+
         Apply();
+        ApplyLocks();
+    }
+
+    // 물건을 줍는 순간(조사 중)에도 바로 반영되어야 해서 매 프레임 확인한다.
+    // SetActive는 상태가 실제로 바뀔 때만 부르므로 레이아웃이 매 프레임 다시 계산되지는 않는다.
+    private void Update()
+    {
+        ApplyLocks();
+    }
+
+    private void ApplyLocks()
+    {
+        SetButtonVisible(noteButton, UIManager.IsNoteUnlocked);
+        SetButtonVisible(phoneButton, UIManager.IsPhoneUnlocked);
+    }
+
+    private static void SetButtonVisible(GameObject button, bool visible)
+    {
+        if (button == null || button.activeSelf == visible) return;
+        button.SetActive(visible);
     }
 
     private void Apply()

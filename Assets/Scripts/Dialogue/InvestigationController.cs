@@ -133,7 +133,8 @@ public class InvestigationController : MonoBehaviour
         TextKey("BG_07_InvestigationSite_05", "Hotspot_Documents_F02L"),
         TextKey("BG_07_InvestigationSite_05", "Hotspot_Documents_F02R"),
         TextKey("BG_07_InvestigationSite_07", "Hotspot_Curtain"),
-        TextKey("BG_07_InvestigationSite_07", "Hotspot_BookCase"),
+        // 책장은 뺐다. 금고 비밀번호 단서(사장의 비망록)가 여기서 나오므로 "엉뚱한 곳"이
+        // 아니라 반드시 들러야 하는 자리다. 시간을 깎으면 꼭 해야 할 일에 벌을 주는 셈이 된다.
         TextKey("BG_07_InvestigationSite_07", "Hotspot_CEODesk"),
         TextKey("BG_07_InvestigationSite_07", "Hotspot_Sofa"),
     };
@@ -1923,7 +1924,7 @@ public class InvestigationController : MonoBehaviour
     private static readonly Dictionary<string, (string partner, string speaker, string line)> CombineHintLines =
         new Dictionary<string, (string, string, string)>(StringComparer.OrdinalIgnoreCase)
         {
-            { "sd_card", ("camera", "재훈", "카메라에 꽂아 보자.") },
+            { "sd_card", ("camera", "차재훈", "카메라에 꽂아 보자.") },
         };
 
     private void ScheduleCombineHint(string itemId)
