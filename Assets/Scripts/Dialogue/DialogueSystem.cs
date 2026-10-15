@@ -87,6 +87,17 @@ public class DialogueSystem : MonoBehaviour
     // IsFadeOut 칸과 상관없이) 이 시간만큼 어둠을 유지한 뒤 다음 장면으로 넘어간다.
     public float postInvestigationBlackHoldDuration = 1f;
 
+    // ===== 스킵 중에는 암전도 휘리릭 지나간다 =====
+    // 예전에는 스킵을 눌러도 암전만은 제 속도(fadeDuration + 유지시간 + fadeDuration,
+    // 합쳐서 2초)로 다 재생돼서, 암전이 많은 구간에서 스킵이 멈춘 것처럼 느껴졌다.
+    // 스킵 중이면 이 짧은 시간을 대신 쓰고, 검은 화면 유지도 건너뛴다.
+    // 암전이 진행되는 도중에 스킵을 눌러도 그 자리에서 바로 빨라진다(Fade 참고).
+    [Tooltip("스킵 중일 때 암전/복귀에 걸리는 시간(초). 0이면 즉시.")]
+    public float fadeSkipDuration = 0.06f;
+
+    // 지금 스킵 중인가 (암전 속도와 검은 화면 유지 시간을 정할 때 쓴다).
+    private bool IsSkipping => skipMode != SkipMode.None;
+
     // 조사 종료 콜백에서 켜고, 다음 줄을 보여줄 때 한 번 읽고 바로 끈다(ShowNextSentence 참고).
     private bool nextLineFollowsInvestigation;
 
@@ -1029,7 +1040,7 @@ public class DialogueSystem : MonoBehaviour
             // 조사 오브젝트 그림은 암전이 다 될 때까지 남겨 두었다가 여기서 지운다 (InvestigationController.Exit 참고).
             InvestigationController.Instance?.ClearLeftoverHotspots();
             ApplyLineStage(line, instant: true);
-            yield return new WaitForSeconds(postInvestigationBlackHoldDuration);
+            yield return StartCoroutine(HoldBlack(postInvestigationBlackHoldDuration));
             yield return StartCoroutine(Fade(0f));
 
             if (fadeCanvasGroup != null) fadeCanvasGroup.blocksRaycasts = false;
@@ -1043,7 +1054,7 @@ public class DialogueSystem : MonoBehaviour
         ShowDialoguePanel();
         yield return StartCoroutine(Fade(1f));
         DisplayLine(line);
-        yield return new WaitForSeconds(blackHoldDuration);
+        yield return StartCoroutine(HoldBlack(blackHoldDuration));
 
         // ===== 세이브 창이 열려 있으면 닫힐 때까지 암전을 유지한다 =====
         // 이 줄이 세이브포인트(IsSavePoint=TRUE)이기도 하면 DisplayLine() 안에서
@@ -1144,13 +1155,31 @@ public class DialogueSystem : MonoBehaviour
 
         float startAlpha = fadeCanvasGroup.alpha;
         float t = 0f;
-        while (t < fadeDuration)
+        while (true)
         {
+            // 걸리는 시간을 매 프레임 다시 본다. 암전 도중에 스킵을 눌러도
+            // 그 순간부터 남은 구간이 짧아져서 곧바로 빨라진다.
+            float dur = Mathf.Max(0.0001f, IsSkipping ? fadeSkipDuration : fadeDuration);
             t += Time.deltaTime;
-            fadeCanvasGroup.alpha = Mathf.Lerp(startAlpha, targetAlpha, t / fadeDuration);
+            float p = Mathf.Clamp01(t / dur);
+            fadeCanvasGroup.alpha = Mathf.Lerp(startAlpha, targetAlpha, p);
+            if (p >= 1f) break;
             yield return null;
         }
         fadeCanvasGroup.alpha = targetAlpha;
+    }
+
+    // 검은 화면을 유지하는 대기. 스킵 중이면 기다리지 않고, 대기 도중에 스킵을
+    // 누르면 그 자리에서 끊는다.
+    private IEnumerator HoldBlack(float seconds)
+    {
+        float t = 0f;
+        while (t < seconds)
+        {
+            if (IsSkipping) yield break;
+            t += Time.deltaTime;
+            yield return null;
+        }
     }
 
     // 지문/나레이션(LineType.Narration)은 화자 이름을 숨긴다 (DialogueLine.cs의 lineType 주석 참고).
