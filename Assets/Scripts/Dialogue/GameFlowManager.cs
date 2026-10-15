@@ -132,6 +132,10 @@ public class GameFlowManager : MonoBehaviour
         {
             TimingClickMinigameController.Instance.ForceExit();
         }
+        if (KeypadMinigameController.Instance != null && KeypadMinigameController.Instance.IsActive)
+        {
+            KeypadMinigameController.Instance.ForceExit();
+        }
 
         if (DialogueSystem.Instance == null)
         {

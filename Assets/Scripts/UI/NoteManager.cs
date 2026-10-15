@@ -188,6 +188,17 @@ public class NoteManager : MonoBehaviour
     }
 
     // 조사 화면을 마쳤을 때. InvestigationController.Exit()이 호출한다.
+    // 조사 화면에 들어선 순간 부른다. TriggerType=Investigate 메모는 대부분
+    // "겨우 기억해냈다. 한성이가 알려줬던 비밀 공간." 처럼 그 조사를 시작하며 떠올리는
+    // 문장이라, 조사를 마친 뒤에 적히면 한 박자 늦는다. 조사 중에 수첩을 열어도
+    // 보이도록 들어설 때 적는다.
+    // 같은 메모를 또 부르는 것은 AddEntry()가 알아서 걸러내므로(recordedEntryIds)
+    // 끝날 때 한 번 더 불려도 중복되지 않는다.
+    public bool OnInvestigationStarted(string investigationId)
+    {
+        return AddEntriesMatching("Investigate", investigationId);
+    }
+
     public bool OnInvestigationFinished(string investigationId)
     {
         return AddEntriesMatching("Investigate", investigationId);

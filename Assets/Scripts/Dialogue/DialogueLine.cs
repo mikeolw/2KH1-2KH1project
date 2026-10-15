@@ -14,7 +14,7 @@ public class DialogueLine
 {
     [Header("기본 대사 정보")]
     public LineType lineType = LineType.NormalDialogue;
-    public string speaker;             // 화자 이름 (예: "재훈", "한성")
+    public string speaker;             // 화자 이름 (예: "차재훈", "유한성")
     [TextArea(2, 5)]
     public string sentence;            // 대사 내용
 
@@ -151,6 +151,16 @@ public class DialogueLine
     // 주석 참고). Minigame 행이 아니라 아무 LineType에나 적을 수 있다 - 목표 지점이 보통
     // 평범한 대사/나레이션 한 줄이기 때문이다.
     public bool minigameTimerStop;
+
+    // ===== 미니게임 3: 번호 입력(금고 키패드) - KeypadMinigameController.cs 참고 =====
+    // Minigame 행에 MinigameAnswer 칸이 채워져 있으면, "버튼 하나 누르면 성공"하는 스텁
+    // 대신 숫자 키패드가 뜬다. 비어 있으면 예전처럼 스텁으로 동작하므로, 이미 적어둔
+    // 다른 미니게임 행들은 아무 영향도 받지 않는다.
+    //   MinigameAnswer : 정답. 숫자를 그대로 적거나(133837), "원본+이동값"으로 적는다(800504+3).
+    //                    뒤쪽 형식은 각 자리를 그 수만큼 민 값(시저 암호)이 정답이 된다.
+    //   MinigameHint   : 키패드 아래에 작게 뜨는 힌트 한 줄. 비우면 힌트 줄이 안 나온다.
+    public string minigameAnswer;
+    public string minigameHint;
 
     [Header("조사 모드 (선택)")]
     // CSV의 LineType이 "Investigate"인 행에서만 채워진다. isInvestigation이 true면

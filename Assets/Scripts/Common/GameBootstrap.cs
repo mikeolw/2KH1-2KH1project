@@ -115,6 +115,7 @@ public static class GameBootstrap
             // 자료실 문 잠입에 쓰는 타이밍 클릭 미니게임. 위 TimeAttackController와 같은
             // 이유로 인스펙터 연결 없이 자동 생성해도 안전하다 (TimingClickMinigameController.cs 참고).
             if (TimingClickMinigameController.Instance == null) Create<TimingClickMinigameController>("TimingClickMinigameController");
+            if (KeypadMinigameController.Instance == null) Create<KeypadMinigameController>("KeypadMinigameController");
 
             // 자료실 앞 복도 감시(범인측 인물이 보일 때 문을 누르면 배드엔딩 C). 위와 같은
             // 이유로 인스펙터 연결 없이 자동 생성해도 안전하다 (CorridorWatchController.cs 참고).

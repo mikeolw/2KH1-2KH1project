@@ -134,7 +134,8 @@ public class InvestigationController : MonoBehaviour
         TextKey("BG_07_InvestigationSite_05", "Hotspot_Documents_F02R"),
         TextKey("BG_07_InvestigationSite_07", "Hotspot_Curtain"),
         TextKey("BG_07_InvestigationSite_07", "Hotspot_BookCase"),
-        TextKey("BG_07_InvestigationSite_07", "Hotspot_CEODesk"),
+        // 사장 책상은 뺐다. 금고 비밀번호 단서(사장의 비망록)가 여기서 나오므로 "엉뚱한 곳"이
+        // 아니라 반드시 들러야 하는 자리다. 시간을 깎으면 꼭 해야 할 일에 벌을 주는 셈이 된다.
         TextKey("BG_07_InvestigationSite_07", "Hotspot_Sofa"),
     };
 
@@ -788,6 +789,10 @@ public class InvestigationController : MonoBehaviour
     private void EnterScreen(string screenId, ScreenData screen)
     {
         ShowScreenContent(screen);
+
+        // 이 화면을 여는 순간 적히는 수첩 메모(TriggerType=Investigate)를 먼저 남긴다.
+        // 조사를 마칠 때도 한 번 더 부르지만(Exit 참고) 중복은 NoteManager가 걸러낸다.
+        NoteManager.Instance?.OnInvestigationStarted(screenId);
 
         // ===== 자료실 앞 복도 감시 =====
         // 이 화면에 있는 동안만 복도에 직원들이 오간다. 범인과 친분이 있는 인물이 보일 때
@@ -1923,7 +1928,7 @@ public class InvestigationController : MonoBehaviour
     private static readonly Dictionary<string, (string partner, string speaker, string line)> CombineHintLines =
         new Dictionary<string, (string, string, string)>(StringComparer.OrdinalIgnoreCase)
         {
-            { "sd_card", ("camera", "재훈", "카메라에 꽂아 보자.") },
+            { "sd_card", ("camera", "차재훈", "카메라에 꽂아 보자.") },
         };
 
     private void ScheduleCombineHint(string itemId)

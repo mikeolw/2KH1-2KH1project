@@ -55,7 +55,7 @@ public class CorridorWatchController : MonoBehaviour
 
     [Header("난이도 조절")]
     [Tooltip("복도 인물이 바뀌는 간격(초). 짧을수록 어렵다.")]
-    public float changeIntervalSeconds = 3.5f;
+    public float changeIntervalSeconds = 1.8f;
     [Tooltip("사람이 바뀌는 순간 문을 눌러도 억울하지 않도록, 바뀐 직후 이만큼은 판정을 유예한다(초).")]
     public float graceSeconds = 0.25f;
 
@@ -111,16 +111,18 @@ public class CorridorWatchController : MonoBehaviour
             new CorridorGroup { spriteName = "STD_07_Corridor_01", caption = "", dangerous = false, weight = 0.35f },
 
             new CorridorGroup { spriteName = "STD_07_Corridor_02", caption = "오수정 사원", dangerous = false, weight = 1f },
-            new CorridorGroup { spriteName = "STD_07_Corridor_03", caption = "한도윤 과장", dangerous = false, weight = 1f },
+            new CorridorGroup { spriteName = "STD_07_Corridor_03", caption = "한도윤 사원", dangerous = false, weight = 1f },
             new CorridorGroup { spriteName = "STD_07_Corridor_04", caption = "서지민 사원, 배유리 사원", dangerous = false, weight = 1f },
-            new CorridorGroup { spriteName = "STD_07_Corridor_05", caption = "오수정 사원, 한도윤 과장", dangerous = false, weight = 1f },
+            new CorridorGroup { spriteName = "STD_07_Corridor_05", caption = "오수정 사원, 한도윤 사원", dangerous = false, weight = 1f },
             new CorridorGroup { spriteName = "STD_07_Corridor_06", caption = "배유리 사원", dangerous = false, weight = 1f },
 
-            // 범인과 친분이 있는 인물 - 이때 문을 누르면 들킨다.
-            new CorridorGroup { spriteName = "STD_07_Corridor_07", caption = "최지훈 대리", dangerous = true, weight = 1f },
-            new CorridorGroup { spriteName = "STD_07_Corridor_08", caption = "나영석 대리", dangerous = true, weight = 1f },
-            new CorridorGroup { spriteName = "STD_07_Corridor_09", caption = "최지훈 대리, 오수정 사원", dangerous = true, weight = 1f },
-            new CorridorGroup { spriteName = "STD_07_Corridor_10", caption = "나영석 대리, 서지민 사원", dangerous = true, weight = 1f },
+            // ===== 진범 측 인물 - 이때 문을 누르면 들킨다 =====
+            // 과장 / 대리 / 서기 / 차장 네 사람이다. 목업 그림에도 머리 위에 같은 직책이
+            // 적혀 있어서, 그림만 보고도 들어가면 안 되는 순간인지 바로 알 수 있다.
+            new CorridorGroup { spriteName = "STD_07_Corridor_07", caption = "과장", dangerous = true, weight = 1f },
+            new CorridorGroup { spriteName = "STD_07_Corridor_08", caption = "대리", dangerous = true, weight = 1f },
+            new CorridorGroup { spriteName = "STD_07_Corridor_09", caption = "서기, 오수정 사원", dangerous = true, weight = 1f },
+            new CorridorGroup { spriteName = "STD_07_Corridor_10", caption = "차장, 서지민 사원", dangerous = true, weight = 1f },
         };
     }
 
