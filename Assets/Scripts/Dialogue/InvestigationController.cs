@@ -771,6 +771,21 @@ public class InvestigationController : MonoBehaviour
             NoteManager.Instance.SetRealtimeUpdate(false);
         }
 
+        // ===== CSV가 직접 연 화면의 AutoFinish는 이미 할 일을 마친 것으로 본다 =====
+        // AutoFinish는 "이 화면에 도착하면 지금까지의 조사를 끊고 다음 흐름으로 넘긴다"는
+        // 인계 장치다(ScreenData.autoFinishRequiredItemIds 참고). CSV가 Investigate로 이
+        // 화면을 직접 열었다면 그 인계는 이미 끝난 것이므로, 나중에 화살표로 이 화면에
+        // 다시 들어왔을 때 또 발동하면 안 된다.
+        //
+        // 이게 없으면 이런 일이 생긴다: 사장실 앞에서 되돌아가기 화살표로 자료실 앞(_04)에
+        // 가는 순간, 아직 열쇠를 들고 있다는 이유로 AutoFinish가 터져 조사가 끝나버리고,
+        // 사장실 문을 누르지도 않았는데 "사장실 문이 열렸다" 줄로 넘어간다.
+        if (screen.hasAutoFinish && InventoryManager.Instance != null)
+        {
+            string afFlag = AutoFinishUsedFlag(activeScreenId);
+            if (!InventoryManager.Instance.HasItem(afFlag)) InventoryManager.Instance.AddItem(afFlag);
+        }
+
         // 이번 조사에서 거쳐 간 화면을 새로 센다 (화면 이동 중 조사 완료 기록용).
         visitedScreenIds.Clear();
         visitedScreenIds.Add(activeScreenId);
@@ -856,7 +871,18 @@ public class InvestigationController : MonoBehaviour
         BuildHotspots(screen);
 
         // 3) 안내문을 대화창에 띄운다.
-        if (!string.IsNullOrWhiteSpace(screen.introText))
+        // ===== 자료실 앞은 일을 끝낸 뒤에 다시 와도 같은 안내를 하면 안 된다 =====
+        // _04의 안내문은 "문을 열어 진입할 수 있을 것 같다"처럼 아직 들어가기 전을 말한다.
+        // 그런데 자료실에서 증거를 다 모아 나온 뒤에도 이 복도를 다시 지나갈 수 있어서
+        // (사장실 앞 <-> 자료실 앞 <-> 회의실 앞 화살표), 그때마다 이미 끝난 일을
+        // 또 권하는 꼴이 됐다. 문을 눌렀을 때는 이미 "다시 들어갈 필요는 없을 것 같다"로
+        // 막고 있으므로(Inspect 참고), 안내문 쪽도 같은 기준으로 아예 띄우지 않는다.
+        bool skipIntro = screenData != null
+                         && screenData.TryGetValue(ResourceRoomDoorScreenId, out ScreenData doorScreen)
+                         && ReferenceEquals(doorScreen, screen)
+                         && HasAllResourceRoomClues();
+
+        if (!skipIntro && !string.IsNullOrWhiteSpace(screen.introText))
         {
             ShowLineInDialogue("", screen.introText, screen.introLongMonologue);
         }
