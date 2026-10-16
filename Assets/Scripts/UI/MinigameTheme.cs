@@ -131,8 +131,43 @@ public static class MinigameTheme
         text.text = label;
 
         var hover = img.gameObject.AddComponent<ThemedButtonHover>();
-        hover.Init(img, AddBorder(rt, Line), text);
+        hover.Init(img, AddBorder(rt, Line), text, null);
         return button;
+    }
+
+    // 씬에 이미 있는 버튼(Image + Button + 글자 자식)에 같은 모양을 입힌다. 타이틀 메뉴에서 쓴다.
+    // 마우스 올림 때는 왼쪽 강조 막대도 켜진다 (선택지와 같은 방식).
+    public static void StyleButton(Button button, TMP_Text label, float fontSize)
+    {
+        if (button == null) return;
+        var img = button.GetComponent<Image>();
+        if (img == null) img = button.gameObject.AddComponent<Image>();
+        img.sprite = null;
+        img.type = Image.Type.Simple;
+        img.color = ButtonFill;
+        button.targetGraphic = img;
+        button.transition = Selectable.Transition.None;
+        var nav = button.navigation; nav.mode = Navigation.Mode.None; button.navigation = nav;
+
+        var rt = (RectTransform)button.transform;
+        var border = AddBorder(rt, Line);
+        var bar = AddImage(rt, "AccentBar", Accent);
+        var brt = bar.rectTransform;
+        brt.anchorMin = new Vector2(0, 0); brt.anchorMax = new Vector2(0, 1); brt.pivot = new Vector2(0, 0.5f);
+        brt.sizeDelta = new Vector2(3f, 0f); brt.anchoredPosition = Vector2.zero;
+
+        if (label != null)
+        {
+            label.fontSize = fontSize;
+            label.fontStyle = FontStyles.Normal;
+            label.alignment = TextAlignmentOptions.Center;
+            label.characterSpacing = 4f;
+            label.raycastTarget = false;
+        }
+
+        var hover = button.gameObject.GetComponent<ThemedButtonHover>();
+        if (hover == null) hover = button.gameObject.AddComponent<ThemedButtonHover>();
+        hover.Init(img, border, label, bar);
     }
 
     // ---------------------------------------------------------------------------------
@@ -220,10 +255,11 @@ public static class MinigameTheme
         private Image bg;
         private Image[] border;
         private TMP_Text label;
+        private Image accentBar;
 
-        public void Init(Image background, Image[] borderLines, TMP_Text text)
+        public void Init(Image background, Image[] borderLines, TMP_Text text, Image bar)
         {
-            bg = background; border = borderLines; label = text;
+            bg = background; border = borderLines; label = text; accentBar = bar;
             Set(false);
         }
 
@@ -236,6 +272,7 @@ public static class MinigameTheme
             if (bg != null) bg.color = on ? ButtonHover : ButtonFill;
             if (border != null) foreach (var b in border) if (b != null) b.color = on ? Accent : Line;
             if (label != null) label.color = on ? TextBright : Text;
+            if (accentBar != null) accentBar.enabled = on;
         }
     }
 
