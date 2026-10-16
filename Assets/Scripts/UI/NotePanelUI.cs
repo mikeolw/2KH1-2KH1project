@@ -45,8 +45,8 @@ public class NotePanelUI : MonoBehaviour
     private static readonly Color AccentColor = new Color(0.298f, 0.388f, 0.467f);      // 4C6377 청회색 강조
     private static readonly Color SpineColor = new Color(0.114f, 0.141f, 0.169f, 0.25f);
     private static readonly Color TabIdleColor = new Color(0.79f, 0.8f, 0.8f, 1f);      // 그림이 없을 때만
-    private static readonly Color TabIdleInkColor = new Color(0.31f, 0.365f, 0.412f);   // 4F5D69
-    private static readonly Color TabIdleIndexColor = new Color(0.43f, 0.48f, 0.52f);   // 6E7A85
+    private static readonly Color TabIdleInkColor = new Color(0.769f, 0.808f, 0.839f);  // C4CED6 (어두운 청회색 탭 위)
+    private static readonly Color TabIdleIndexColor = new Color(0.588f, 0.643f, 0.69f); // 96A4B0
 
     // ----- 글자 -----
     private const float BodyFontSize = 23f;
@@ -55,10 +55,10 @@ public class NotePanelUI : MonoBehaviour
     private const float PlaceTitleFontSize = 38f;
 
     // 노트 그림 경로 (Resources 기준, 확장자 없음).
-    //   NoteBook_v2    : 1440x1080 투명 PNG. 책 + 기본 상태 탭이 그려져 있다.
-    //   NoteTab_Active : 176x80. 고른 탭 자리에 책 위로 얹는 종이색 탭.
-    private const string BookSpritePath = "Illusts/UI/NoteBook_v2";
-    private const string ActiveTabSpritePath = "Illusts/UI/NoteTab_Active";
+    //   NoteBook_v3    : 1440x1080 투명 PNG. 책 + 기본 상태 탭(2개)이 그려져 있다.
+    //   NoteTab_Active_v3 : 176x80. 고른 탭 자리에 책 위로 얹는 종이색 탭.
+    private const string BookSpritePath = "Illusts/UI/NoteBook_v3";
+    private const string ActiveTabSpritePath = "Illusts/UI/NoteTab_Active_v3";
     private bool hasBookArt;
     private Sprite activeTabSprite;
 
@@ -548,7 +548,7 @@ public class NotePanelUI : MonoBehaviour
         dim.raycastTarget = true;   // 뒤쪽 게임 화면이 눌리지 않게 막는다
 
         // ----- 펼친 책 -----
-        // 노트 그림(NoteBook_v2.png)은 캔버스와 같은 1440x1080 한 장이라 책을 캔버스 전체 크기로 깔고,
+        // 노트 그림(NoteBook_v3.png)은 캔버스와 같은 1440x1080 한 장이라 책을 캔버스 전체 크기로 깔고,
         // 탭/페이지 위치는 그림 속 좌표(왼쪽 위 기준 px)로 잡는다. 그림이 없으면 색 도형 책으로 대신 그린다.
         var book = new GameObject("Book", typeof(RectTransform), typeof(Image));
         book.transform.SetParent(overlay.transform, false);
@@ -601,14 +601,14 @@ public class NotePanelUI : MonoBehaviour
         rt.sizeDelta = new Vector2(width, height);
     }
 
-    // ----- 노트 그림 속 좌표 (NoteBook_v2.png 기준) -----
+    // ----- 노트 그림 속 좌표 (NoteBook_v3.png 기준) -----
     // 표지 x150~1290 y66~1014 / 왼쪽 페이지 x190~720 / 오른쪽 페이지 x720~1250 / 종이 y95~985.
     // 가운데 접힘선 그림자가 720 양옆으로 번지므로 글은 그보다 안쪽에서 시작하게 둔다.
-    // 오른쪽 페이지의 x1186~1204에는 책갈피 끈이 지나가므로 본문은 1176에서 끝낸다.
+    // 오른쪽 페이지 본문은 왼쪽과 같은 여백으로 1212에서 끝낸다.
     private const float LeftPageX = 228f;
     private const float LeftPageWidth = 456f;
     private const float RightPageX = 776f;
-    private const float RightPageWidth = 400f;
+    private const float RightPageWidth = 436f;
     private const float PageTop = 128f;
     private const float BodyTop = 232f;          // 장소 이름 + 이중선 아래
     private const float BodyBottom = 900f;       // 그 아래는 장 넘기기 버튼 자리
@@ -617,7 +617,7 @@ public class NotePanelUI : MonoBehaviour
 
     // 탭 (왼쪽, 위에서부터 y 150 + 96·i, 높이 80).
     //   기본 탭: 그림에 그려져 있다 (x40~190, 표지 밖으로 보이는 건 x40~150).
-    //   고른 탭: NoteTab_Active(176x80)를 x20에 책 위로 얹는다 (페이지 가장자리 x196까지 이어짐).
+    //   고른 탭: NoteTab_Active_v3(176x80)를 x20에 책 위로 얹는다 (페이지 가장자리 x196까지 이어짐).
     private const float TabActiveX = 20f;
     private const float TabIdleX = 40f;
     private const float TabActiveWidth = 176f;

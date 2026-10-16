@@ -39,6 +39,8 @@ public class TitleManager : MonoBehaviour
             clearCam.cullingMask = 0;
         }
 
+        StyleMenu();
+
         // "시작하기"는 슬롯 선택 없이 곧바로 게임 씬으로 이동해 새 게임을 시작한다.
         // 이전에 이어하던 세이브가 남아 있으면 그 지점부터 시작해 버리므로 여기서 비워준다
         // (DialogueSystem.Start()가 SaveManager.ActiveSave를 보고 이어할지 판단한다).
@@ -65,5 +67,69 @@ public class TitleManager : MonoBehaviour
             }
             SceneManager.LoadScene(settingsSceneName);
         });
+    }
+
+    // ===== 메뉴 모양 (청회색 테마, 씬은 그대로 두고 코드로 입힌다) =====
+    // 타이틀 그림(TitleArt)은 4:3 그대로 화면 가운데에 놓이는데, 버튼 묶음은 화면 오른쪽 아래에
+    // 붙어 있어서 와이드 화면에서는 그림 가장자리에 반쯤 걸쳐 보였다. 그래서 그림과 같은 4:3 틀을
+    // 하나 만들어 버튼 묶음을 그 안 오른쪽 아래로 옮긴다. 화면 비율이 바뀌어도 그림 안에 머문다.
+    //
+    //   ┌──────────── 타이틀 그림 (4:3) ────────────┐
+    //   │                                          │
+    //   │                          ┌────────────┐  │
+    //   │                          │  시작하기   │  │  ← 마우스 올림: 테두리/글자 밝게 + 왼쪽 막대
+    //   │                          │ 세이브데이터 │  │
+    //   │                          │  환경설정   │  │
+    //   │                          └────────────┘  │
+    //   └──────────────────────────────────────────┘
+    private const float MenuButtonWidth = 280f;
+    private const float MenuButtonHeight = 58f;
+    private const float MenuSpacing = 12f;
+    private const float MenuMarginRight = 72f;
+    private const float MenuMarginBottom = 72f;
+
+    private void StyleMenu()
+    {
+        if (startButton == null) return;
+        var column = startButton.transform.parent as RectTransform;
+        var canvasRt = column != null ? column.parent as RectTransform : null;
+        if (column == null || canvasRt == null) return;
+
+        // 그림과 같은 4:3 틀
+        var frameGo = new GameObject("MenuFrame", typeof(RectTransform), typeof(AspectRatioFitter));
+        var frame = (RectTransform)frameGo.transform;
+        frame.SetParent(canvasRt, false);
+        frame.SetSiblingIndex(column.GetSiblingIndex());
+        frame.anchorMin = Vector2.zero;
+        frame.anchorMax = Vector2.one;
+        frame.offsetMin = frame.offsetMax = Vector2.zero;
+        var fitter = frameGo.GetComponent<AspectRatioFitter>();
+        fitter.aspectMode = AspectRatioFitter.AspectMode.FitInParent;
+        fitter.aspectRatio = 4f / 3f;
+
+        column.SetParent(frame, false);
+        column.anchorMin = column.anchorMax = new Vector2(1f, 0f);
+        column.pivot = new Vector2(1f, 0f);
+        column.anchoredPosition = new Vector2(-MenuMarginRight, MenuMarginBottom);
+        column.sizeDelta = new Vector2(MenuButtonWidth, MenuButtonHeight * 3f + MenuSpacing * 2f);
+
+        var layout = column.GetComponent<VerticalLayoutGroup>();
+        if (layout != null)
+        {
+            layout.spacing = MenuSpacing;
+            layout.childControlWidth = true;
+            layout.childControlHeight = true;
+            layout.childForceExpandWidth = true;
+            layout.childForceExpandHeight = false;
+        }
+
+        foreach (var button in new[] { startButton, saveDataButton, settingsButton })
+        {
+            if (button == null) continue;
+            var le = button.GetComponent<LayoutElement>();
+            if (le == null) le = button.gameObject.AddComponent<LayoutElement>();
+            le.minHeight = le.preferredHeight = MenuButtonHeight;
+            MinigameTheme.StyleButton(button, button.GetComponentInChildren<TMPro.TMP_Text>(true), 24f);
+        }
     }
 }

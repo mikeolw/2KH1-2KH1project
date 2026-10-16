@@ -56,6 +56,10 @@ public class GameFlowManager : MonoBehaviour
     // 지금 어떤 엔딩으로 진행 중인지. 엔딩 화면 UI 등에서 참고할 수 있게 열어둔다.
     public EndingType CurrentEnding { get; private set; } = EndingType.None;
 
+    // 엔딩 대본을 재생하는 중인지. 대본 마지막 줄을 넘기면 DialogueSystem이 이걸 보고
+    // 곧바로 엔딩 카드를 띄운다 (FinishEnding).
+    public bool IsInEnding => endingStarted;
+
     private void Awake()
     {
         if (Instance == null) Instance = this;
@@ -147,11 +151,25 @@ public class GameFlowManager : MonoBehaviour
     }
 
     // ===== 엔딩을 다 본 뒤 =====
-    // 엔딩 대본 마지막의 [END] 버튼을 누르면 여기로 온다. 진행 상태를 정리하고
-    // 타이틀 화면으로 돌아간다.
+    // 엔딩 대본의 마지막 줄을 넘기면 여기로 온다 (DialogueSystem.ShowChoices - 예전 대본처럼
+    // 끝에 [END] 선택지가 남아 있으면 그 버튼을 눌렀을 때도 온다). 먼저 엔딩 카드(엔딩 이름 +
+    // [타이틀로])를 보여주고, 플레이어가 [타이틀로]를 누르면 진행 상태를 정리하고
+    // 타이틀 화면으로 돌아간다 (EndingCardUI.cs 참고).
+    private bool finishing;
+
     public void FinishEnding()
     {
+        if (finishing) return;   // [END]를 여러 번 눌러도 카드는 한 번만
+        finishing = true;
+
+        if (UIManager.Instance != null) UIManager.Instance.CloseAllPanels();
+        EndingCardUI.Show(CurrentEnding, ReturnToTitle);
+    }
+
+    private void ReturnToTitle()
+    {
         Debug.Log($"[GameFlowManager] '{CurrentEnding}' 엔딩을 마쳤습니다. 타이틀로 돌아갑니다.");
+        finishing = false;
 
         // 다음 플레이를 위해 진행 상태를 전부 비운다.
         // 이걸 안 하면 타이틀에서 새 게임을 눌러도 방금 엔딩을 본 지점부터 시작해 버린다.

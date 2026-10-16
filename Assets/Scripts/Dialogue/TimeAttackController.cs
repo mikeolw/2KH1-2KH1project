@@ -48,9 +48,12 @@ public class TimeAttackController : MonoBehaviour
     [Header("남은 시간이 이 초 이하로 떨어지면 빨간색 경고로 바뀐다")]
     public float warningThresholdSeconds = 60f;
 
+    [Header("이 초 이하로 떨어지면 숫자가 깜빡인다")]
+    public float blinkThresholdSeconds = 30f;
+
     [Header("평소 색 / 경고 색")]
-    public Color normalColor = new Color(1f, 0.86f, 0.45f); // 대화창 화자 이름과 같은 옅은 금색
-    public Color warningColor = new Color(1f, 0.3f, 0.3f);
+    public Color normalColor = MinigameTheme.TextBright;
+    public Color warningColor = MinigameTheme.Danger;
 
     // ===== 시간 페널티(ApplyPenalty) 연출 설정 =====
     // "엉뚱한 곳"을 조사했을 때(InvestigationController의 WrongHotspots 참고) 시간이
@@ -59,9 +62,15 @@ public class TimeAttackController : MonoBehaviour
     [Header("페널티(시간 감소) 연출")]
     public Color penaltyFlashColor = new Color(1f, 0.15f, 0.15f);
     public float penaltyFlashDuration = 0.4f;
+    [Tooltip("시간이 깎일 때 화면이 흔들리는 시간(초)과 세기(px). 세기를 0으로 두면 흔들지 않는다.")]
+    public float hitShakeDuration = 0.35f;
+    public float hitShakeStrength = 18f;
 
     // 지금 타이머가 돌아가는 중인지. DialogueSystem 등 다른 곳에서 참고할 수 있게 열어둔다.
     public bool IsRunning { get; private set; }
+
+    // true인 동안은 시간이 줄지 않는다. 미션 카드(MinigameController)가 떠 있는 동안 켠다.
+    public bool Paused { get; set; }
 
     // ===== 세이브에 담아야 하는 값들 (SavePointManager.cs가 읽어간다) =====
     // 타이머가 CSV의 특정 줄(MinigameTimeLimit이 적힌 Minigame 행)을 지나갈 때만 켜지는데,
@@ -81,6 +90,10 @@ public class TimeAttackController : MonoBehaviour
     // 코드로 만든 카운트다운 UI. 평소엔 꺼져 있다가 StartTimer()가 불릴 때만 켜진다.
     private GameObject timerRoot;
     private TMP_Text timerText;
+    private Image progressFill;       // 상자 아래쪽 남은 시간 막대
+    private Image clockIcon;          // 시계 아이콘 (링 + 바늘)
+    private RectTransform clockHand;
+    private float totalSeconds;       // 막대 비율 계산용. 세이브에서 이어하면 그때 남은 시간이 기준이 된다.
 
     // ===== 페널티 연출 상태 =====
     // penaltyFlashCoroutine : 지금 재생 중인 "빨갛게 물들었다 돌아오기" 코루틴. 짧은 시간에
@@ -164,6 +177,8 @@ public class TimeAttackController : MonoBehaviour
     private void BeginRunning(float seconds, string stopSavePointId, EndingType onFailEnding)
     {
         remainingSeconds = seconds;
+        totalSeconds = seconds;
+        Paused = false;
         failEnding = onFailEnding;
         // 세이브에서 이어하는 경우에만 stopSavePointId가 채워질 수 있다(RestoreTimer 참고) -
         // 새로 시작하는 타이머(StartTimer)는 이 값을 아예 넘기지 않는다. 이제 목표 지점은
@@ -186,6 +201,7 @@ public class TimeAttackController : MonoBehaviour
     private void StopTimer()
     {
         IsRunning = false;
+        Paused = false;
         if (timerRoot != null) timerRoot.SetActive(false);
     }
 
@@ -233,6 +249,24 @@ public class TimeAttackController : MonoBehaviour
         if (penaltyFlashCoroutine != null) StopCoroutine(penaltyFlashCoroutine);
         penaltyFlashCoroutine = StartCoroutine(PlayPenaltyColorFlash());
         StartCoroutine(PlayPenaltyPopup(seconds));
+
+        // ===== 3) 데미지를 입은 것처럼: 화면 흔들림 + 가장자리 붉은 번쩍임 + 타이머 상자 튕김 =====
+        if (hitShakeStrength > 0f) MinigameTheme.PlayHit(targetCanvas, hitShakeDuration, hitShakeStrength);
+        StartCoroutine(PlayTimerPunch());
+    }
+
+    // 타이머 상자가 순간 커졌다가 돌아온다.
+    private IEnumerator PlayTimerPunch()
+    {
+        const float duration = 0.3f;
+        var t0 = timerRoot.transform;
+        for (float t = 0f; t < duration; t += Time.unscaledDeltaTime)
+        {
+            float k = 1f - t / duration;
+            t0.localScale = Vector3.one * (1f + 0.18f * k * k);
+            yield return null;
+        }
+        t0.localScale = Vector3.one;
     }
 
     // ===== 1) 메인 타이머 글자 색 반짝임 연출 (Color Flash) =====
@@ -323,6 +357,7 @@ public class TimeAttackController : MonoBehaviour
     private void Update()
     {
         if (!IsRunning) return;
+        if (Paused) { UpdateTimerText(); return; }
 
         // Time.deltaTime = "지난 프레임부터 지금까지 걸린 실제 시간(초)". 컴퓨터 성능에 따라
         // 프레임이 빠르거나 느릴 수 있으므로, 그냥 "1씩 깎기"가 아니라 이 값만큼 깎아야
@@ -386,18 +421,46 @@ public class TimeAttackController : MonoBehaviour
         rt.anchorMax = new Vector2(0.5f, 1f);  // 기준 사각형의 오른쪽 위 = 화면 위쪽 가운데 (min과 같으면 "점 하나"가 기준이 된다)
         rt.pivot = new Vector2(0.5f, 1f);      // 이 오브젝트 자신의 중심점도 "위쪽 가운데"로 맞춘다
         rt.anchoredPosition = new Vector2(0f, -20f); // 기준점에서 아래로 20픽셀
-        rt.sizeDelta = new Vector2(160f, 56f);       // 가로 160, 세로 56 크기
+        rt.sizeDelta = new Vector2(196f, 64f);       // 가로 196, 세로 64 크기
 
-        var bg = timerRoot.GetComponent<Image>();
-        bg.color = new Color(0f, 0f, 0f, 0.75f);
+        // ===== 모양 =====
+        //   ┌──────────────────────┐
+        //   │  (◷)     04:57       │   ← 시계 아이콘 + 남은 시간
+        //   ▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀░░░░░░░   ← 남은 시간 막대 (줄어든다)
+        //   └──────────────────────┘
+        // 미니게임 공통 카드 모양(어두운 청회색 면 + 테두리 + 위쪽 강조선)을 쓴다.
+        MinigameTheme.StyleCard(rt);
+
+        // 시계 아이콘: 링 + 한 바퀴 도는 바늘 (1분에 한 바퀴)
+        clockIcon = MinigameTheme.AddImage(rt, "ClockIcon", MinigameTheme.Accent);
+        clockIcon.sprite = MinigameTheme.RingSprite(26f);
+        var irt = clockIcon.rectTransform;
+        irt.anchorMin = irt.anchorMax = new Vector2(0f, 0.5f);
+        irt.pivot = new Vector2(0.5f, 0.5f);
+        irt.sizeDelta = new Vector2(28f, 28f);
+        irt.anchoredPosition = new Vector2(34f, 1f);
+        var hand = MinigameTheme.AddImage(irt, "Hand", MinigameTheme.Accent);
+        clockHand = hand.rectTransform;
+        clockHand.anchorMin = clockHand.anchorMax = new Vector2(0.5f, 0.5f);
+        clockHand.pivot = new Vector2(0.5f, 0f);
+        clockHand.sizeDelta = new Vector2(2.5f, 10f);
+        clockHand.anchoredPosition = Vector2.zero;
+
+        // 남은 시간 막대 (아래쪽 테두리 위에 3px)
+        var track = MinigameTheme.AddImage(rt, "ProgressTrack", MinigameTheme.Line);
+        var trt = track.rectTransform;
+        trt.anchorMin = new Vector2(0f, 0f); trt.anchorMax = new Vector2(1f, 0f); trt.pivot = new Vector2(0.5f, 0f);
+        trt.offsetMin = new Vector2(1f, 1f); trt.offsetMax = new Vector2(-1f, 4f);
+        progressFill = MinigameTheme.AddImage(trt, "Fill", MinigameTheme.Accent);
+        MinigameTheme.Stretch(progressFill.rectTransform);   // 오른쪽 끝(anchorMax.x)을 남은 비율만큼 당긴다 (UpdateTimerText)
 
         var textGo = new GameObject("Text", typeof(RectTransform));
         textGo.transform.SetParent(timerRoot.transform, false);
         var textRect = textGo.GetComponent<RectTransform>();
         textRect.anchorMin = Vector2.zero;
         textRect.anchorMax = Vector2.one;
-        textRect.offsetMin = Vector2.zero;
-        textRect.offsetMax = Vector2.zero;
+        textRect.offsetMin = new Vector2(56f, 4f);    // 아이콘 오른쪽부터, 막대 위까지
+        textRect.offsetMax = new Vector2(-18f, 0f);
 
         timerText = textGo.AddComponent<TextMeshProUGUI>();
         timerText.fontSize = 32;
@@ -439,17 +502,44 @@ public class TimeAttackController : MonoBehaviour
     {
         if (timerText == null) return;
 
-        int totalSeconds = Mathf.CeilToInt(remainingSeconds);
-        int minutes = totalSeconds / 60;
-        int seconds = totalSeconds % 60;
-        timerText.text = $"{minutes:00}:{seconds:00}";
+        int wholeSeconds = Mathf.CeilToInt(remainingSeconds);
+        int minutes = wholeSeconds / 60;
+        int seconds = wholeSeconds % 60;
+        // 숫자마다 폭이 달라 1초마다 글자가 좌우로 흔들리지 않게 고정폭(mspace)으로 쓴다.
+        timerText.text = $"<mspace=0.6em>{minutes:00}</mspace>:<mspace=0.6em>{seconds:00}</mspace>";
+
+        bool warning = remainingSeconds <= warningThresholdSeconds;
+        Color baseColor = warning ? warningColor : normalColor;
 
         // 페널티 플래시(PlayPenaltyColorFlash)가 재생 중일 땐 그 코루틴이 색을 직접 다루므로
         // 여기서 평소 색으로 덮어쓰지 않는다 - 안 그러면 매 프레임 서로 색을 다시 씌워써서
         // 빨갛게 물드는 연출이 보이지 않게 된다.
         if (!isPenaltyFlashActive)
         {
-            timerText.color = remainingSeconds <= warningThresholdSeconds ? warningColor : normalColor;
+            // 30초 이하: 1초에 한 번 숨쉬듯 흐려졌다 돌아온다 (멈춘 동안은 깜빡이지 않는다).
+            float alpha = 1f;
+            if (!Paused && remainingSeconds <= blinkThresholdSeconds)
+            {
+                alpha = 0.55f + 0.45f * (0.5f + 0.5f * Mathf.Cos(Time.unscaledTime * Mathf.PI * 2f));
+            }
+            timerText.color = new Color(baseColor.r, baseColor.g, baseColor.b, alpha);
+        }
+
+        if (progressFill != null)
+        {
+            float ratio = totalSeconds > 0f ? Mathf.Clamp01(remainingSeconds / totalSeconds) : 0f;
+            var frt = progressFill.rectTransform;
+            frt.anchorMax = new Vector2(ratio, 1f);
+            frt.offsetMax = Vector2.zero;
+            progressFill.color = warning ? warningColor : MinigameTheme.Accent;
+        }
+        if (clockIcon != null) clockIcon.color = warning ? warningColor : MinigameTheme.Accent;
+        if (clockHand != null)
+        {
+            clockHand.GetComponent<Image>().color = clockIcon.color;
+            // 흐른 시간만큼 시계 방향으로 돈다 (1분에 한 바퀴).
+            float elapsed = Mathf.Max(0f, totalSeconds - remainingSeconds);
+            clockHand.localEulerAngles = new Vector3(0f, 0f, -(elapsed % 60f) / 60f * 360f);
         }
     }
 }

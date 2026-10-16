@@ -582,9 +582,10 @@ public class DialogueSystem : MonoBehaviour
     {
         if (dialoguePanel == null) return;
 
-        // Unity 기본 UI 버튼과 같은 배경(둥근 모서리 sprite). 프로젝트 에셋이 아니라
-        // 엔진에 내장된 리소스라서 빌드에도 그대로 포함된다.
-        Sprite buttonSprite = Resources.GetBuiltinResource<Sprite>("UI/Skin/UISprite.psd");
+        // 예전에는 Unity 기본 버튼 배경(UI/Skin/UISprite.psd)을 불러왔지만, Unity 6에서는 그 내장
+        // 리소스를 찾지 못해 게임을 시작할 때마다 콘솔에 에러가 찍혔다. 대화창 그림이 있으면 버튼은
+        // 배경 없이 글자만 보이므로(SetButtonActiveVisual) 배경 그림 없이 단색 사각형으로 만든다.
+        Sprite buttonSprite = null;
 
         bool created = autoButton == null && skipAlreadyReadButton == null && skipForceButton == null;
         if (autoButton == null) autoButton = CreateQuickActionButton("AutoButton", "AUTO", buttonSprite, 30f, 90f);
@@ -1831,6 +1832,13 @@ public class DialogueSystem : MonoBehaviour
             if (!string.IsNullOrEmpty(currentDialogue.autoNextScenarioCsv))
             {
                 LoadDialogueFromCSV(currentDialogue.autoNextScenarioCsv);
+                return;
+            }
+
+            // 엔딩 대본의 마지막 줄까지 다 봤다: 따로 [END] 선택지 없이 곧바로 엔딩 카드로 간다.
+            if (GameFlowManager.Instance != null && GameFlowManager.Instance.IsInEnding)
+            {
+                GameFlowManager.Instance.FinishEnding();
                 return;
             }
 
