@@ -47,7 +47,14 @@ public class InventoryManager : MonoBehaviour
 
         if (acquiredItemIds.Add(itemId))
         {
-            NewContentTracker.Add(NewContentTracker.Kind.Item, itemId);   // 가방 NEW 표시 / 퀵바 숫자
+            // mg_passed_화면ID, af_used_화면ID 같은 "내부 기록용 가짜 아이템"은 ItemData.csv에
+            // 없고 가방에 슬롯도 생기지 않는다(ToastNotificationManager.OnItemAdded 주석 참고).
+            // 그런데도 NEW 숫자를 올리면, 퀵바 가방에 1이 뜨는데 열어보면 새 게 없는
+            // 상태가 된다. 등록된 아이템일 때만 센다.
+            if (ItemDatabase.Get(itemId) != null)
+            {
+                NewContentTracker.Add(NewContentTracker.Kind.Item, itemId);   // 가방 NEW 표시 / 퀵바 숫자
+            }
 
             // 아이템 획득 알림(토스트)이 관련 메모 알림보다 먼저 뜨도록, 수첩 연동보다 먼저 발생시킨다.
             OnItemAdded?.Invoke(itemId);
