@@ -92,6 +92,7 @@ public class CorridorWatchController : MonoBehaviour
     private GameObject root;
     private Image personImage;
     private TMP_Text captionText;
+    private GameObject captionChip;
 
     private void Awake()
     {
@@ -227,10 +228,10 @@ public class CorridorWatchController : MonoBehaviour
         }
         if (captionText != null)
         {
-            captionText.gameObject.SetActive(showCaption);
+            if (captionChip != null) captionChip.SetActive(showCaption);
             captionText.text = string.IsNullOrWhiteSpace(g.caption)
-                ? "복도에 아무도 없다."
-                : "복도: " + g.caption;
+                ? "<color=#8C9AA6>복도에 아무도 없다.</color>"
+                : "<color=#8FA4B7><b>복도</b></color>    " + g.caption;
         }
     }
 
@@ -262,18 +263,27 @@ public class CorridorWatchController : MonoBehaviour
         // 복도 인물은 "보이기만 하는" 그림이다. 클릭이 통과해야 뒤의 자료실 문을 누를 수 있다.
         personImage.raycastTarget = false;
 
-        var capGo = new GameObject("CorridorCaption", typeof(RectTransform));
-        capGo.transform.SetParent(root.transform, false);
-        var capRt = capGo.GetComponent<RectTransform>();
-        capRt.anchorMin = new Vector2(0.06f, 0.80f);
-        capRt.anchorMax = new Vector2(0.60f, 0.88f);
-        capRt.offsetMin = Vector2.zero;
-        capRt.offsetMax = Vector2.zero;
-        captionText = capGo.AddComponent<TextMeshProUGUI>();
-        captionText.fontSize = 26;
-        captionText.alignment = TextAlignmentOptions.Left;
-        captionText.color = Color.white;
-        captionText.raycastTarget = false;
+        // 안내 글줄: 퀵바 아래 왼쪽의 어두운 띠 (미니게임 공통 모양).
+        //   ▌ 복도   오수정 사원, 한도윤 사원
+        var chip = MinigameTheme.AddImage(root.transform, "CorridorCaption", MinigameTheme.Fill);
+        captionChip = chip.gameObject;
+        var chipRt = chip.rectTransform;
+        chipRt.anchorMin = chipRt.anchorMax = chipRt.pivot = new Vector2(0f, 1f);
+        chipRt.anchoredPosition = new Vector2(20f, -124f);
+        chipRt.sizeDelta = new Vector2(520f, 52f);
+        MinigameTheme.AddBorder(chipRt, MinigameTheme.Line);
+        var bar = MinigameTheme.AddImage(chipRt, "AccentBar", MinigameTheme.Accent);
+        var barRt = bar.rectTransform;
+        barRt.anchorMin = new Vector2(0f, 0f); barRt.anchorMax = new Vector2(0f, 1f); barRt.pivot = new Vector2(0f, 0.5f);
+        barRt.sizeDelta = new Vector2(3f, 0f); barRt.anchoredPosition = Vector2.zero;
+
+        captionText = MinigameTheme.AddText(chipRt, "Text", 22, MinigameTheme.TextBright, TextAlignmentOptions.Left);
+        var capRt = captionText.rectTransform;
+        MinigameTheme.Stretch(capRt);
+        capRt.offsetMin = new Vector2(22f, 0f);
+        capRt.offsetMax = new Vector2(-16f, 0f);
+        captionText.richText = true;
+        captionText.overflowMode = TextOverflowModes.Ellipsis;
 
         UIFontHelper.ApplyToChildren(root);
 

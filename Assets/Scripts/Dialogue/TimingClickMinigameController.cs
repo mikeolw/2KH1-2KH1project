@@ -9,7 +9,7 @@ using TMPro;
 // ===== 어떤 게임인가 =====
 // 화면 가운데에 외곽선만 있는 원이 뜨고, 그 원 위에 "성공 구간"인 짧은 원호가 표시된다.
 // 원 반지름 길이의 바늘이 9시 방향에서 출발해 시계 방향으로 돈다. 바늘이 원호 위에
-// 있을 때(=성공 구간에 들어와 있을 때) 원 중앙의 "CLICK" 글자가 빨간색으로 바뀐다.
+// 있을 때(=성공 구간에 들어와 있을 때) 원호가 밝아지고 원 중앙 글자가 "지금!"으로 바뀐다.
 //   - 바늘이 원호 안에 있을 때 클릭 -> 성공 (onSuccess)
 //   - 원호에 닿기 전에 미리 클릭 -> 실패 (onFail)
 //   - 클릭하지 않고 바늘이 원호를 완전히 지나쳐버림 -> 실패 (onFail)
@@ -18,7 +18,7 @@ using TMPro;
 // 이 원/바늘/원호는 서사가 담긴 CG가 아니라 미니게임 조작을 표시하는 UI 부품이다.
 // IllustLoader로 불러오는 배경/오브젝트 그림과 달리 매번 똑같은 모양이면 되므로,
 // Resources 폴더에 그림 파일을 새로 그려 넣을 필요 없이 텍스처를 코드로 직접 그려서
-// 쓴다(BuildRingSprite 참고). 팀원이 그림을 준비하지 않아도 바로 동작한다.
+// 쓴다(MinigameTheme.RingSprite 참고). 팀원이 그림을 준비하지 않아도 바로 동작한다.
 //
 // ===== 씬 배치 =====
 // TimeAttackController와 같은 방식이다. 인스펙터에서 아무것도 연결하지 않아도 되고,
@@ -53,11 +53,16 @@ public class TimingClickMinigameController : MonoBehaviour
     public float arcStartClockDegrees = 30f;
 
     [Header("색상")]
-    public Color ringColor = Color.white;
-    public Color arcColor = new Color(1f, 0.35f, 0.25f, 0.95f);
-    public Color needleColor = Color.white;
-    public Color clickTextNormalColor = Color.white;
-    public Color clickTextHitColor = new Color(1f, 0.15f, 0.15f);
+    // 청회색 테마 (MinigameTheme). 성공 구간은 바늘이 들어오면 밝게 켜지고, 가운데 글자가 "지금!"으로 바뀐다.
+    public Color ringColor = MinigameTheme.Line;
+    public Color arcColor = MinigameTheme.Accent;
+    public Color arcHitColor = MinigameTheme.TextBright;
+    public Color needleColor = MinigameTheme.TextBright;
+    public Color clickTextNormalColor = MinigameTheme.TextDim;
+    public Color clickTextHitColor = MinigameTheme.TextBright;
+
+    private const string IdleText = "클릭";
+    private const string HitText = "지금!";
 
     // 지금 미니게임 패널이 떠 있는지. GameFlowManager.TriggerEnding()이 엔딩 도중 갑자기
     // 끼어들 때(ForceExit) 이 값을 보고 정리할 게 있는지 판단한다.
@@ -119,7 +124,7 @@ public class TimingClickMinigameController : MonoBehaviour
         arcImage.fillAmount = width / 360f;
         arcImage.color = arcColor;
 
-        clickText.text = "CLICK";
+        clickText.text = IdleText;
         clickText.color = clickTextNormalColor;
 
         // 바늘을 9시 방향(z=90)에 놓고 시작한다 (EnsureUI 상단 주석의 좌표 설명 참고).
@@ -144,6 +149,9 @@ public class TimingClickMinigameController : MonoBehaviour
 
         bool inArc = currentContinuous >= arcStartContinuous && currentContinuous <= arcEndContinuous;
         clickText.color = inArc ? clickTextHitColor : clickTextNormalColor;
+        clickText.text = inArc ? HitText : IdleText;
+        clickText.fontSize = inArc ? 44f : 30f;
+        arcImage.color = inArc ? arcHitColor : arcColor;
 
         // 클릭 없이 원호를 완전히 지나쳐버리거나(가장 흔한 실패), 한 바퀴를 다 돌 때까지도
         // 정리가 안 됐으면(원호가 아주 끝부분에 있는 경우의 안전장치) 실패 처리한다.
@@ -219,7 +227,7 @@ public class TimingClickMinigameController : MonoBehaviour
         rootRect.anchorMax = Vector2.one;
         rootRect.offsetMin = Vector2.zero;
         rootRect.offsetMax = Vector2.zero;
-        root.GetComponent<Image>().color = new Color(0f, 0f, 0f, 0.55f);
+        root.GetComponent<Image>().color = new Color(0f, 0f, 0f, 0.8f);
         root.GetComponent<Button>().onClick.AddListener(OnScreenClicked);
 
         // 원 (외곽선만 - 링 모양 텍스처를 그대로 보여준다)
@@ -230,7 +238,7 @@ public class TimingClickMinigameController : MonoBehaviour
         ringRect.sizeDelta = new Vector2(320f, 320f);
         ringRect.anchoredPosition = Vector2.zero;
         var ringImage = ringGo.GetComponent<Image>();
-        ringImage.sprite = BuildRingSprite();
+        ringImage.sprite = MinigameTheme.RingSprite(8f);     // 가는 트랙
         ringImage.color = ringColor;
         ringImage.raycastTarget = false;
 
@@ -250,7 +258,7 @@ public class TimingClickMinigameController : MonoBehaviour
         arcRect.sizeDelta = new Vector2(320f, 320f);
         arcRect.anchoredPosition = Vector2.zero;
         arcImage = arcGo.GetComponent<Image>();
-        arcImage.sprite = BuildRingSprite();
+        arcImage.sprite = MinigameTheme.RingSprite(24f);     // 성공 구간은 트랙보다 굵게
         arcImage.raycastTarget = false;
         arcImage.type = Image.Type.Filled;
         arcImage.fillMethod = Image.FillMethod.Radial360;
@@ -267,65 +275,29 @@ public class TimingClickMinigameController : MonoBehaviour
         needleGo.transform.SetParent(root.transform, false);
         needle = needleGo.GetComponent<RectTransform>();
         needle.anchorMin = needle.anchorMax = new Vector2(0.5f, 0.5f);
-        needle.pivot = new Vector2(0.5f, 0f);
-        needle.sizeDelta = new Vector2(6f, 158f);
+        needle.pivot = new Vector2(0.5f, -100f / 58f);   // 중심에서 100px 떨어진 곳부터 원까지만 (가운데 글자를 가리지 않게)
+        needle.sizeDelta = new Vector2(5f, 58f);
         needle.anchoredPosition = Vector2.zero;
         needleGo.GetComponent<Image>().raycastTarget = false;
 
-        // 원 중앙의 "CLICK" 글자.
-        var textGo = new GameObject("ClickText", typeof(RectTransform));
-        textGo.transform.SetParent(root.transform, false);
-        var textRect = textGo.GetComponent<RectTransform>();
-        textRect.anchorMin = textRect.anchorMax = new Vector2(0.5f, 0.5f);
-        textRect.sizeDelta = new Vector2(220f, 80f);
-        textRect.anchoredPosition = Vector2.zero;
-        clickText = textGo.AddComponent<TextMeshProUGUI>();
-        clickText.text = "CLICK";
-        clickText.fontSize = 36;
+        // 원 중앙 글자. 평소엔 흐린 "클릭", 바늘이 성공 구간에 들어오면 크고 밝은 "지금!".
+        clickText = MinigameTheme.AddText(root.transform, "ClickText", 30, clickTextNormalColor);
+        MinigameTheme.Center(clickText.rectTransform, new Vector2(200f, 80f), Vector2.zero);
         clickText.fontStyle = TMPro.FontStyles.Bold;
-        clickText.alignment = TMPro.TextAlignmentOptions.Center;
-        clickText.color = clickTextNormalColor;
-        clickText.raycastTarget = false;
+        clickText.text = IdleText;
 
-        // 코드로 만든 글자에는 한글 글꼴이 없다 - "CLICK"은 영문이라 당장은 문제없지만,
-        // 다른 코드 생성 UI와 같은 방식으로 통일해서 물려둔다 (UIFontHelper.cs 참고).
-        UIFontHelper.ApplyToChildren(root);
+        // 원 위: 머리글 / 원 아래: 조작 안내
+        var header = MinigameTheme.AddText(root.transform, "Header", 18, MinigameTheme.Accent);
+        MinigameTheme.Center(header.rectTransform, new Vector2(400f, 24f), new Vector2(0f, 226f));
+        header.fontStyle = TMPro.FontStyles.Bold;
+        header.characterSpacing = 24f;
+        header.text = "TIMING";
+
+        var hint = MinigameTheme.AddText(root.transform, "Hint", 24, MinigameTheme.Text);
+        MinigameTheme.Center(hint.rectTransform, new Vector2(600f, 30f), new Vector2(0f, -222f));
+        hint.text = "바늘이 밝은 구간을 지날 때 클릭";
 
         root.SetActive(false);
         return true;
-    }
-
-    // 256x256 텍스처 안에 두께 14짜리 링(도넛) 모양을 그려 Sprite로 만든다. 한 번만
-    // 만들어서 재사용한다(ringSpriteCache) - 이 미니게임 안에서 원과 원호 그림 둘 다
-    // 이 텍스처를 그대로 쓴다(원호 쪽은 Radial360으로 일부만 잘라 보여줄 뿐이다).
-    private static Sprite ringSpriteCache;
-    private static Sprite BuildRingSprite()
-    {
-        if (ringSpriteCache != null) return ringSpriteCache;
-
-        const int size = 256;
-        const float outerRadius = size / 2f - 4f;
-        const float thickness = 14f;
-
-        var tex = new Texture2D(size, size, TextureFormat.RGBA32, false);
-        tex.wrapMode = TextureWrapMode.Clamp;
-        tex.filterMode = FilterMode.Bilinear;
-
-        Vector2 center = new Vector2(size / 2f, size / 2f);
-        var pixels = new Color32[size * size];
-        for (int y = 0; y < size; y++)
-        {
-            for (int x = 0; x < size; x++)
-            {
-                float dist = Vector2.Distance(new Vector2(x + 0.5f, y + 0.5f), center);
-                bool onRing = dist <= outerRadius && dist >= outerRadius - thickness;
-                pixels[y * size + x] = onRing ? new Color32(255, 255, 255, 255) : new Color32(255, 255, 255, 0);
-            }
-        }
-        tex.SetPixels32(pixels);
-        tex.Apply();
-
-        ringSpriteCache = Sprite.Create(tex, new Rect(0, 0, size, size), new Vector2(0.5f, 0.5f));
-        return ringSpriteCache;
     }
 }

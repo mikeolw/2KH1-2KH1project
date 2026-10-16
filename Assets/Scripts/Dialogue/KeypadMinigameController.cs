@@ -42,13 +42,11 @@ public class KeypadMinigameController : MonoBehaviour
     [Header("자동 생성 시 사용할 캔버스 (비워두면 씬에서 찾는다)")]
     public Canvas targetCanvas;
 
-    [Header("색상")]
-    public Color panelColor = new Color(0x16 / 255f, 0x1A / 255f, 0x1F / 255f, 0.98f);
-    public Color displayColor = new Color(0x0A / 255f, 0x0D / 255f, 0x10 / 255f, 1f);
-    public Color keyColor = new Color(0x26 / 255f, 0x2D / 255f, 0x36 / 255f, 1f);
-    public Color textColor = new Color32(0xE6, 0xED, 0xF3, 0xFF);
-    public Color okColor = new Color32(0x4A, 0xD6, 0x7F, 0xFF);
-    public Color failColor = new Color32(0xE2, 0x5A, 0x4F, 0xFF);
+    [Header("색상 (청회색 테마 - MinigameTheme)")]
+    public Color displayColor = MinigameTheme.Well;
+    public Color textColor = MinigameTheme.TextBright;
+    public Color okColor = MinigameTheme.Ok;
+    public Color failColor = MinigameTheme.Danger;
 
     [Header("연출 시간(초)")]
     [Tooltip("정답을 맞혔을 때 초록색을 보여주고 패널을 닫기까지의 시간.")]
@@ -302,27 +300,34 @@ public class KeypadMinigameController : MonoBehaviour
         rootRect.anchorMax = Vector2.one;
         rootRect.offsetMin = Vector2.zero;
         rootRect.offsetMax = Vector2.zero;
-        root.GetComponent<Image>().color = new Color(0f, 0f, 0f, 0.6f);
+        root.GetComponent<Image>().color = new Color(0f, 0f, 0f, 0.75f);
 
-        // 키패드 본체
-        var panel = NewRect("Panel", root.transform, new Vector2(420f, 620f), Vector2.zero);
-        var panelImg = panel.gameObject.AddComponent<Image>();
-        panelImg.color = panelColor;
+        // 키패드 본체 (미니게임 공통 카드: 어두운 면 + 테두리 + 위쪽 강조선)
+        var panel = NewRect("Panel", root.transform, new Vector2(420f, 660f), Vector2.zero);
+        MinigameTheme.StyleCard(panel);
+
+        // 머리글
+        var header = NewText("Header", panel, 16, FontStyles.Bold, TextAlignmentOptions.Center,
+            new Vector2(380f, 24f), new Vector2(0f, 296f));
+        header.color = MinigameTheme.Accent;
+        header.characterSpacing = 24f;
+        header.text = "PASSWORD";
 
         // 안내문
         titleText = NewText("Title", panel, 26, FontStyles.Bold, TextAlignmentOptions.Center,
-            new Vector2(380f, 40f), new Vector2(0f, 252f));
+            new Vector2(380f, 40f), new Vector2(0f, 256f));
 
         // 힌트
         hintText = NewText("Hint", panel, 17, FontStyles.Normal, TextAlignmentOptions.Center,
-            new Vector2(380f, 60f), new Vector2(0f, 200f));
-        hintText.color = new Color(textColor.r, textColor.g, textColor.b, 0.72f);
+            new Vector2(380f, 60f), new Vector2(0f, 204f));
+        hintText.color = MinigameTheme.TextDim;
         hintText.textWrappingMode = TextWrappingModes.Normal;
 
-        // 입력칸
+        // 입력칸 (움푹한 면 + 테두리)
         var display = NewRect("Display", panel, new Vector2(340f, 72f), new Vector2(0f, 128f));
         displayBg = display.gameObject.AddComponent<Image>();
         displayBg.color = displayColor;
+        MinigameTheme.AddBorder(display, MinigameTheme.Line);
         displayText = NewText("Value", display, 40, FontStyles.Bold, TextAlignmentOptions.Center,
             new Vector2(320f, 60f), Vector2.zero);
 
@@ -379,22 +384,12 @@ public class KeypadMinigameController : MonoBehaviour
         return text;
     }
 
+    // 선택지/미션 카드와 같은 모양의 버튼 (마우스 올림 때 테두리가 밝아진다).
     private void MakeKey(Transform parent, string label, Vector2 pos, Vector2 size, Action onClick)
     {
-        var rt = NewRect("Key_" + label, parent, size, pos);
-        var img = rt.gameObject.AddComponent<Image>();
-        img.color = keyColor;
-
-        var button = rt.gameObject.AddComponent<Button>();
-        button.targetGraphic = img;
-        var colors = button.colors;
-        colors.normalColor = Color.white;
-        colors.highlightedColor = new Color(1.25f, 1.25f, 1.25f, 1f);
-        colors.pressedColor = new Color(0.8f, 0.8f, 0.8f, 1f);
-        button.colors = colors;
-        button.onClick.AddListener(() => onClick());
-
-        NewText("Label", rt, label.Length > 1 ? 20f : 28f, FontStyles.Bold,
-            TextAlignmentOptions.Center, size, Vector2.zero);
+        var button = MinigameTheme.MakeButton(parent, "Key_" + label, label, size, pos, onClick,
+            label.Length > 1 ? 20f : 28f);
+        var text = button.GetComponentInChildren<TMP_Text>();
+        if (text != null) text.fontStyle = FontStyles.Bold;
     }
 }
