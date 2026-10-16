@@ -1835,6 +1835,13 @@ public class DialogueSystem : MonoBehaviour
                 return;
             }
 
+            // 엔딩 대본의 마지막 줄까지 다 봤다: 따로 [END] 선택지 없이 곧바로 엔딩 카드로 간다.
+            if (GameFlowManager.Instance != null && GameFlowManager.Instance.IsInEnding)
+            {
+                GameFlowManager.Instance.FinishEnding();
+                return;
+            }
+
             sentenceText.text = "[대사 세트 종료]";
             return;
         }
