@@ -30,6 +30,10 @@ public class ItemModalController : MonoBehaviour
         else Destroy(gameObject);
 
         if (panel != null) panel.SetActive(false);
+
+        // 조사 상세는 퀵바·알림보다 항상 위 층 (UILayers.cs 참고). Esc = 닫기.
+        UILayers.Place(panel, UILayer.Detail);
+        ModalStack.Register(panel, Hide);
     }
 
     // InvestigationController.Inspect()가 Item/Description 타입 오브젝트를 클릭했을 때 호출한다.
@@ -40,8 +44,6 @@ public class ItemModalController : MonoBehaviour
         if (itemDescriptionText != null) itemDescriptionText.text = description;
 
         panel.SetActive(true);
-        // 조사 상세는 퀵바/알림 등 다른 UI보다 항상 위에 (UITopLayer.cs 참고)
-        UITopLayer.MakeTopmost(panel, UITopLayer.InvestigationDetailOrder);
     }
 
     // 배경(반투명 검은 부분) 클릭이나 닫기 버튼의 OnClick에 연결한다.

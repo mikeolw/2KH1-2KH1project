@@ -212,7 +212,7 @@ public class TimingClickMinigameController : MonoBehaviour
     {
         if (root != null) return true;
 
-        if (targetCanvas == null) targetCanvas = FindAnyObjectByType<Canvas>();
+        if (targetCanvas == null) targetCanvas = UILayers.RootCanvas();
         if (targetCanvas == null)
         {
             Debug.LogError("[TimingClickMinigameController] 씬에 Canvas가 없어 UI를 만들 수 없습니다.");
@@ -228,6 +228,7 @@ public class TimingClickMinigameController : MonoBehaviour
         rootRect.offsetMin = Vector2.zero;
         rootRect.offsetMax = Vector2.zero;
         root.GetComponent<Image>().color = new Color(0f, 0f, 0f, 0.8f);
+        ModalStack.MarkNotWindow(root, "타이밍 클릭 미니게임. 게임 단계라 창이 아니다.");
         root.GetComponent<Button>().onClick.AddListener(OnScreenClicked);
 
         // 원 (외곽선만 - 링 모양 텍스처를 그대로 보여준다)

@@ -28,8 +28,8 @@ public class ToastNotificationManager : MonoBehaviour
     // 알림 그림 (Figma "Toast" - 어두운 칸 + 왼쪽 청회색 막대). git 제외 - 드라이브로 공유.
     // 그림이 없으면 예전 검은 칸으로 대신 그린다.
     private const string ArtFolder = "Illusts/UI/Investigation/";
-    private static readonly Color KickerColor = new Color(0.435f, 0.518f, 0.588f);    // 6F8496
-    private static readonly Color MessageColor = new Color(0.851f, 0.89f, 0.922f);    // D9E3EB
+    private static readonly Color KickerColor = UITheme.Kicker;    // 6F8496
+    private static readonly Color MessageColor = UITheme.Active;    // D9E3EB
 
     // 조사 화면의 "조사 그만하기" 버튼(우상단, -24/-24, 196x52) 바로 아래 자리.
     // 그 버튼이 없는 화면(#07 등)에서도 항상 같은 위치를 쓴다 - 화면마다 위치가
@@ -57,7 +57,7 @@ public class ToastNotificationManager : MonoBehaviour
 
     private void Start()
     {
-        var canvas = FindAnyObjectByType<Canvas>();
+        var canvas = UILayers.RootCanvas();
         if (canvas == null)
         {
             Debug.LogWarning("[ToastNotificationManager] 씬에 Canvas가 없어 알림을 표시할 수 없습니다.");
@@ -127,6 +127,8 @@ public class ToastNotificationManager : MonoBehaviour
     {
         var go = new GameObject("Toast", typeof(RectTransform), typeof(Image));
         go.transform.SetParent(canvasTransform, false);
+        // 퀵바 창(가방 등)을 연 채로 아이템을 얻어도 알림이 보이게 창보다 위 층에 (UILayers.cs 참고)
+        UILayers.Place(go, UILayer.Toast);
 
         var rt = go.GetComponent<RectTransform>();
         rt.anchorMin = rt.anchorMax = rt.pivot = new Vector2(1f, 1f);

@@ -285,7 +285,7 @@ public class KeypadMinigameController : MonoBehaviour
     {
         if (root != null) return true;
 
-        if (targetCanvas == null) targetCanvas = FindAnyObjectByType<Canvas>();
+        if (targetCanvas == null) targetCanvas = UILayers.RootCanvas();
         if (targetCanvas == null)
         {
             Debug.LogError("[KeypadMinigameController] 씬에 Canvas가 없어 UI를 만들 수 없습니다.");
@@ -301,6 +301,7 @@ public class KeypadMinigameController : MonoBehaviour
         rootRect.offsetMin = Vector2.zero;
         rootRect.offsetMax = Vector2.zero;
         root.GetComponent<Image>().color = new Color(0f, 0f, 0f, 0.75f);
+        ModalStack.MarkNotWindow(root, "금고 키패드 미니게임. 게임 단계라 창이 아니다 (대사 막기는 IsActive).");
 
         // 키패드 본체 (미니게임 공통 카드: 어두운 면 + 테두리 + 위쪽 강조선)
         var panel = NewRect("Panel", root.transform, new Vector2(420f, 660f), Vector2.zero);

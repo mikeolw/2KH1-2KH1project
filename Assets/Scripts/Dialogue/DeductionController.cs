@@ -328,7 +328,7 @@ public class DeductionController : MonoBehaviour
 
     private void BuildClueTools()
     {
-        Canvas canvas = FindAnyObjectByType<Canvas>();
+        Canvas canvas = UILayers.RootCanvas();
         if (canvas == null) return;
 
         clueTools = new GameObject(ClueToolsName, typeof(RectTransform), typeof(Image),
