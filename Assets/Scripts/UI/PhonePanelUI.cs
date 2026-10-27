@@ -4,6 +4,7 @@ using UnityEngine;
 using UnityEngine.EventSystems;
 using UnityEngine.UI;
 using TMPro;
+using static UIKit;   // CreateText, PlaceTopLeft, AddRect, Stretch ... (UIKit.cs)
 
 // =====================================================================================
 // 핸드폰 UI - 퀵바의 폰 버튼을 누르면 열리는 화면 (NotePanelUI.cs와 같은 방식으로 작성)
@@ -111,8 +112,6 @@ public class PhonePanelUI : MonoBehaviour
     private Page page = Page.Menu;
     private string dialedNumber = "";
 
-    private AudioSource sfxSource;
-    private AudioClip clickClip;
     private Coroutine openRoutine;
 
     private static readonly Dictionary<int, Sprite> roundedCache = new Dictionary<int, Sprite>();
@@ -121,11 +120,6 @@ public class PhonePanelUI : MonoBehaviour
     {
         Instance = this;
         HideOriginalPanelVisuals();
-
-        sfxSource = gameObject.AddComponent<AudioSource>();
-        sfxSource.playOnAwake = false;
-        AudioManager.RegisterSafe(sfxSource, AudioManager.Channel.Sfx);
-        clickClip = Resources.Load<AudioClip>("Sounds/SFX/Click_SFX");
 
         BuildOverlay();
     }
@@ -244,10 +238,7 @@ public class PhonePanelUI : MonoBehaviour
         ShowMenu();
     }
 
-    private void PlayClick()
-    {
-        if (sfxSource != null && clickClip != null) sfxSource.PlayOneShot(clickClip);
-    }
+    private void PlayClick() => AudioManager.PlaySfx(AudioManager.Sfx.Click);
 
     // 주머니에서 꺼내듯 아래에서 짧게 올라오면서, 덮개가 경첩을 축으로 탁 펼쳐진다.
     // 일시정지 중에도 돌도록 unscaled 시간을 쓴다.
@@ -965,14 +956,6 @@ public class PhonePanelUI : MonoBehaviour
         rt.pivot = new Vector2(0f, 1f);
         rt.anchoredPosition = new Vector2(x, -y);
         rt.sizeDelta = new Vector2(w, h);
-    }
-
-    private static void Stretch(RectTransform rt, float inset = 0f)
-    {
-        rt.anchorMin = Vector2.zero;
-        rt.anchorMax = Vector2.one;
-        rt.offsetMin = new Vector2(inset, inset);
-        rt.offsetMax = new Vector2(-inset, -inset);
     }
 
     private static void SetRounded(Image img, int radius, Color color)

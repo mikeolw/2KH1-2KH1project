@@ -28,8 +28,8 @@ public class ToastNotificationManager : MonoBehaviour
     // 알림 그림 (Figma "Toast" - 어두운 칸 + 왼쪽 청회색 막대). git 제외 - 드라이브로 공유.
     // 그림이 없으면 예전 검은 칸으로 대신 그린다.
     private const string ArtFolder = "Illusts/UI/Investigation/";
-    private static readonly Color KickerColor = new Color(0.435f, 0.518f, 0.588f);    // 6F8496
-    private static readonly Color MessageColor = new Color(0.851f, 0.89f, 0.922f);    // D9E3EB
+    private static readonly Color KickerColor = UITheme.Kicker;    // 6F8496
+    private static readonly Color MessageColor = UITheme.Active;    // D9E3EB
 
     // 조사 화면의 "조사 그만하기" 버튼(우상단, -24/-24, 196x52) 바로 아래 자리.
     // 그 버튼이 없는 화면(#07 등)에서도 항상 같은 위치를 쓴다 - 화면마다 위치가

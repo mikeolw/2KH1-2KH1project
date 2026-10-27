@@ -2,6 +2,7 @@ using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.UI;
 using TMPro;
+using static UIKit;   // CreateText, PlaceTopLeft, AddRect, Stretch ... (UIKit.cs)
 
 // =====================================================================================
 // 환경설정 화면 - 코드로 직접 만드는 하나짜리 설정 UI
@@ -61,20 +62,20 @@ public class SettingsPanelUI : MonoBehaviour
     private const float ButtonHeight = 54f;
 
     // ===== 색 =====
-    private static readonly Color Accent = new Color(0.561f, 0.643f, 0.718f);       // 8FA4B7 청회색 강조
-    private static readonly Color TitleColor = new Color(0.894f, 0.918f, 0.937f);   // E4EAEF 제목
-    private static readonly Color KickerColor = new Color(0.435f, 0.518f, 0.588f);  // 6F8496 SETTINGS
-    private static readonly Color LabelColor = new Color(0.788f, 0.835f, 0.878f);   // C9D5E0 항목 이름/값
-    private static readonly Color ActiveColor = new Color(0.851f, 0.89f, 0.922f);   // D9E3EB 고른 것
-    private static readonly Color DimColor = new Color(0.424f, 0.486f, 0.545f);     // 6C7C8B 안 고른 것
-    private static readonly Color HintColor = new Color(0.482f, 0.541f, 0.596f);    // 7B8A98 안내 문구
-    private static readonly Color ButtonTextColor = new Color(0.663f, 0.729f, 0.788f);   // A9BAC9
-    private static readonly Color PrimaryTextColor = new Color(0.059f, 0.082f, 0.106f);  // 0F151B
-    private static readonly Color RowLineColor = new Color(0.165f, 0.208f, 0.251f, 0.6f);  // 2A3540
+    private static readonly Color Accent = UITheme.Accent;       // 8FA4B7 청회색 강조
+    private static readonly Color TitleColor = UITheme.Title;   // E4EAEF 제목
+    private static readonly Color KickerColor = UITheme.Kicker;  // 6F8496 SETTINGS
+    private static readonly Color LabelColor = UITheme.Label;   // C9D5E0 항목 이름/값
+    private static readonly Color ActiveColor = UITheme.Active;   // D9E3EB 고른 것
+    private static readonly Color DimColor = UITheme.Muted;     // 6C7C8B 안 고른 것
+    private static readonly Color HintColor = UITheme.Hint;    // 7B8A98 안내 문구
+    private static readonly Color ButtonTextColor = UITheme.ButtonText;   // A9BAC9
+    private static readonly Color PrimaryTextColor = UITheme.PrimaryText;  // 0F151B
+    private static readonly Color RowLineColor = UITheme.WithAlpha(UITheme.Divider, 0.6f);  // 2A3540
     // 그림이 없을 때만 쓰는 색
-    private static readonly Color PanelColor = new Color(0.063f, 0.086f, 0.114f, 0.95f);   // 10161D
-    private static readonly Color TrackColor = new Color(0.204f, 0.255f, 0.302f);          // 34414D
-    private static readonly Color OnFillColor = new Color(0.141f, 0.192f, 0.251f);         // 243140
+    private static readonly Color PanelColor = UITheme.Panel;   // 10161D
+    private static readonly Color TrackColor = UITheme.Line;          // 34414D
+    private static readonly Color OnFillColor = UITheme.OnFill;         // 243140
 
     // 그림 경로 (Resources 기준)
     private const string ArtFolder = "Illusts/UI/Settings/";
@@ -937,25 +938,6 @@ public class SettingsPanelUI : MonoBehaviour
         slider.targetGraphic = hImg;
 
         return slider;
-    }
-
-    // 패널 왼쪽 위 기준 (x, y)에 w x h 크기로 놓는다.
-    private static void PlaceTopLeft(RectTransform rt, float x, float y, float w, float h)
-    {
-        rt.anchorMin = rt.anchorMax = new Vector2(0f, 1f);
-        rt.pivot = new Vector2(0f, 1f);
-        rt.anchoredPosition = new Vector2(x, -y);
-        rt.sizeDelta = new Vector2(w, h);
-    }
-
-    private static void AddRect(Transform parent, string name, float x, float y, float w, float h, Color color)
-    {
-        var go = new GameObject(name, typeof(RectTransform), typeof(Image));
-        go.transform.SetParent(parent, false);
-        PlaceTopLeft(go.GetComponent<RectTransform>(), x, y, w, h);
-        var img = go.GetComponent<Image>();
-        img.color = color;
-        img.raycastTarget = false;
     }
 
     private void Stretch(RectTransform rt)

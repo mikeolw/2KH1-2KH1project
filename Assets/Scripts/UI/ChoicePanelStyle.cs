@@ -3,6 +3,7 @@ using TMPro;
 using UnityEngine;
 using UnityEngine.EventSystems;
 using UnityEngine.UI;
+using static UIKit;   // AddBorder (UIKit.cs)
 
 // =====================================================================================
 // 선택지 화면 모양 (청회색 테마)
@@ -27,13 +28,10 @@ using UnityEngine.UI;
 // 숫자키 1~9로도 위에서부터 차례로 고를 수 있다.
 public class ChoicePanelStyle : MonoBehaviour
 {
-    // ===== 색 (DocumentViewerController / 대사 기록과 같은 값) =====
-    private static readonly Color AccentColor  = Hex(0x8FA4B7);
-    private static readonly Color TextColor    = Hex(0xD2DAE1);
-    private static readonly Color TextHover    = Hex(0xE4EAEF);
-    private static readonly Color LineColor    = Hex(0x34414D);
-    private static readonly Color FillColor    = new Color(0.063f, 0.086f, 0.114f, 0.92f);  // 10161D
-    private static readonly Color FillHover    = new Color(0.094f, 0.133f, 0.176f, 0.96f);  // 18222D
+    // ===== 색 (UITheme.cs) =====
+    // 버튼 바탕만 이 화면에 맞게 투명도를 조금 다르게 쓴다 (뒤 장면이 살짝 비치게).
+    private static readonly Color FillColor = UITheme.WithAlpha(UITheme.Panel, 0.92f);
+    private static readonly Color FillHover = UITheme.WithAlpha(UITheme.SurfaceHover, 0.96f);
 
     // ===== 배치 (화면 1440x1080 기준) =====
     private const float Width = 760f;
@@ -181,9 +179,6 @@ public class ChoicePanelStyle : MonoBehaviour
         return t;
     }
 
-    private static Color Hex(int rgb) =>
-        new Color(((rgb >> 16) & 0xFF) / 255f, ((rgb >> 8) & 0xFF) / 255f, (rgb & 0xFF) / 255f);
-
     // =================================================================================
     // 선택지 한 줄 (ChoiceButton 프리팹에 모양을 입힌다)
     // =================================================================================
@@ -223,24 +218,10 @@ public class ChoicePanelStyle : MonoBehaviour
             }
 
             // 테두리 (얇은 선 4개)
-            border = new Image[4];
-            for (int i = 0; i < 4; i++)
-            {
-                var line = NewImage("Border" + i, rt, LineColor);
-                var lrt = line.rectTransform;
-                switch (i)
-                {
-                    case 0: lrt.anchorMin = new Vector2(0, 1); lrt.anchorMax = new Vector2(1, 1); lrt.pivot = new Vector2(0.5f, 1); lrt.sizeDelta = new Vector2(0, 1); break;
-                    case 1: lrt.anchorMin = new Vector2(0, 0); lrt.anchorMax = new Vector2(1, 0); lrt.pivot = new Vector2(0.5f, 0); lrt.sizeDelta = new Vector2(0, 1); break;
-                    case 2: lrt.anchorMin = new Vector2(0, 0); lrt.anchorMax = new Vector2(0, 1); lrt.pivot = new Vector2(0, 0.5f); lrt.sizeDelta = new Vector2(1, 0); break;
-                    default: lrt.anchorMin = new Vector2(1, 0); lrt.anchorMax = new Vector2(1, 1); lrt.pivot = new Vector2(1, 0.5f); lrt.sizeDelta = new Vector2(1, 0); break;
-                }
-                lrt.anchoredPosition = Vector2.zero;
-                border[i] = line;
-            }
+            border = AddBorder(rt, UITheme.Line);
 
             // 마우스 올림 때만 보이는 왼쪽 강조 막대
-            accentBar = NewImage("AccentBar", rt, AccentColor);
+            accentBar = NewImage("AccentBar", rt, UITheme.Accent);
             PlaceLeftColumn(accentBar.rectTransform, 0f, 3f, 0f);
             accentBar.enabled = false;
 
@@ -259,7 +240,7 @@ public class ChoicePanelStyle : MonoBehaviour
                 label.fontStyle = FontStyles.Normal;
                 label.alignment = TextAlignmentOptions.Center;
                 label.textWrappingMode = TextWrappingModes.Normal;
-                label.color = TextColor;
+                label.color = UITheme.Body;
                 label.raycastTarget = false;
             }
 
@@ -279,9 +260,9 @@ public class ChoicePanelStyle : MonoBehaviour
         private void SetHover(bool on)
         {
             if (bg != null) bg.color = on ? FillHover : FillColor;
-            if (border != null) foreach (var b in border) if (b != null) b.color = on ? AccentColor : LineColor;
+            if (border != null) foreach (var b in border) if (b != null) b.color = on ? UITheme.Accent : UITheme.Line;
             if (accentBar != null) accentBar.enabled = on;
-            if (label != null) label.color = on ? TextHover : TextColor;
+            if (label != null) label.color = on ? UITheme.Title : UITheme.Body;
         }
 
         private static Image NewImage(string name, RectTransform parent, Color color)

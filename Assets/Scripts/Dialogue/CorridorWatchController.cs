@@ -2,6 +2,7 @@ using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.UI;
 using TMPro;
+using static UIKit;   // CreateText, PlaceTopLeft, AddRect, Stretch ... (UIKit.cs)
 
 // =====================================================================================
 // 자료실 앞 복도 감시 (BG_07_InvestigationSite_04 전용)
@@ -293,11 +294,4 @@ public class CorridorWatchController : MonoBehaviour
         return true;
     }
 
-    private static void Stretch(RectTransform rt)
-    {
-        rt.anchorMin = Vector2.zero;
-        rt.anchorMax = Vector2.one;
-        rt.offsetMin = Vector2.zero;
-        rt.offsetMax = Vector2.zero;
-    }
 }

@@ -20,12 +20,31 @@ using UnityEngine;
 // 전체 볼륨은 SettingsManager가 AudioListener.volume에 직접 넣으므로, 여기서는 종류별
 // 볼륨만 담당하면 된다.
 //
+// ===== 효과음은 여기서 바로 낸다 (PlaySfx) =====
+// 예전에는 효과음이 필요한 스크립트마다 AudioSource를 하나씩 만들고(UIManager, 핸드폰,
+// 조사 오브젝트 마우스 올림...), 그걸 여기에 등록하고, 그림 파일도 각자 Resources.Load 했다.
+// 이제 짧은 효과음은 한 줄이면 된다:
+//   AudioManager.PlaySfx(AudioManager.Sfx.Click);                 // 파일 경로로
+//   AudioManager.PlaySfx(someClip);                               // 인스펙터에 연결한 소리로
+//   AudioManager.PlaySfx(AudioManager.Sfx.HotspotHover, 0.15f);   // 0.15초 안에 또 부르면 무시
+// 효과음 볼륨 설정은 자동으로 따른다. 소리 파일이 없으면(드라이브에서 아직 안 받음) 경고를 한 번만
+// 띄우고 소리 없이 넘어간다.
+//
+// 배경음악(BGM)과 대사 줄마다 바뀌는 효과음은 "같은 곡이면 끊지 않고 이어 틀기" 같은 규칙이
+// 있어서 지금처럼 DialogueSystem/BgmPlayer가 자기 AudioSource로 틀고, 여기에는 등록만 한다.
+//
 // ===== 씬 배치 =====
-// Title.unity에 빈 GameObject를 만들고 이 스크립트를 붙여두면 된다(DontDestroyOnLoad).
-// 등록은 각 스크립트가 알아서 하므로 인스펙터에서 연결할 것은 없다.
+// 따로 둘 필요 없다. GameBootstrap이 만들고, 그 전에 누가 부르면 그때 알아서 만든다(Ensure).
 public class AudioManager : MonoBehaviour
 {
     public static AudioManager Instance;
+
+    // 자주 쓰는 효과음 파일 경로 (Assets/Resources/ 아래, 확장자 없이)
+    public static class Sfx
+    {
+        public const string Click = "Sounds/SFX/Click_SFX";
+        public const string HotspotHover = "Sounds/SFX/HotspotHover_SFX";
+    }
 
     // 소리의 종류. 어떤 볼륨 설정을 따를지 결정한다.
     public enum Channel
@@ -39,6 +58,11 @@ public class AudioManager : MonoBehaviour
     private readonly List<AudioSource> bgmSources = new List<AudioSource>();
     private readonly List<AudioSource> sfxSources = new List<AudioSource>();
 
+    // PlaySfx가 쓰는 효과음 전용 AudioSource (PlayOneShot이라 여러 소리가 겹쳐도 된다)
+    private AudioSource oneShotSource;
+    private readonly Dictionary<string, AudioClip> clipCache = new Dictionary<string, AudioClip>();
+    private readonly Dictionary<string, float> lastPlayedAt = new Dictionary<string, float>();
+
     private void Awake()
     {
         if (Instance == null)
@@ -51,6 +75,55 @@ public class AudioManager : MonoBehaviour
             Destroy(gameObject);
             return;
         }
+
+        oneShotSource = gameObject.AddComponent<AudioSource>();
+        oneShotSource.playOnAwake = false;
+        oneShotSource.spatialBlend = 0f;   // 2D 소리 (위치에 따라 작아지지 않게)
+        Register(oneShotSource, Channel.Sfx);
+    }
+
+    // 없으면 만들어서 돌려준다. Title 씬을 거치지 않고 게임 씬을 바로 실행해도 소리/볼륨이 동작하게.
+    public static AudioManager Ensure()
+    {
+        if (Instance == null) new GameObject("AudioManager").AddComponent<AudioManager>();
+        return Instance;
+    }
+
+    // ---------------------------------------------------------------------------------
+    // 효과음 재생
+    // ---------------------------------------------------------------------------------
+    public static void PlaySfx(AudioClip clip)
+    {
+        if (clip == null) return;
+        Ensure().oneShotSource.PlayOneShot(clip);
+    }
+
+    // resourcePath: Assets/Resources/ 아래 경로(확장자 없이). 예: AudioManager.Sfx.Click
+    // minInterval: 같은 소리를 이 시간(초) 안에 다시 부르면 무시한다 - 마우스로 빠르게 훑을 때
+    //              소리가 연달아 겹쳐 거슬리는 걸 막는다. 0이면 제한 없음.
+    public static void PlaySfx(string resourcePath, float minInterval = 0f)
+    {
+        if (string.IsNullOrEmpty(resourcePath)) return;
+        var m = Ensure();
+
+        if (minInterval > 0f)
+        {
+            if (m.lastPlayedAt.TryGetValue(resourcePath, out float last) && Time.unscaledTime - last < minInterval) return;
+            m.lastPlayedAt[resourcePath] = Time.unscaledTime;
+        }
+
+        PlaySfx(m.LoadClip(resourcePath));
+    }
+
+    // 한 번 읽은 소리는 기억해 둔다. 없는 파일도 "없음"으로 기억해서 경고는 한 번만 띄운다.
+    private AudioClip LoadClip(string resourcePath)
+    {
+        if (clipCache.TryGetValue(resourcePath, out var cached)) return cached;
+        var clip = Resources.Load<AudioClip>(resourcePath);
+        if (clip == null)
+            Debug.LogWarning($"[AudioManager] 효과음 파일이 없어 소리 없이 넘어갑니다: Assets/Resources/{resourcePath} (드라이브에서 받았는지 확인)");
+        clipCache[resourcePath] = clip;
+        return clip;
     }
 
     private void OnEnable()
@@ -150,19 +223,11 @@ public class AudioManager : MonoBehaviour
 
     // 아직 AudioManager가 없어도 안전하게 등록할 수 있게 해주는 도우미.
     // (Title 씬을 거치지 않고 SampleScene을 바로 실행하는 테스트 상황 대응)
+    // 예전에는 AudioManager가 없으면 지금 볼륨을 한 번만 넣어 두고 끝이라, 그 뒤 환경설정에서
+    // 볼륨을 바꿔도 그 소리에는 반영되지 않았다. 이제는 없으면 만들어서 정식으로 등록한다.
     public static void RegisterSafe(AudioSource source, Channel channel)
     {
-        if (Instance != null)
-        {
-            Instance.Register(source, channel);
-            return;
-        }
-
-        // AudioManager가 없으면 설정값만 직접 한 번 적용해준다.
-        if (source != null && SettingsManager.Instance != null)
-        {
-            var s = SettingsManager.Instance.Current;
-            source.volume = channel == Channel.Bgm ? s.bgmVolume : s.sfxVolume;
-        }
+        if (source == null) return;
+        Ensure().Register(source, channel);
     }
 }

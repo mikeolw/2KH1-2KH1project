@@ -25,8 +25,8 @@ public class HotspotHoverFocus : MonoBehaviour, IPointerEnterHandler, IPointerEx
 
     // 흰 선화 배경 위에서 잘 보이도록 괄호는 짙은 청흑색, 이름표는 패널 색 + 밝은 글자.
     private static readonly Color BracketColor = new Color(0.12f, 0.16f, 0.21f);
-    private static readonly Color TagTextColor = new Color(0.851f, 0.89f, 0.922f);       // D9E3EB
-    private static readonly Color TagFallbackColor = new Color(0.063f, 0.086f, 0.114f, 0.9f);
+    private static readonly Color TagTextColor = UITheme.Active;       // D9E3EB
+    private static readonly Color TagFallbackColor = UITheme.WithAlpha(UITheme.Panel, 0.9f);
 
     public void OnPointerEnter(PointerEventData eventData)
     {
@@ -38,39 +38,12 @@ public class HotspotHoverFocus : MonoBehaviour, IPointerEnterHandler, IPointerEx
 
     // ===== 마우스를 올렸을 때 효과음 =====
     // Assets/Resources/Sounds/SFX/HotspotHover_SFX.mp3 (git 제외 - 드라이브 공유). 없으면 소리 없이 넘어간다.
-    // 오브젝트마다 AudioSource를 두지 않고 하나만 만들어 같이 쓴다. 효과음 볼륨 설정을 따르도록
-    // AudioManager에 효과음으로 등록한다.
-    private const string HoverSfxPath = "Sounds/SFX/HotspotHover_SFX";
-    private static AudioSource hoverSfxSource;
-    private static AudioClip hoverSfxClip;
-    private static bool hoverSfxLoaded;
-
     // 오브젝트 사이를 빠르게 훑으면 소리가 연달아 겹쳐 거슬리므로, 마지막으로 낸 뒤 이 시간(초)
     // 안에 다시 올리면 소리를 내지 않는다. (괄호/이름표 표시는 그대로 바뀐다)
     private const float HoverSfxMinInterval = 0.15f;
-    private static float lastHoverSfxTime = -1f;
 
-    private static void PlayHoverSound()
-    {
-        if (!hoverSfxLoaded)
-        {
-            hoverSfxClip = Resources.Load<AudioClip>(HoverSfxPath);
-            hoverSfxLoaded = true;
-        }
-        if (hoverSfxClip == null) return;
-        if (lastHoverSfxTime >= 0f && Time.unscaledTime - lastHoverSfxTime < HoverSfxMinInterval) return;
-        lastHoverSfxTime = Time.unscaledTime;
-
-        if (hoverSfxSource == null)   // 씬이 바뀌어 사라졌으면 다시 만든다
-        {
-            var go = new GameObject("HotspotHoverSfx");
-            hoverSfxSource = go.AddComponent<AudioSource>();
-            hoverSfxSource.playOnAwake = false;
-            hoverSfxSource.spatialBlend = 0f;
-            AudioManager.RegisterSafe(hoverSfxSource, AudioManager.Channel.Sfx);
-        }
-        hoverSfxSource.PlayOneShot(hoverSfxClip);
-    }
+    private static void PlayHoverSound() =>
+        AudioManager.PlaySfx(AudioManager.Sfx.HotspotHover, HoverSfxMinInterval);
 
     public void OnPointerExit(PointerEventData eventData) => Hide();
     public void OnPointerClick(PointerEventData eventData) => Hide();

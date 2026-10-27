@@ -2,6 +2,7 @@ using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.UI;
 using TMPro;
+using static UIKit;   // CreateText, PlaceTopLeft, AddRect, Stretch ... (UIKit.cs)
 
 // =====================================================================================
 // 가방(인벤토리) 화면 - 획득한 아이템 목록 + 설명 보기 + 아이템 조합
@@ -106,23 +107,23 @@ public class InventoryPanelUI : MonoBehaviour
     private const float ButtonGap = 12f;
 
     // ===== 색 =====
-    private static readonly Color Accent = new Color(0.561f, 0.643f, 0.718f);       // 8FA4B7
-    private static readonly Color TitleColor = new Color(0.894f, 0.918f, 0.937f);   // E4EAEF
-    private static readonly Color KickerColor = new Color(0.435f, 0.518f, 0.588f);  // 6F8496
-    private static readonly Color LabelColor = new Color(0.788f, 0.835f, 0.878f);   // C9D5E0
-    private static readonly Color ActiveColor = new Color(0.851f, 0.89f, 0.922f);   // D9E3EB
-    private static readonly Color DimColor = new Color(0.424f, 0.486f, 0.545f);     // 6C7C8B
-    private static readonly Color HintColor = new Color(0.482f, 0.541f, 0.596f);    // 7B8A98
-    private static readonly Color ButtonTextColor = new Color(0.663f, 0.729f, 0.788f);   // A9BAC9
-    private static readonly Color PrimaryTextColor = new Color(0.059f, 0.082f, 0.106f);  // 0F151B
+    private static readonly Color Accent = UITheme.Accent;       // 8FA4B7
+    private static readonly Color TitleColor = UITheme.Title;   // E4EAEF
+    private static readonly Color KickerColor = UITheme.Kicker;  // 6F8496
+    private static readonly Color LabelColor = UITheme.Label;   // C9D5E0
+    private static readonly Color ActiveColor = UITheme.Active;   // D9E3EB
+    private static readonly Color DimColor = UITheme.Muted;     // 6C7C8B
+    private static readonly Color HintColor = UITheme.Hint;    // 7B8A98
+    private static readonly Color ButtonTextColor = UITheme.ButtonText;   // A9BAC9
+    private static readonly Color PrimaryTextColor = UITheme.PrimaryText;  // 0F151B
     private static readonly Color PrimaryBadgeText = PrimaryTextColor;
     // 그림이 없을 때만 쓰는 색
-    private static readonly Color PanelColor = new Color(0.063f, 0.086f, 0.114f, 0.95f);   // 10161D
-    private static readonly Color SlotColor = new Color(0.043f, 0.063f, 0.082f, 0.9f);     // 0B1015
-    private static readonly Color SlotSelectedColor = new Color(0.094f, 0.133f, 0.176f);   // 18222D
-    private static readonly Color LineColor = new Color(0.165f, 0.208f, 0.251f);           // 2A3540
-    private static readonly Color OnFillColor = new Color(0.141f, 0.192f, 0.251f);         // 243140
-    private static readonly Color MessageBarColor = new Color(0.043f, 0.063f, 0.082f, 0.6f);
+    private static readonly Color PanelColor = UITheme.Panel;   // 10161D
+    private static readonly Color SlotColor = UITheme.WithAlpha(UITheme.Surface, 0.9f);     // 0B1015
+    private static readonly Color SlotSelectedColor = UITheme.SurfaceHover;   // 18222D
+    private static readonly Color LineColor = UITheme.Divider;           // 2A3540
+    private static readonly Color OnFillColor = UITheme.OnFill;         // 243140
+    private static readonly Color MessageBarColor = UITheme.WithAlpha(UITheme.Surface, 0.6f);
 
     // 그림 경로 (Resources 기준)
     private const string ArtFolder = "Illusts/UI/Inventory/";
@@ -958,25 +959,8 @@ public class InventoryPanelUI : MonoBehaviour
     }
 
     // ---------------------------------------------------------------------------------
-    // 기본 부품 만들기
+    // 기본 부품 만들기 (PlaceTopLeft, Stretch 등 공용 도우미는 UIKit.cs)
     // ---------------------------------------------------------------------------------
-    // 패널 왼쪽 위 기준 (x, y)에 w x h 크기로 놓는다.
-    private static void PlaceTopLeft(RectTransform rt, float x, float y, float w, float h)
-    {
-        rt.anchorMin = rt.anchorMax = new Vector2(0f, 1f);
-        rt.pivot = new Vector2(0f, 1f);
-        rt.anchoredPosition = new Vector2(x, -y);
-        rt.sizeDelta = new Vector2(w, h);
-    }
-
-    private static void Stretch(RectTransform rt)
-    {
-        rt.anchorMin = Vector2.zero;
-        rt.anchorMax = Vector2.one;
-        rt.offsetMin = Vector2.zero;
-        rt.offsetMax = Vector2.zero;
-    }
-
     private void AddRect(string name, float x, float y, float w, float h, Color color)
     {
         var go = new GameObject(name, typeof(RectTransform), typeof(Image));

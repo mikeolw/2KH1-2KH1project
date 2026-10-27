@@ -21,19 +21,12 @@ public class UIManager : MonoBehaviour
     [Header("효과음")]
     public AudioClip noteOpenSfx;       // 노트(조사기록) 패널을 열 때 재생되는 효과음 (Sounds/SFX/ 폴더 참고)
     public AudioClip phoneOpenSfx;      // 핸드폰 패널을 열 때 재생되는 효과음
-    private AudioSource sfxSource;
+    // (소리는 AudioManager.PlaySfx로 낸다 - 효과음 볼륨 설정을 자동으로 따른다)
 
     private void Awake()
     {
         if (Instance == null) Instance = this;
         else Destroy(gameObject);
-
-        sfxSource = GetComponent<AudioSource>();
-        if (sfxSource == null) sfxSource = gameObject.AddComponent<AudioSource>();
-        sfxSource.playOnAwake = false;
-
-        // 환경설정의 효과음 볼륨이 UI 버튼 소리에도 적용되도록 등록한다 (AudioManager.cs 참고).
-        AudioManager.RegisterSafe(sfxSource, AudioManager.Channel.Sfx);
     }
 
     void Start()
@@ -82,14 +75,14 @@ public class UIManager : MonoBehaviour
         if (!IsPhoneUnlocked) return;   // 아직 핸드폰을 줍지 않았다 (아래 잠금 설명 참고)
         bool willOpen = !phonePanel.activeSelf;
         TogglePanel(phonePanel);
-        if (willOpen && phoneOpenSfx != null) sfxSource.PlayOneShot(phoneOpenSfx);
+        if (willOpen) AudioManager.PlaySfx(phoneOpenSfx);
     }
     public void ToggleNote()
     {
         if (!IsNoteUnlocked) return;    // 아직 메모장을 줍지 않았다
         bool willOpen = !notePanel.activeSelf;
         TogglePanel(notePanel);
-        if (willOpen && noteOpenSfx != null) sfxSource.PlayOneShot(noteOpenSfx);
+        if (willOpen) AudioManager.PlaySfx(noteOpenSfx);
     }
 
     // ---------------------------------------------------------------------------------
