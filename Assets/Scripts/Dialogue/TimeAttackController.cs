@@ -299,8 +299,8 @@ public class TimeAttackController : MonoBehaviour
     // ===== 2) 패널티 텍스트 팝업 (-5s) =====
     // 타이머 상자 바로 아래에 "-5s"를 띄우고, 위로 떠오르며(Y축 이동) 서서히 투명해지다
     // 사라진다. timerRoot의 자식이 아니라 targetCanvas에 직접 붙인다 - 자식으로 두면 이
-    // 팝업의 생애주기(뜨고 떠오르고 사라지는 것)가 타이머 UI 자체의 갱신(LateUpdate의
-    // SetAsLastSibling 등)과 뒤섞이지 않고 독립적으로 관리된다.
+    // 팝업의 생애주기(뜨고 떠오르고 사라지는 것)가 타이머 UI 자체의 갱신과 뒤섞이지 않고
+    // 독립적으로 관리된다. 타이머와 같은 층에 둬야 창에 가려지지 않는다.
     private IEnumerator PlayPenaltyPopup(float seconds)
     {
         if (targetCanvas == null) yield break;
@@ -309,6 +309,7 @@ public class TimeAttackController : MonoBehaviour
 
         var go = new GameObject("TimeAttackPenaltyPopup", typeof(RectTransform));
         go.transform.SetParent(targetCanvas.transform, false);
+        UILayers.Place(go, UILayer.Timer);
 
         var rt = go.GetComponent<RectTransform>();
         rt.anchorMin = timerRt.anchorMin;
@@ -401,7 +402,7 @@ public class TimeAttackController : MonoBehaviour
     {
         if (timerRoot != null) return;
 
-        if (targetCanvas == null) targetCanvas = FindAnyObjectByType<Canvas>();
+        if (targetCanvas == null) targetCanvas = UILayers.RootCanvas();
         if (targetCanvas == null)
         {
             Debug.LogError("[TimeAttackController] 씬에 Canvas가 없어 타이머 UI를 만들 수 없습니다.");
@@ -410,6 +411,11 @@ public class TimeAttackController : MonoBehaviour
 
         timerRoot = new GameObject("TimeAttackTimer", typeof(RectTransform), typeof(Image));
         timerRoot.transform.SetParent(targetCanvas.transform, false);
+        // ===== 어떤 창을 열어도 타이머가 보이게 =====
+        // 예전에는 매 프레임(LateUpdate) 형제 목록 맨 끝으로 보내 "맨 위"를 유지했는데,
+        // 이제는 타이머 층(UILayer.Timer)에 둔다 - 수첩/가방/조사 상세/세이브 창보다 항상 위다
+        // (UILayers.cs 참고).
+        UILayers.Place(timerRoot, UILayer.Timer);
 
         // ===== 화면 위치 잡기 (RectTransform) =====
         // 유니티 UI는 "화면의 어느 모서리/가운데를 기준으로 삼을지(anchor)"와 "그 기준점에서
@@ -474,28 +480,8 @@ public class TimeAttackController : MonoBehaviour
         UIFontHelper.ApplyToChildren(timerRoot);
 
         // 타이머가 아직 시작되지 않았으니 일단 꺼둔다. StartTimer()가 불릴 때 다시 켠다.
-        // (화면에 항상 맨 위로 뜨게 하는 처리는 LateUpdate() 참고.)
+        // (화면에 항상 맨 위로 뜨게 하는 처리는 위 UILayers.Place 참고.)
         timerRoot.SetActive(false);
-    }
-
-    // ===== 왜 Update가 아니라 LateUpdate인가? =====
-    // 유니티는 한 프레임 안에서 모든 오브젝트의 Update()를 먼저 다 실행한 뒤에, 그다음
-    // LateUpdate()를 전부 실행한다. 조사 화면이나 미니게임 패널이 "이번 프레임의 Update()
-    // 안에서" 새로 만들어질 수 있으므로, 순서를 확실히 뒤로 미루기 위해 LateUpdate에서
-    // "제일 위로 올리기"를 한다 - 그래야 이번 프레임에 새로 생긴 패널보다도 확실하게 위에 뜬다.
-    //
-    // ===== "맨 위로 올린다"는 게 무슨 뜻인가? (SetAsLastSibling) =====
-    // 유니티 UI는 같은 부모(Canvas) 밑에 여러 형제 오브젝트가 나란히 있을 때, 목록의
-    // 아래쪽(나중)에 있는 것이 화면에서는 앞쪽(위)에 그려진다. 대화창/선택지/조사 화면/
-    // 미니게임 패널이 전부 이 타이머와 같은 Canvas 밑 형제이므로(StageController/
-    // InvestigationController 참고), 형제 목록의 맨 끝으로 보내주면 그 어떤 패널보다도
-    // 항상 화면에서 가장 위에(가려지지 않고) 보이게 된다.
-    private void LateUpdate()
-    {
-        if (timerRoot != null && timerRoot.activeSelf)
-        {
-            timerRoot.transform.SetAsLastSibling();
-        }
     }
 
     private void UpdateTimerText()

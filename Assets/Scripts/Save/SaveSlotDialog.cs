@@ -116,7 +116,7 @@ public class SaveSlotDialog : MonoBehaviour
     //   저장되는 것은 ... 저장 지점입니다.            [저장하지 않고 계속]
     private void BuildUI()
     {
-        if (targetCanvas == null) targetCanvas = FindAnyObjectByType<Canvas>();
+        if (targetCanvas == null) targetCanvas = UILayers.RootCanvas();
         if (targetCanvas == null)
         {
             Debug.LogError("[SaveSlotDialog] 씬에 Canvas가 없어 저장 창을 만들 수 없습니다.");
@@ -125,8 +125,11 @@ public class SaveSlotDialog : MonoBehaviour
 
         panel = SaveScreenUI.BuildFrame(targetCanvas.transform, "SaveSlotDialog", "SAVE", "기록 남기기",
                                         out RectTransform box, out titleLabel);
-        // 다른 UI보다 항상 위에 뜨도록 계층 맨 끝으로.
-        panel.transform.SetAsLastSibling();
+        // 무조건 골라야 하는 창이라 다른 창보다 위 층에 둔다 (UILayers.cs 참고).
+        UILayers.Place(panel, UILayer.Dialog);
+        // Esc로 닫히지 않는다 - 세이브포인트에서 반드시 고르도록 뜨는 창이다.
+        // (onEscape를 비워 두면 Esc가 여기서 멈춰 아래 창도 닫지 않는다)
+        ModalStack.Register(panel, null);
 
         int slotCount = SaveManager.SlotCount;
         slotRows = new SaveSlotRow[slotCount];

@@ -121,12 +121,16 @@ public class DocumentViewerController : MonoBehaviour
 
         EnsureUI();
         if (panel != null) panel.SetActive(false);
+
+        // 조사 상세는 퀵바·알림·가방보다 항상 위 층 (UILayers.cs 참고). Esc = 닫기.
+        UILayers.Place(panel, UILayer.Detail);
+        ModalStack.Register(panel, Hide);
     }
 
-    // ← → 로 장 넘기기. (Esc로 닫기는 UIManager가 한다)
+    // ← → 로 장 넘기기. 위에 다른 창(세이브 창 등)이 떠 있으면 그쪽 차례이므로 무시한다.
     private void Update()
     {
-        if (!IsOpen) return;
+        if (!IsOpen || ModalStack.IsCoveredByOther(panel)) return;
         if (Input.GetKeyDown(KeyCode.LeftArrow)) PrevPage();
         else if (Input.GetKeyDown(KeyCode.RightArrow)) NextPage();
     }
@@ -186,9 +190,6 @@ public class DocumentViewerController : MonoBehaviour
         if (kickerLabel != null) kickerLabel.text = kicker;
 
         panel.SetActive(true);
-        // 조사 상세는 퀵바/알림 등 다른 UI보다 항상 위에. 같은 Canvas 형제 순서만으로는
-        // 나중에 만들어진 UI가 다시 위로 올라오므로 정렬 순서를 따로 준다 (UITopLayer.cs 참고).
-        UITopLayer.MakeTopmost(panel, UITopLayer.InvestigationDetailOrder);
         BuildPageSegments();
         RefreshPage();
     }
@@ -379,7 +380,7 @@ public class DocumentViewerController : MonoBehaviour
 
         // FindAnyObjectByType: 씬에서 Canvas 아무거나 하나를 찾는다.
         // (예전 FindObjectOfType은 유니티 6에서 사용 중단되어 경고가 뜬다)
-        if (targetCanvas == null) targetCanvas = FindAnyObjectByType<Canvas>();
+        if (targetCanvas == null) targetCanvas = UILayers.RootCanvas();
         if (targetCanvas == null)
         {
             Debug.LogError("[DocumentViewerController] 씬에 Canvas가 없어 자료 뷰어를 만들 수 없습니다.");
@@ -390,7 +391,6 @@ public class DocumentViewerController : MonoBehaviour
         panel = new GameObject("DocumentViewerPanel", typeof(RectTransform));
         panel.transform.SetParent(targetCanvas.transform, false);
         StretchFull(panel.GetComponent<RectTransform>());
-        panel.transform.SetAsLastSibling();
 
         // 바깥 검은 막 (클릭하면 닫힘) - 퀵바 창/환경설정과 같은 97%
         var backdrop = new GameObject("Backdrop", typeof(RectTransform), typeof(Image), typeof(Button));

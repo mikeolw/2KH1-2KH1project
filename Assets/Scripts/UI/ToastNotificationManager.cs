@@ -57,7 +57,7 @@ public class ToastNotificationManager : MonoBehaviour
 
     private void Start()
     {
-        var canvas = FindAnyObjectByType<Canvas>();
+        var canvas = UILayers.RootCanvas();
         if (canvas == null)
         {
             Debug.LogWarning("[ToastNotificationManager] 씬에 Canvas가 없어 알림을 표시할 수 없습니다.");
@@ -127,6 +127,8 @@ public class ToastNotificationManager : MonoBehaviour
     {
         var go = new GameObject("Toast", typeof(RectTransform), typeof(Image));
         go.transform.SetParent(canvasTransform, false);
+        // 퀵바 창(가방 등)을 연 채로 아이템을 얻어도 알림이 보이게 창보다 위 층에 (UILayers.cs 참고)
+        UILayers.Place(go, UILayer.Toast);
 
         var rt = go.GetComponent<RectTransform>();
         rt.anchorMin = rt.anchorMax = rt.pivot = new Vector2(1f, 1f);

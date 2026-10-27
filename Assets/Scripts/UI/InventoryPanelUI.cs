@@ -151,7 +151,7 @@ public class InventoryPanelUI : MonoBehaviour
         if (overlay != null)
         {
             overlay.SetActive(true);
-            overlay.transform.SetAsLastSibling();   // 다른 UI에 가리지 않게
+            UILayers.Place(overlay, UILayer.Panel);   // 퀵바 창 층 (UILayers.cs 참고)
         }
 
         // 가방을 닫았다 열면 조합 모드는 초기화한다(헷갈림 방지).
@@ -743,7 +743,7 @@ public class InventoryPanelUI : MonoBehaviour
         // 아이템 목록 자리가 이미 인스펙터에 연결되어 있으면 손대지 않는다.
         if (itemListContainer != null) return;
 
-        Canvas canvas = FindAnyObjectByType<Canvas>();
+        Canvas canvas = UILayers.RootCanvas();
         if (canvas == null)
         {
             Debug.LogError("[InventoryPanelUI] 씬에 Canvas가 없어 가방 화면을 만들 수 없습니다.");

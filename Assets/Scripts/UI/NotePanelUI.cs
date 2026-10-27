@@ -122,8 +122,7 @@ public class NotePanelUI : MonoBehaviour
         if (overlay != null)
         {
             overlay.SetActive(true);
-            // 다른 UI에 가리지 않도록 항상 맨 앞으로.
-            overlay.transform.SetAsLastSibling();
+            UILayers.Place(overlay, UILayer.Panel);   // 퀵바 창 층 (UILayers.cs 참고)
         }
 
         // 새 메모가 있으면 수사 메모 탭으로 연다.
@@ -142,11 +141,11 @@ public class NotePanelUI : MonoBehaviour
         if (overlay != null) overlay.SetActive(false);
     }
 
-    // ← → 로 장 넘기기. 자료 뷰어가 위에 떠 있으면 그쪽이 ← →를 쓰므로 건드리지 않는다.
+    // ← → 로 장 넘기기. 위에 다른 창(자료 뷰어 등)이 떠 있으면 그쪽이 ← →를 쓰므로 건드리지 않는다.
     private void Update()
     {
         if (overlay == null || !overlay.activeInHierarchy) return;
-        if (DocumentViewerController.Instance != null && DocumentViewerController.Instance.IsOpen) return;
+        if (ModalStack.IsCoveredByOther(gameObject)) return;
         if (Input.GetKeyDown(KeyCode.LeftArrow)) GoToSpread(currentSpread - 1);
         else if (Input.GetKeyDown(KeyCode.RightArrow)) GoToSpread(currentSpread + 1);
     }
@@ -523,7 +522,7 @@ public class NotePanelUI : MonoBehaviour
     // ---------------------------------------------------------------------------------
     private void BuildOverlay()
     {
-        Canvas canvas = FindAnyObjectByType<Canvas>();
+        Canvas canvas = UILayers.RootCanvas();
         if (canvas == null)
         {
             Debug.LogError("[NotePanelUI] 씬에 Canvas가 없어 수첩 화면을 만들 수 없습니다.");

@@ -79,6 +79,10 @@ public class ChoicePanelStyle : MonoBehaviour
             layout.childForceExpandHeight = false;
         }
 
+        // 선택지도 "창"으로 등록한다 - 떠 있는 동안 대사를 넘기지 않는다. Esc로는 닫히지 않는다
+        // (반드시 하나를 골라야 하므로). 위에 수첩 등을 열면 Esc는 그쪽부터 닫는다.
+        ModalStack.Register(panel, null);
+
         group = panel.GetComponent<CanvasGroup>();
         if (group == null) group = panel.AddComponent<CanvasGroup>();
 

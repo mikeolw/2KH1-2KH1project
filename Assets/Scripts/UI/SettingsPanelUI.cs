@@ -110,23 +110,12 @@ public class SettingsPanelUI : MonoBehaviour
 
         Build();
         if (panel != null) panel.SetActive(false);
-    }
 
-    // ===== Esc =====
-    //   확인 창이 떠 있으면 -> 확인 창만 닫는다 ([취소]와 같음)
-    //   아니면              -> 설정 화면을 닫는다 ([돌아가기]와 같음)
-    // UIManager도 Esc로 퀵바 창들을 닫으므로, 같은 프레임에 두 번 처리되지 않게 이번 프레임에
-    // Esc를 썼다는 표시(HandledEscapeThisFrame)를 남긴다.
-    private int escapeHandledFrame = -1;
-    public bool HandledEscapeThisFrame => escapeHandledFrame == Time.frameCount;
-
-    private void Update()
-    {
-        if (!Input.GetKeyDown(KeyCode.Escape) || !IsOpen) return;
-        escapeHandledFrame = Time.frameCount;
-
-        if (confirmDialog != null && confirmDialog.activeInHierarchy) confirmDialog.SetActive(false);
-        else Close();
+        // ===== Esc =====
+        //   확인 창이 떠 있으면 -> 확인 창만 닫는다 ([취소]와 같음)  (BuildConfirmDialog에서 등록)
+        //   아니면              -> 설정 화면을 닫는다 ([돌아가기]와 같음)
+        // 확인 창이 설정 화면보다 나중에 열리므로 ModalStack이 확인 창부터 닫아 준다.
+        ModalStack.Register(panel, Close);
     }
 
     // ---------------------------------------------------------------------------------
@@ -143,7 +132,7 @@ public class SettingsPanelUI : MonoBehaviour
         ShowCategory(Category.Sound);
 
         panel.SetActive(true);
-        panel.transform.SetAsLastSibling();   // 다른 UI보다 항상 위에
+        UILayers.Place(panel, UILayer.Panel);   // 다른 UI보다 위 (UILayers.cs 참고)
     }
 
     public void Close()
@@ -180,7 +169,7 @@ public class SettingsPanelUI : MonoBehaviour
     // ---------------------------------------------------------------------------------
     private void Build()
     {
-        Canvas canvas = FindAnyObjectByType<Canvas>();
+        Canvas canvas = UILayers.RootCanvas();
         if (canvas == null)
         {
             Debug.LogError("[SettingsPanelUI] 씬에 Canvas가 없어 설정 화면을 만들 수 없습니다.");
@@ -796,6 +785,7 @@ public class SettingsPanelUI : MonoBehaviour
         okText.color = PrimaryTextColor;
 
         confirmDialog.SetActive(false);
+        ModalStack.Register(confirmDialog, () => confirmDialog.SetActive(false));
     }
 
     // ---------------------------------------------------------------------------------

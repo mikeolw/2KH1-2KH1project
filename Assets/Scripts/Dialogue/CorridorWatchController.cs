@@ -242,7 +242,7 @@ public class CorridorWatchController : MonoBehaviour
     {
         if (root != null) return true;
 
-        if (targetCanvas == null) targetCanvas = FindAnyObjectByType<Canvas>();
+        if (targetCanvas == null) targetCanvas = UILayers.RootCanvas();
         if (targetCanvas == null)
         {
             Debug.LogWarning("[CorridorWatchController] 씬에 Canvas가 없어 복도 인물을 띄우지 못합니다.");

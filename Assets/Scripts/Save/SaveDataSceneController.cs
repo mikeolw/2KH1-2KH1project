@@ -78,7 +78,7 @@ public class SaveDataSceneController : MonoBehaviour
     // 새 모양의 화면을 만들고 씬에 배치된 예전 UI를 숨긴다. 만들었으면 true.
     private bool BuildScreen()
     {
-        Canvas canvas = FindAnyObjectByType<Canvas>();
+        Canvas canvas = UILayers.RootCanvas();
         if (canvas == null) return false;
 
         // 예전 배치 숨기기 (슬롯/버튼/안내 문구)
@@ -90,7 +90,8 @@ public class SaveDataSceneController : MonoBehaviour
         var root = SaveScreenUI.BuildFrame(canvas.transform, "SaveDataScreen",
                                            saveMode ? "SAVE" : "LOAD", saveMode ? "기록 남기기" : "이어하기",
                                            out RectTransform box, out subtitleText);
-        root.transform.SetAsLastSibling();
+        UILayers.Place(root, UILayer.Panel);
+        ModalStack.Register(root, OnClickBack);   // Esc = 돌아가기
 
         slotRows = new SaveSlotRow[SaveManager.SlotCount];
         for (int i = 0; i < slotRows.Length; i++)
@@ -106,10 +107,11 @@ public class SaveDataSceneController : MonoBehaviour
         return true;
     }
 
-    // Esc = 돌아가기
+    // Esc = 돌아가기. 새 화면은 ModalStack이 처리하고(BuildScreen), 캔버스를 못 찾아
+    // 씬에 배치된 예전 UI를 쓰는 경우에만 여기서 직접 읽는다.
     private void Update()
     {
-        if (Input.GetKeyDown(KeyCode.Escape)) OnClickBack();
+        if (slotRows == null && Input.GetKeyDown(KeyCode.Escape)) OnClickBack();
     }
 
     // 안내 문구: 새 화면이면 머리말 아래, 예전 화면이면 headerText.

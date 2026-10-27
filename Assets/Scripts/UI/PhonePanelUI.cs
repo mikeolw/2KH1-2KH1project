@@ -141,7 +141,7 @@ public class PhonePanelUI : MonoBehaviour
         if (overlay == null) return;
 
         overlay.SetActive(true);
-        overlay.transform.SetAsLastSibling();   // 다른 UI에 가리지 않도록 항상 맨 앞으로
+        UILayers.Place(overlay, UILayer.Panel);   // 퀵바 창 층 (UILayers.cs 참고)
 
         dialedNumber = "";
         ShowMenu();
@@ -296,7 +296,7 @@ public class PhonePanelUI : MonoBehaviour
     // ---------------------------------------------------------------------------------
     private void BuildOverlay()
     {
-        Canvas canvas = FindAnyObjectByType<Canvas>();
+        Canvas canvas = UILayers.RootCanvas();
         if (canvas == null)
         {
             Debug.LogError("[PhonePanelUI] 씬에 Canvas가 없어 핸드폰 화면을 만들 수 없습니다.");

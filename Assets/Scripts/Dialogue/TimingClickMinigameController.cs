@@ -212,7 +212,7 @@ public class TimingClickMinigameController : MonoBehaviour
     {
         if (root != null) return true;
 
-        if (targetCanvas == null) targetCanvas = FindAnyObjectByType<Canvas>();
+        if (targetCanvas == null) targetCanvas = UILayers.RootCanvas();
         if (targetCanvas == null)
         {
             Debug.LogError("[TimingClickMinigameController] 씬에 Canvas가 없어 UI를 만들 수 없습니다.");

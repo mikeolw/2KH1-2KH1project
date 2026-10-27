@@ -99,11 +99,7 @@ public class DialogueLogController : MonoBehaviour
 
     private void Update()
     {
-        if (IsOpen)
-        {
-            if (Input.GetKeyDown(KeyCode.Escape)) Close();
-            return;
-        }
+        if (IsOpen) return;   // Esc로 닫기는 ModalStack이 한다 (BuildOverlay에서 등록)
 
         if (Input.GetKeyDown(KeyCode.UpArrow) &&
             DialogueSystem.Instance != null && DialogueSystem.Instance.CanOpenOverlay)
@@ -143,7 +139,7 @@ public class DialogueLogController : MonoBehaviour
     {
         if (overlay == null) return;
         overlay.SetActive(true);
-        overlay.transform.SetAsLastSibling();
+        UILayers.Place(overlay, UILayer.Panel);
         Refresh(scrollToBottom: true);
     }
 
@@ -269,7 +265,7 @@ public class DialogueLogController : MonoBehaviour
     // ---------------------------------------------------------------------------------
     private void BuildOverlay()
     {
-        Canvas canvas = FindAnyObjectByType<Canvas>();
+        Canvas canvas = UILayers.RootCanvas();
         if (canvas == null)
         {
             Debug.LogError("[DialogueLogController] 씬에 Canvas가 없어 대화 로그 창을 만들 수 없습니다.");
@@ -283,6 +279,7 @@ public class DialogueLogController : MonoBehaviour
         var dim = overlay.GetComponent<Image>();
         dim.color = new Color(0f, 0f, 0f, 0.97f);
         dim.raycastTarget = true; // 뒤쪽 게임 화면이 눌리지 않게 막는다
+        ModalStack.Register(overlay, Close);   // Esc = 닫기
 
         // ----- 패널 그림 (1440x1080 한 장: 패널 + 위쪽 강조선 + 구분선 두 개) -----
         var panelArt = UISpriteUtil.Load(ArtFolder + "LogPanel");

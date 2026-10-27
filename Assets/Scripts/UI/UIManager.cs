@@ -40,31 +40,19 @@ public class UIManager : MonoBehaviour
     {
         // 시작할 때 모든 팝업 닫기
         CloseAllPanels();
-    }
 
-    // ===== Esc: 열려 있는 퀵바 창(수첩/핸드폰/가방/카메라/설정)을 닫는다 =====
-    // 위에 겹쳐 뜬 창이 있으면 그것부터 닫는다:
-    //   자료 뷰어(가방의 [자세히 보기] 등) -> 뷰어만 닫고 가방은 그대로
-    //   환경설정 -> SettingsPanelUI가 스스로 처리 (확인 창이 있으면 확인 창만)
-    //   세이브 창 -> 닫지 않는다 (세이브포인트에서 반드시 고르도록 뜨는 창이라)
-    void Update()
-    {
-        if (!Input.GetKeyDown(KeyCode.Escape)) return;
-
-        if (SaveSlotDialog.Instance != null && SaveSlotDialog.Instance.IsOpen) return;
-        if (SettingsPanelUI.Instance != null &&
-            (SettingsPanelUI.Instance.IsOpen || SettingsPanelUI.Instance.HandledEscapeThisFrame)) return;
-
-        if (DocumentViewerController.Instance != null && DocumentViewerController.Instance.IsOpen)
+        // ===== Esc: 열려 있는 퀵바 창(수첩/핸드폰/가방/카메라/설정)을 닫는다 =====
+        // Esc는 ModalStack이 "가장 나중에 열린 창" 하나에만 보낸다. 그래서 가방 위에 자료 뷰어가
+        // 떠 있으면 뷰어만 닫히고, 세이브 창이 떠 있으면 아무것도 닫히지 않는다 (ModalStack.cs 참고).
+        ModalStack.Register(inventoryPanel, CloseAllPanels);
+        ModalStack.Register(photoPanel, CloseAllPanels);
+        ModalStack.Register(notePanel, CloseAllPanels);
+        ModalStack.Register(settingsPanel, CloseAllPanels);
+        // 핸드폰은 앱 화면/전화 걸기 중이면 메인 메뉴로 돌아가기만 한다 (PhonePanelUI.HandleEscape).
+        ModalStack.Register(phonePanel, () =>
         {
-            DocumentViewerController.Instance.Hide();
-            return;
-        }
-
-        // 핸드폰 앱 화면/전화 걸기 중이면 Esc는 메인 메뉴로 돌아가기만 한다 (PhonePanelUI.HandleEscape).
-        if (PhonePanelUI.Instance != null && PhonePanelUI.Instance.HandleEscape()) return;
-
-        if (IsAnyPanelOpen) CloseAllPanels();
+            if (PhonePanelUI.Instance == null || !PhonePanelUI.Instance.HandleEscape()) CloseAllPanels();
+        });
     }
 
     // 하단 퀵바 버튼에서 호출할 함수들
