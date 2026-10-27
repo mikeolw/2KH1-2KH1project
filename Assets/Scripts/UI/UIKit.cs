@@ -91,7 +91,24 @@ public static class UIKit
         return lines;
     }
 
-    // 화면 전체를 덮는 검은 막(97%). 퀵바 창/환경설정 등의 루트로 쓴다.
+    // ===== 새 창 만들기 =====
+    // 화면을 덮는 창(검은 막 97%)을 만들고, 층(UILayers)과 창 목록(ModalStack) 등록까지 한 번에 한다.
+    // 이걸로 만들면 Esc로 닫기 / 떠 있는 동안 대사 멈춤 / 다른 UI와의 앞뒤 순서가 자동으로 맞는다.
+    //   parent         : 보통 UILayers.RootCanvas().transform
+    //   layer          : Panel(수첩·설정 같은 일반 창) / Detail(조사 상세) / Dialog(반드시 골라야 하는 창) ...
+    //   onEscape       : Esc를 눌렀을 때 할 일 (보통 닫기). null이면 Esc로 닫히지 않는다.
+    //   blocksDialogue : 떠 있는 동안 대사 넘기기/자동 진행을 멈출지
+    // 돌려받은 오브젝트 아래에 창 내용을 만들고, 켜고 끄는 것으로 창을 여닫는다.
+    public static GameObject CreateWindow(Transform parent, string name, UILayer layer,
+                                          System.Action onEscape, bool blocksDialogue = true)
+    {
+        var root = CreateScreenDim(parent, name);
+        UILayers.Place(root, layer);
+        ModalStack.Register(root, onEscape, blocksDialogue);
+        return root;
+    }
+
+    // 화면 전체를 덮는 검은 막(97%)만 만든다. 창이면 위 CreateWindow를 쓴다.
     // 클릭을 받아서 뒤의 게임 화면이 눌리지 않게 막는다.
     public static GameObject CreateScreenDim(Transform parent, string name)
     {

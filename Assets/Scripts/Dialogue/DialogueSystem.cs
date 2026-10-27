@@ -692,6 +692,10 @@ public class DialogueSystem : MonoBehaviour
     void Start()
     {
         StyleDialogueBox();
+        // 암전 판은 화면을 덮는 검은 막이지만 창이 아니다 (ModalStack 개발 중 경고에서 뺀다).
+        if (fadeCanvasGroup != null)
+            ModalStack.MarkNotWindow(fadeCanvasGroup.gameObject, "장면 전환 암전 판.");
+
         // 선택지 버튼 모양 (청회색 테마) - 대본/조사/추리 선택지 모두 이 패널을 같이 쓴다 (ChoicePanelStyle.cs 참고)
         ChoicePanelStyle.Attach(choicePanel, choiceContainer, dialoguePanel);
 

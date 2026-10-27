@@ -114,6 +114,7 @@ public class DocumentViewerController : MonoBehaviour
         if (panel != null) panel.SetActive(false);
 
         // 조사 상세는 퀵바·알림·가방보다 항상 위 층 (UILayers.cs 참고). Esc = 닫기.
+        // (자동으로 만든 화면은 CreateWindow가 이미 했고, 인스펙터로 연결한 화면을 위해 한 번 더 건다)
         UILayers.Place(panel, UILayer.Detail);
         ModalStack.Register(panel, Hide);
     }
@@ -378,17 +379,9 @@ public class DocumentViewerController : MonoBehaviour
             return;
         }
 
-        // 루트 패널 (화면 전체를 덮음)
-        panel = new GameObject("DocumentViewerPanel", typeof(RectTransform));
-        panel.transform.SetParent(targetCanvas.transform, false);
-        Stretch(panel.GetComponent<RectTransform>());
-
-        // 바깥 검은 막 (클릭하면 닫힘) - 퀵바 창/환경설정과 같은 97%
-        var backdrop = new GameObject("Backdrop", typeof(RectTransform), typeof(Image), typeof(Button));
-        backdrop.transform.SetParent(panel.transform, false);
-        Stretch(backdrop.GetComponent<RectTransform>());
-        backdrop.GetComponent<Image>().color = UITheme.ScreenDim;
-        backdropButton = backdrop.GetComponent<Button>();
+        // 창 (화면 전체를 덮는 검은 막 + 조사 상세 층 + Esc = 닫기). 막을 누르면 닫힌다.
+        panel = CreateWindow(targetCanvas.transform, "DocumentViewerPanel", UILayer.Detail, Hide);
+        backdropButton = panel.AddComponent<Button>();
         backdropButton.transition = Selectable.Transition.None; // 눌렀을 때 색이 변하면 어색하다
         backdropButton.onClick.AddListener(Hide);
 

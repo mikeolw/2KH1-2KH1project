@@ -106,6 +106,8 @@ public class ChoicePanelStyle : MonoBehaviour
             dimImg.color = new Color(0f, 0f, 0f, 0.55f);
             dimImg.raycastTarget = true;   // 선택지가 떠 있는 동안 뒤의 조사 오브젝트가 눌리지 않게
             dim.SetActive(panel.activeInHierarchy);
+            // 창 등록은 선택지 패널이 하고(아래), 이 막은 그 일부다 - 개발 중 경고에서 뺀다.
+            ModalStack.MarkNotWindow(dim, "선택지 뒤의 어두운 막. 창 등록은 선택지 패널(choicePanel)이 한다.");
         }
 
         StyleChildren();

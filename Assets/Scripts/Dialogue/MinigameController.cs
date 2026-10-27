@@ -148,6 +148,7 @@ public class MinigameController : MonoBehaviour
             MinigameTheme.Stretch(dimImg.rectTransform);
             dim = dimImg.gameObject;
             dim.SetActive(false);
+            ModalStack.MarkNotWindow(dim, "미니게임 카드 뒤의 막. 게임 단계라 창이 아니다 (대사 막기는 IsActive).");
         }
     }
 

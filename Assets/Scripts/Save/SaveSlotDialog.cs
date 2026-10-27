@@ -123,13 +123,10 @@ public class SaveSlotDialog : MonoBehaviour
             return;
         }
 
+        // 무조건 골라야 하는 창이라 다른 창보다 위 층(Dialog)에 두고, Esc로 닫히지 않게 한다
+        // (onEscape = null이면 Esc가 여기서 멈춰 아래 창도 닫지 않는다).
         panel = SaveScreenUI.BuildFrame(targetCanvas.transform, "SaveSlotDialog", "SAVE", "기록 남기기",
-                                        out RectTransform box, out titleLabel);
-        // 무조건 골라야 하는 창이라 다른 창보다 위 층에 둔다 (UILayers.cs 참고).
-        UILayers.Place(panel, UILayer.Dialog);
-        // Esc로 닫히지 않는다 - 세이브포인트에서 반드시 고르도록 뜨는 창이다.
-        // (onEscape를 비워 두면 Esc가 여기서 멈춰 아래 창도 닫지 않는다)
-        ModalStack.Register(panel, null);
+                                        UILayer.Dialog, null, out RectTransform box, out titleLabel);
 
         int slotCount = SaveManager.SlotCount;
         slotRows = new SaveSlotRow[slotCount];

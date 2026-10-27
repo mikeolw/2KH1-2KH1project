@@ -37,16 +37,14 @@ public static class SaveScreenUI
     private static readonly Color DividerColor = UITheme.Divider; // 2A3540
     private static readonly Color PanelColor = UITheme.Panel;
 
-    // 화면 전체를 덮는 막 + 패널을 만들고, 글자/슬롯을 얹을 패널(box)을 돌려준다.
+    // 창(화면 전체를 덮는 막 + 층 + Esc 등록) + 패널을 만들고, 글자/슬롯을 얹을 패널(box)을 돌려준다.
+    //   layer    : 세이브포인트 저장 창은 Dialog(무조건 골라야 함), 이어하기 화면은 Panel
+    //   onEscape : Esc 동작. 세이브포인트 저장 창은 null(Esc로 안 닫힘)
     public static GameObject BuildFrame(Transform canvas, string objectName, string kicker, string title,
+                                        UILayer layer, System.Action onEscape,
                                         out RectTransform box, out TMP_Text subtitle)
     {
-        var root = new GameObject(objectName, typeof(RectTransform), typeof(Image));
-        root.transform.SetParent(canvas, false);
-        Stretch((RectTransform)root.transform);
-        var dim = root.GetComponent<Image>();
-        dim.color = new Color(0f, 0f, 0f, 0.97f);   // 환경설정/퀵바 창과 같은 검은 막
-        dim.raycastTarget = true;                    // 뒤쪽 화면이 눌리지 않게
+        var root = UIKit.CreateWindow(canvas, objectName, layer, onEscape);
 
         var panelArt = UISpriteUtil.Load(ArtFolder + "SavePanel");
         if (panelArt != null)

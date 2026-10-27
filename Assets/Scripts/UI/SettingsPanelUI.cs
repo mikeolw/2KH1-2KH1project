@@ -111,12 +111,6 @@ public class SettingsPanelUI : MonoBehaviour
 
         Build();
         if (panel != null) panel.SetActive(false);
-
-        // ===== Esc =====
-        //   확인 창이 떠 있으면 -> 확인 창만 닫는다 ([취소]와 같음)  (BuildConfirmDialog에서 등록)
-        //   아니면              -> 설정 화면을 닫는다 ([돌아가기]와 같음)
-        // 확인 창이 설정 화면보다 나중에 열리므로 ModalStack이 확인 창부터 닫아 준다.
-        ModalStack.Register(panel, Close);
     }
 
     // ---------------------------------------------------------------------------------
@@ -133,7 +127,6 @@ public class SettingsPanelUI : MonoBehaviour
         ShowCategory(Category.Sound);
 
         panel.SetActive(true);
-        UILayers.Place(panel, UILayer.Panel);   // 다른 UI보다 위 (UILayers.cs 참고)
     }
 
     public void Close()
@@ -177,14 +170,11 @@ public class SettingsPanelUI : MonoBehaviour
             return;
         }
 
-        // ----- 화면 전체를 덮는 어두운 막 -----
-        panel = new GameObject("SettingsPanel", typeof(RectTransform), typeof(Image));
-        panel.transform.SetParent(canvas.transform, false);
-        Stretch(panel.GetComponent<RectTransform>());
-        var dim = panel.GetComponent<Image>();
+        // ----- 창 (화면 전체를 덮는 검은 막 97% + 퀵바 창 층 + Esc) -----
         // 설정 화면 뒤의 게임 화면(흰 선화)이 비쳐 보이면 글자가 읽기 어려워서 거의 가린다.
-        dim.color = new Color(0f, 0f, 0f, 0.97f);   // 검은색
-        dim.raycastTarget = true;   // 뒤쪽 게임 화면이 눌리지 않게 막는다
+        // Esc: 확인 창이 떠 있으면 확인 창만 닫고(BuildConfirmDialog에서 등록), 아니면 설정을 닫는다
+        // ([돌아가기]와 같음). 확인 창이 나중에 열리므로 ModalStack이 확인 창부터 닫아 준다.
+        panel = CreateWindow(canvas.transform, "SettingsPanel", UILayer.Panel, Close);
 
         // ----- 패널 그림 (1440x1080 한 장: 패널 + 그림자 + 위쪽 강조선 + 구분선) -----
         var panelArt = LoadSprite("SettingsPanel");

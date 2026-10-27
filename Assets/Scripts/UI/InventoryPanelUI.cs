@@ -771,12 +771,10 @@ public class InventoryPanelUI : MonoBehaviour
         }
 
         // ----- 화면 전체를 덮는 검은 막 (환경설정과 같은 톤) -----
-        overlay = new GameObject(ContentRootName, typeof(RectTransform), typeof(Image));
-        overlay.transform.SetParent(canvas.transform, false);
-        Stretch(overlay.GetComponent<RectTransform>());
-        var dim = overlay.GetComponent<Image>();
-        dim.color = new Color(0f, 0f, 0f, 0.97f);
-        dim.raycastTarget = true;
+        // 창 등록(Esc/대사 막기)은 UIManager가 이 컴포넌트가 붙은 inventoryPanel로 하고,
+        // 여기는 그 창의 실제 화면이라 "창 아님"으로 표시해 개발 중 경고에서 뺀다 (ModalStack.cs 참고).
+        overlay = CreateScreenDim(canvas.transform, ContentRootName);
+        ModalStack.MarkNotWindow(overlay, "가방 창의 화면. 창 등록은 UIManager가 inventoryPanel로 한다.");
 
         // ----- 패널 그림 (1440x1080 한 장: 패널 + 그림자 + 위쪽 강조선 + 구분선) -----
         var panelArt = LoadSprite(ArtFolder + "InventoryPanel");

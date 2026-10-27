@@ -89,9 +89,8 @@ public class SaveDataSceneController : MonoBehaviour
         bool saveMode = OpenMode == Mode.Save;
         var root = SaveScreenUI.BuildFrame(canvas.transform, "SaveDataScreen",
                                            saveMode ? "SAVE" : "LOAD", saveMode ? "기록 남기기" : "이어하기",
+                                           UILayer.Panel, OnClickBack,   // Esc = 돌아가기
                                            out RectTransform box, out subtitleText);
-        UILayers.Place(root, UILayer.Panel);
-        ModalStack.Register(root, OnClickBack);   // Esc = 돌아가기
 
         slotRows = new SaveSlotRow[SaveManager.SlotCount];
         for (int i = 0; i < slotRows.Length; i++)

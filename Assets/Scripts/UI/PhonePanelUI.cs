@@ -301,6 +301,8 @@ public class PhonePanelUI : MonoBehaviour
         overlay = new GameObject(OverlayName, typeof(RectTransform));
         overlay.transform.SetParent(canvas.transform, false);
         Stretch(overlay.GetComponent<RectTransform>());
+        // 창 등록(Esc/대사 막기)은 UIManager가 phonePanel로 하고, 여기는 그 창의 실제 화면이다 (ModalStack.cs 참고).
+        ModalStack.MarkNotWindow(overlay, "핸드폰 창의 화면. 창 등록은 UIManager가 phonePanel로 한다.");
 
         // ----- 화면 전체를 덮는 막 (바깥을 누르면 닫힘) -----
         // 핸드폰의 "부모"가 아니라 "형제"로 둔다. 부모에 닫기 버튼을 달면, 핸드폰 안에서 버튼이

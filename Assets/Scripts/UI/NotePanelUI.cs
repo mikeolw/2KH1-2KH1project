@@ -539,12 +539,10 @@ public class NotePanelUI : MonoBehaviour
         pages.Clear();
 
         // ----- 화면 전체를 덮는 막 -----
-        overlay = new GameObject(OverlayName, typeof(RectTransform), typeof(Image));
-        overlay.transform.SetParent(canvas.transform, false);
-        Stretch(overlay.GetComponent<RectTransform>());
-        var dim = overlay.GetComponent<Image>();
-        dim.color = new Color(0f, 0f, 0f, 0.97f);   // 환경설정/가방과 같은 검은 막
-        dim.raycastTarget = true;   // 뒤쪽 게임 화면이 눌리지 않게 막는다
+        // 창 등록(Esc/대사 막기)은 UIManager가 이 컴포넌트가 붙은 notePanel로 하고,
+        // 여기는 그 창의 실제 화면이라 "창 아님"으로 표시해 개발 중 경고에서 뺀다 (ModalStack.cs 참고).
+        overlay = UIKit.CreateScreenDim(canvas.transform, OverlayName);
+        ModalStack.MarkNotWindow(overlay, "수첩 창의 화면. 창 등록은 UIManager가 notePanel로 한다.");
 
         // ----- 펼친 책 -----
         // 노트 그림(NoteBook_v3.png)은 캔버스와 같은 1440x1080 한 장이라 책을 캔버스 전체 크기로 깔고,

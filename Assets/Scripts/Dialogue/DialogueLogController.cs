@@ -140,7 +140,6 @@ public class DialogueLogController : MonoBehaviour
     {
         if (overlay == null) return;
         overlay.SetActive(true);
-        UILayers.Place(overlay, UILayer.Panel);
         Refresh(scrollToBottom: true);
     }
 
@@ -259,14 +258,8 @@ public class DialogueLogController : MonoBehaviour
             return;
         }
 
-        // ----- 화면 전체를 덮는 검은 막 (환경설정/가방과 같은 톤) -----
-        overlay = new GameObject(OverlayName, typeof(RectTransform), typeof(Image));
-        overlay.transform.SetParent(canvas.transform, false);
-        Stretch(overlay.GetComponent<RectTransform>());
-        var dim = overlay.GetComponent<Image>();
-        dim.color = new Color(0f, 0f, 0f, 0.97f);
-        dim.raycastTarget = true; // 뒤쪽 게임 화면이 눌리지 않게 막는다
-        ModalStack.Register(overlay, Close);   // Esc = 닫기
+        // ----- 창 (화면 전체를 덮는 검은 막 + 퀵바 창 층 + Esc = 닫기) -----
+        overlay = CreateWindow(canvas.transform, OverlayName, UILayer.Panel, Close);
 
         // ----- 패널 그림 (1440x1080 한 장: 패널 + 위쪽 강조선 + 구분선 두 개) -----
         var panelArt = UISpriteUtil.Load(ArtFolder + "LogPanel");
