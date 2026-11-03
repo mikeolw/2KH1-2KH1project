@@ -4,6 +4,7 @@ using UnityEngine;
 using UnityEngine.EventSystems;
 using UnityEngine.UI;
 using TMPro;
+using static UIKit;   // CreateText, PlaceTopLeft, AddRect, Stretch ... (UIKit.cs)
 
 // =====================================================================================
 // 핸드폰 UI - 퀵바의 폰 버튼을 누르면 열리는 화면 (NotePanelUI.cs와 같은 방식으로 작성)
@@ -111,8 +112,6 @@ public class PhonePanelUI : MonoBehaviour
     private Page page = Page.Menu;
     private string dialedNumber = "";
 
-    private AudioSource sfxSource;
-    private AudioClip clickClip;
     private Coroutine openRoutine;
 
     private static readonly Dictionary<int, Sprite> roundedCache = new Dictionary<int, Sprite>();
@@ -121,11 +120,6 @@ public class PhonePanelUI : MonoBehaviour
     {
         Instance = this;
         HideOriginalPanelVisuals();
-
-        sfxSource = gameObject.AddComponent<AudioSource>();
-        sfxSource.playOnAwake = false;
-        AudioManager.RegisterSafe(sfxSource, AudioManager.Channel.Sfx);
-        clickClip = Resources.Load<AudioClip>("Sounds/SFX/Click_SFX");
 
         BuildOverlay();
     }
@@ -141,7 +135,7 @@ public class PhonePanelUI : MonoBehaviour
         if (overlay == null) return;
 
         overlay.SetActive(true);
-        overlay.transform.SetAsLastSibling();   // 다른 UI에 가리지 않도록 항상 맨 앞으로
+        UILayers.Place(overlay, UILayer.Panel);   // 퀵바 창 층 (UILayers.cs 참고)
 
         dialedNumber = "";
         ShowMenu();
@@ -244,10 +238,7 @@ public class PhonePanelUI : MonoBehaviour
         ShowMenu();
     }
 
-    private void PlayClick()
-    {
-        if (sfxSource != null && clickClip != null) sfxSource.PlayOneShot(clickClip);
-    }
+    private void PlayClick() => AudioManager.PlaySfx(AudioManager.Sfx.Click);
 
     // 주머니에서 꺼내듯 아래에서 짧게 올라오면서, 덮개가 경첩을 축으로 탁 펼쳐진다.
     // 일시정지 중에도 돌도록 unscaled 시간을 쓴다.
@@ -296,7 +287,7 @@ public class PhonePanelUI : MonoBehaviour
     // ---------------------------------------------------------------------------------
     private void BuildOverlay()
     {
-        Canvas canvas = FindAnyObjectByType<Canvas>();
+        Canvas canvas = UILayers.RootCanvas();
         if (canvas == null)
         {
             Debug.LogError("[PhonePanelUI] 씬에 Canvas가 없어 핸드폰 화면을 만들 수 없습니다.");
@@ -310,6 +301,8 @@ public class PhonePanelUI : MonoBehaviour
         overlay = new GameObject(OverlayName, typeof(RectTransform));
         overlay.transform.SetParent(canvas.transform, false);
         Stretch(overlay.GetComponent<RectTransform>());
+        // 창 등록(Esc/대사 막기)은 UIManager가 phonePanel로 하고, 여기는 그 창의 실제 화면이다 (ModalStack.cs 참고).
+        ModalStack.MarkNotWindow(overlay, "핸드폰 창의 화면. 창 등록은 UIManager가 phonePanel로 한다.");
 
         // ----- 화면 전체를 덮는 막 (바깥을 누르면 닫힘) -----
         // 핸드폰의 "부모"가 아니라 "형제"로 둔다. 부모에 닫기 버튼을 달면, 핸드폰 안에서 버튼이
@@ -965,14 +958,6 @@ public class PhonePanelUI : MonoBehaviour
         rt.pivot = new Vector2(0f, 1f);
         rt.anchoredPosition = new Vector2(x, -y);
         rt.sizeDelta = new Vector2(w, h);
-    }
-
-    private static void Stretch(RectTransform rt, float inset = 0f)
-    {
-        rt.anchorMin = Vector2.zero;
-        rt.anchorMax = Vector2.one;
-        rt.offsetMin = new Vector2(inset, inset);
-        rt.offsetMax = new Vector2(-inset, -inset);
     }
 
     private static void SetRounded(Image img, int radius, Color color)

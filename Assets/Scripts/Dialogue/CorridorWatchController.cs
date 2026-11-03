@@ -2,6 +2,7 @@ using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.UI;
 using TMPro;
+using static UIKit;   // CreateText, PlaceTopLeft, AddRect, Stretch ... (UIKit.cs)
 
 // =====================================================================================
 // 자료실 앞 복도 감시 (BG_07_InvestigationSite_04 전용)
@@ -242,7 +243,7 @@ public class CorridorWatchController : MonoBehaviour
     {
         if (root != null) return true;
 
-        if (targetCanvas == null) targetCanvas = FindAnyObjectByType<Canvas>();
+        if (targetCanvas == null) targetCanvas = UILayers.RootCanvas();
         if (targetCanvas == null)
         {
             Debug.LogWarning("[CorridorWatchController] 씬에 Canvas가 없어 복도 인물을 띄우지 못합니다.");
@@ -293,11 +294,4 @@ public class CorridorWatchController : MonoBehaviour
         return true;
     }
 
-    private static void Stretch(RectTransform rt)
-    {
-        rt.anchorMin = Vector2.zero;
-        rt.anchorMax = Vector2.one;
-        rt.offsetMin = Vector2.zero;
-        rt.offsetMax = Vector2.zero;
-    }
 }

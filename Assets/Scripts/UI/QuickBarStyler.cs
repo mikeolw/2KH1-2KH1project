@@ -1,6 +1,7 @@
 using UnityEngine;
 using UnityEngine.UI;
 using TMPro;
+using static UIKit;   // CreateText, PlaceTopLeft, AddRect, Stretch ... (UIKit.cs)
 
 // =====================================================================================
 // 퀵바(수첩/휴대폰/가방/설정) 버튼 모양 - Figma "QuickButton" 디자인을 씬 버튼에 입힌다
@@ -280,11 +281,4 @@ public class QuickBarStyler : MonoBehaviour
         return circleSprite;
     }
 
-    private static void Stretch(RectTransform rt)
-    {
-        rt.anchorMin = Vector2.zero;
-        rt.anchorMax = Vector2.one;
-        rt.offsetMin = Vector2.zero;
-        rt.offsetMax = Vector2.zero;
-    }
 }

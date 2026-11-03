@@ -692,6 +692,10 @@ public class DialogueSystem : MonoBehaviour
     void Start()
     {
         StyleDialogueBox();
+        // 암전 판은 화면을 덮는 검은 막이지만 창이 아니다 (ModalStack 개발 중 경고에서 뺀다).
+        if (fadeCanvasGroup != null)
+            ModalStack.MarkNotWindow(fadeCanvasGroup.gameObject, "장면 전환 암전 판.");
+
         // 선택지 버튼 모양 (청회색 테마) - 대본/조사/추리 선택지 모두 이 패널을 같이 쓴다 (ChoicePanelStyle.cs 참고)
         ChoicePanelStyle.Attach(choicePanel, choiceContainer, dialoguePanel);
 
@@ -1910,16 +1914,16 @@ public class DialogueSystem : MonoBehaviour
         return InvestigationController.Instance != null && InvestigationController.Instance.IsActive;
     }
 
+    // 창(수첩·핸드폰·가방·환경설정·자료 뷰어·세이브 창·대사 기록·선택지...)은 ModalStack에
+    // 등록되어 있어서 하나씩 적지 않는다 - 새 창도 ModalStack.Register만 하면 여기서 같이 막힌다.
+    // 창이 아닌 "진행 중인 게임 단계"(미니게임/추리)만 따로 확인한다.
     private bool IsBlockedByOtherUI()
     {
-        if (choicePanel != null && choicePanel.activeSelf) return true;
-        if (UIManager.Instance != null && UIManager.Instance.IsAnyPanelOpen) return true;
+        if (ModalStack.BlocksDialogue) return true;
+        if (choicePanel != null && choicePanel.activeSelf) return true;   // 선택지 모양을 못 입혔을 때를 대비
         if (MinigameController.Instance != null && MinigameController.Instance.IsActive) return true;
         if (KeypadMinigameController.Instance != null && KeypadMinigameController.Instance.IsActive) return true;
-        if (DocumentViewerController.Instance != null && DocumentViewerController.Instance.IsOpen) return true;
         if (DeductionController.Instance != null && DeductionController.Instance.IsActive) return true;
-        if (SaveSlotDialog.Instance != null && SaveSlotDialog.Instance.IsOpen) return true;
-        if (DialogueLogController.Instance != null && DialogueLogController.Instance.IsOpen) return true;
         return false;
     }
 

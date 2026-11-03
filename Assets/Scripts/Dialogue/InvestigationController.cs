@@ -1987,7 +1987,7 @@ public class InvestigationController : MonoBehaviour
     // ---------------------------------------------------------------------------------
     private bool EnsureCanvas()
     {
-        if (targetCanvas == null) targetCanvas = FindAnyObjectByType<Canvas>();
+        if (targetCanvas == null) targetCanvas = UILayers.RootCanvas();
 
         if (targetCanvas == null)
         {

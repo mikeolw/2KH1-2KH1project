@@ -2,6 +2,7 @@ using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.UI;
 using TMPro;
+using static UIKit;   // CreateText, PlaceTopLeft, AddRect, Stretch ... (UIKit.cs)
 
 // =====================================================================================
 // 대화 로그(백로그) - 위 화살표 키를 누르면 지금까지 나온 대사를 다시 볼 수 있는 창
@@ -73,19 +74,19 @@ public class DialogueLogController : MonoBehaviour
     private const float NameGap = 32f;
 
     // ===== 색 =====
-    private static readonly Color KickerColor = new Color(0.435f, 0.518f, 0.588f);   // 6F8496
-    private static readonly Color TitleColor = new Color(0.894f, 0.918f, 0.937f);    // E4EAEF
-    private static readonly Color SpeakerColor = new Color(0.561f, 0.643f, 0.718f);  // 8FA4B7
-    private static readonly Color SentenceColor = new Color(0.824f, 0.855f, 0.882f); // D2DAE1
-    private static readonly Color NarrationColor = new Color(0.576f, 0.631f, 0.682f);// 93A1AE
-    private static readonly Color LatestNameColor = new Color(0.851f, 0.89f, 0.922f);// D9E3EB
-    private static readonly Color DividerColor = new Color(0.165f, 0.208f, 0.251f);  // 2A3540
-    private static readonly Color HintColor = new Color(0.482f, 0.541f, 0.596f);     // 7B8A98
-    private static readonly Color DimTextColor = new Color(0.424f, 0.486f, 0.545f);  // 6C7C8B
-    private static readonly Color ButtonTextColor = new Color(0.663f, 0.729f, 0.788f);
+    private static readonly Color KickerColor = UITheme.Kicker;   // 6F8496
+    private static readonly Color TitleColor = UITheme.Title;    // E4EAEF
+    private static readonly Color SpeakerColor = UITheme.Accent;  // 8FA4B7
+    private static readonly Color SentenceColor = UITheme.Body; // D2DAE1
+    private static readonly Color NarrationColor = UITheme.Narration;// 93A1AE
+    private static readonly Color LatestNameColor = UITheme.Active;// D9E3EB
+    private static readonly Color DividerColor = UITheme.Divider;  // 2A3540
+    private static readonly Color HintColor = UITheme.Hint;     // 7B8A98
+    private static readonly Color DimTextColor = UITheme.Muted;  // 6C7C8B
+    private static readonly Color ButtonTextColor = UITheme.ButtonText;
     // 그림이 없을 때만 쓰는 색
-    private static readonly Color PanelColor = new Color(0.063f, 0.086f, 0.114f, 0.95f);
-    private static readonly Color LatestBgColor = new Color(0.094f, 0.133f, 0.176f);  // 18222D
+    private static readonly Color PanelColor = UITheme.Panel;
+    private static readonly Color LatestBgColor = UITheme.SurfaceHover;  // 18222D
 
     public bool IsOpen => overlay != null && overlay.activeSelf;
 
@@ -99,11 +100,7 @@ public class DialogueLogController : MonoBehaviour
 
     private void Update()
     {
-        if (IsOpen)
-        {
-            if (Input.GetKeyDown(KeyCode.Escape)) Close();
-            return;
-        }
+        if (IsOpen) return;   // Esc로 닫기는 ModalStack이 한다 (BuildOverlay에서 등록)
 
         if (Input.GetKeyDown(KeyCode.UpArrow) &&
             DialogueSystem.Instance != null && DialogueSystem.Instance.CanOpenOverlay)
@@ -143,7 +140,6 @@ public class DialogueLogController : MonoBehaviour
     {
         if (overlay == null) return;
         overlay.SetActive(true);
-        overlay.transform.SetAsLastSibling();
         Refresh(scrollToBottom: true);
     }
 
@@ -250,39 +246,20 @@ public class DialogueLogController : MonoBehaviour
         return row;
     }
 
-    private static TMP_Text CreateText(Transform parent, string name, string text, float size, FontStyles style, Color color)
-    {
-        var go = new GameObject(name, typeof(RectTransform));
-        go.transform.SetParent(parent, false);
-        var tmp = go.AddComponent<TextMeshProUGUI>();
-        tmp.text = text;
-        tmp.fontSize = size;
-        tmp.fontStyle = style;
-        tmp.color = color;
-        tmp.alignment = TextAlignmentOptions.TopLeft;
-        tmp.raycastTarget = false;
-        return tmp;
-    }
-
     // ---------------------------------------------------------------------------------
     // UI 만들기 (캔버스 바로 아래)
     // ---------------------------------------------------------------------------------
     private void BuildOverlay()
     {
-        Canvas canvas = FindAnyObjectByType<Canvas>();
+        Canvas canvas = UILayers.RootCanvas();
         if (canvas == null)
         {
             Debug.LogError("[DialogueLogController] 씬에 Canvas가 없어 대화 로그 창을 만들 수 없습니다.");
             return;
         }
 
-        // ----- 화면 전체를 덮는 검은 막 (환경설정/가방과 같은 톤) -----
-        overlay = new GameObject(OverlayName, typeof(RectTransform), typeof(Image));
-        overlay.transform.SetParent(canvas.transform, false);
-        Stretch(overlay.GetComponent<RectTransform>());
-        var dim = overlay.GetComponent<Image>();
-        dim.color = new Color(0f, 0f, 0f, 0.97f);
-        dim.raycastTarget = true; // 뒤쪽 게임 화면이 눌리지 않게 막는다
+        // ----- 창 (화면 전체를 덮는 검은 막 + 퀵바 창 층 + Esc = 닫기) -----
+        overlay = CreateWindow(canvas.transform, OverlayName, UILayer.Panel, Close);
 
         // ----- 패널 그림 (1440x1080 한 장: 패널 + 위쪽 강조선 + 구분선 두 개) -----
         var panelArt = UISpriteUtil.Load(ArtFolder + "LogPanel");
@@ -444,29 +421,4 @@ public class DialogueLogController : MonoBehaviour
         return bar;
     }
 
-    private static void PlaceTopLeft(RectTransform rt, float x, float y, float w, float h)
-    {
-        rt.anchorMin = rt.anchorMax = new Vector2(0f, 1f);
-        rt.pivot = new Vector2(0f, 1f);
-        rt.anchoredPosition = new Vector2(x, -y);
-        rt.sizeDelta = new Vector2(w, h);
-    }
-
-    private static void AddRect(Transform parent, string name, float x, float y, float w, float h, Color color)
-    {
-        var go = new GameObject(name, typeof(RectTransform), typeof(Image));
-        go.transform.SetParent(parent, false);
-        PlaceTopLeft((RectTransform)go.transform, x, y, w, h);
-        var img = go.GetComponent<Image>();
-        img.color = color;
-        img.raycastTarget = false;
-    }
-
-    private static void Stretch(RectTransform rt)
-    {
-        rt.anchorMin = Vector2.zero;
-        rt.anchorMax = Vector2.one;
-        rt.offsetMin = Vector2.zero;
-        rt.offsetMax = Vector2.zero;
-    }
 }

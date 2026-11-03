@@ -122,8 +122,7 @@ public class NotePanelUI : MonoBehaviour
         if (overlay != null)
         {
             overlay.SetActive(true);
-            // 다른 UI에 가리지 않도록 항상 맨 앞으로.
-            overlay.transform.SetAsLastSibling();
+            UILayers.Place(overlay, UILayer.Panel);   // 퀵바 창 층 (UILayers.cs 참고)
         }
 
         // 새 메모가 있으면 수사 메모 탭으로 연다.
@@ -142,11 +141,11 @@ public class NotePanelUI : MonoBehaviour
         if (overlay != null) overlay.SetActive(false);
     }
 
-    // ← → 로 장 넘기기. 자료 뷰어가 위에 떠 있으면 그쪽이 ← →를 쓰므로 건드리지 않는다.
+    // ← → 로 장 넘기기. 위에 다른 창(자료 뷰어 등)이 떠 있으면 그쪽이 ← →를 쓰므로 건드리지 않는다.
     private void Update()
     {
         if (overlay == null || !overlay.activeInHierarchy) return;
-        if (DocumentViewerController.Instance != null && DocumentViewerController.Instance.IsOpen) return;
+        if (ModalStack.IsCoveredByOther(gameObject)) return;
         if (Input.GetKeyDown(KeyCode.LeftArrow)) GoToSpread(currentSpread - 1);
         else if (Input.GetKeyDown(KeyCode.RightArrow)) GoToSpread(currentSpread + 1);
     }
@@ -523,7 +522,7 @@ public class NotePanelUI : MonoBehaviour
     // ---------------------------------------------------------------------------------
     private void BuildOverlay()
     {
-        Canvas canvas = FindAnyObjectByType<Canvas>();
+        Canvas canvas = UILayers.RootCanvas();
         if (canvas == null)
         {
             Debug.LogError("[NotePanelUI] 씬에 Canvas가 없어 수첩 화면을 만들 수 없습니다.");
@@ -540,12 +539,10 @@ public class NotePanelUI : MonoBehaviour
         pages.Clear();
 
         // ----- 화면 전체를 덮는 막 -----
-        overlay = new GameObject(OverlayName, typeof(RectTransform), typeof(Image));
-        overlay.transform.SetParent(canvas.transform, false);
-        Stretch(overlay.GetComponent<RectTransform>());
-        var dim = overlay.GetComponent<Image>();
-        dim.color = new Color(0f, 0f, 0f, 0.97f);   // 환경설정/가방과 같은 검은 막
-        dim.raycastTarget = true;   // 뒤쪽 게임 화면이 눌리지 않게 막는다
+        // 창 등록(Esc/대사 막기)은 UIManager가 이 컴포넌트가 붙은 notePanel로 하고,
+        // 여기는 그 창의 실제 화면이라 "창 아님"으로 표시해 개발 중 경고에서 뺀다 (ModalStack.cs 참고).
+        overlay = UIKit.CreateScreenDim(canvas.transform, OverlayName);
+        ModalStack.MarkNotWindow(overlay, "수첩 창의 화면. 창 등록은 UIManager가 notePanel로 한다.");
 
         // ----- 펼친 책 -----
         // 노트 그림(NoteBook_v3.png)은 캔버스와 같은 1440x1080 한 장이라 책을 캔버스 전체 크기로 깔고,

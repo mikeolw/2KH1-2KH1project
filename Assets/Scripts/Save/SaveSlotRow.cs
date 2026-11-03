@@ -2,6 +2,7 @@ using TMPro;
 using UnityEngine;
 using UnityEngine.EventSystems;
 using UnityEngine.UI;
+using static UIKit;   // CreateText, PlaceTopLeft, AddRect, Stretch ... (UIKit.cs)
 
 // =====================================================================================
 // 세이브 화면 공용 UI (Figma "Screen / Save" - 청회색 테마)
@@ -28,24 +29,22 @@ public static class SaveScreenUI
     public const float SlotStep = 130f;     // 슬롯 높이 116 + 간격 14
     public const float FooterY = BoxHeight - Pad - 54f;   // 아래 버튼 위쪽
 
-    public static readonly Color KickerColor = new Color(0.435f, 0.518f, 0.588f);   // 6F8496
-    public static readonly Color TitleColor = new Color(0.894f, 0.918f, 0.937f);    // E4EAEF
-    public static readonly Color HintColor = new Color(0.482f, 0.541f, 0.596f);     // 7B8A98
-    public static readonly Color ButtonTextColor = new Color(0.663f, 0.729f, 0.788f);// A9BAC9
-    private static readonly Color AccentColor = new Color(0.561f, 0.643f, 0.718f);  // 8FA4B7
-    private static readonly Color DividerColor = new Color(0.165f, 0.208f, 0.251f); // 2A3540
-    private static readonly Color PanelColor = new Color(0.063f, 0.086f, 0.114f, 0.95f);
+    public static readonly Color KickerColor = UITheme.Kicker;   // 6F8496
+    public static readonly Color TitleColor = UITheme.Title;    // E4EAEF
+    public static readonly Color HintColor = UITheme.Hint;     // 7B8A98
+    public static readonly Color ButtonTextColor = UITheme.ButtonText;// A9BAC9
+    private static readonly Color AccentColor = UITheme.Accent;  // 8FA4B7
+    private static readonly Color DividerColor = UITheme.Divider; // 2A3540
+    private static readonly Color PanelColor = UITheme.Panel;
 
-    // 화면 전체를 덮는 막 + 패널을 만들고, 글자/슬롯을 얹을 패널(box)을 돌려준다.
+    // 창(화면 전체를 덮는 막 + 층 + Esc 등록) + 패널을 만들고, 글자/슬롯을 얹을 패널(box)을 돌려준다.
+    //   layer    : 세이브포인트 저장 창은 Dialog(무조건 골라야 함), 이어하기 화면은 Panel
+    //   onEscape : Esc 동작. 세이브포인트 저장 창은 null(Esc로 안 닫힘)
     public static GameObject BuildFrame(Transform canvas, string objectName, string kicker, string title,
+                                        UILayer layer, System.Action onEscape,
                                         out RectTransform box, out TMP_Text subtitle)
     {
-        var root = new GameObject(objectName, typeof(RectTransform), typeof(Image));
-        root.transform.SetParent(canvas, false);
-        Stretch((RectTransform)root.transform);
-        var dim = root.GetComponent<Image>();
-        dim.color = new Color(0f, 0f, 0f, 0.97f);   // 환경설정/퀵바 창과 같은 검은 막
-        dim.raycastTarget = true;                    // 뒤쪽 화면이 눌리지 않게
+        var root = UIKit.CreateWindow(canvas, objectName, layer, onEscape);
 
         var panelArt = UISpriteUtil.Load(ArtFolder + "SavePanel");
         if (panelArt != null)
@@ -117,47 +116,14 @@ public static class SaveScreenUI
         return btn;
     }
 
+    // 한 줄 글자 (UIKit.CreateLabel과 같음 - 예전 호출부를 위해 이름만 남겨 둔다)
     public static TMP_Text CreateText(Transform parent, string name, string text, float size, FontStyles style, Color color)
-    {
-        var go = new GameObject(name, typeof(RectTransform));
-        go.transform.SetParent(parent, false);
-        var tmp = go.AddComponent<TextMeshProUGUI>();
-        tmp.text = text;
-        tmp.fontSize = size;
-        tmp.fontStyle = style;
-        tmp.color = color;
-        tmp.alignment = TextAlignmentOptions.TopLeft;
-        tmp.raycastTarget = false;
-        tmp.textWrappingMode = TextWrappingModes.NoWrap;
-        tmp.overflowMode = TextOverflowModes.Ellipsis;
-        return tmp;
-    }
+        => UIKit.CreateLabel(parent, name, text, size, style, color);
 
-    public static void PlaceTopLeft(RectTransform rt, float x, float y, float w, float h)
-    {
-        rt.anchorMin = rt.anchorMax = new Vector2(0f, 1f);
-        rt.pivot = new Vector2(0f, 1f);
-        rt.anchoredPosition = new Vector2(x, -y);
-        rt.sizeDelta = new Vector2(w, h);
-    }
+    public static void PlaceTopLeft(RectTransform rt, float x, float y, float w, float h) => UIKit.PlaceTopLeft(rt, x, y, w, h);
 
-    public static void Stretch(RectTransform rt)
-    {
-        rt.anchorMin = Vector2.zero;
-        rt.anchorMax = Vector2.one;
-        rt.offsetMin = Vector2.zero;
-        rt.offsetMax = Vector2.zero;
-    }
+    public static void Stretch(RectTransform rt) => UIKit.Stretch(rt);
 
-    private static void AddRect(Transform parent, string name, float x, float y, float w, float h, Color color)
-    {
-        var go = new GameObject(name, typeof(RectTransform), typeof(Image));
-        go.transform.SetParent(parent, false);
-        PlaceTopLeft((RectTransform)go.transform, x, y, w, h);
-        var img = go.GetComponent<Image>();
-        img.color = color;
-        img.raycastTarget = false;
-    }
 }
 
 // 세이브 슬롯 한 줄. 상태(저장됨/빈 칸/잠김)와 마우스 올림에 따라 그림과 글자가 바뀐다.
@@ -169,13 +135,13 @@ public class SaveSlotRow : MonoBehaviour, IPointerEnterHandler, IPointerExitHand
     // 그림(848x116 @2x)과 화면 크기가 달라져도 왼쪽 번호 칸(구분선 포함 110px)과 테두리는 그대로 둔다.
     private static readonly Vector4 SlotBorder = new Vector4(220f, 12f, 12f, 12f);
 
-    private static readonly Color IndexColor = new Color(0.561f, 0.643f, 0.718f);    // 8FA4B7
-    private static readonly Color IndexEmptyColor = new Color(0.204f, 0.255f, 0.302f);// 34414D
-    private static readonly Color ActiveColor = new Color(0.851f, 0.89f, 0.922f);    // D9E3EB
-    private static readonly Color LabelColor = new Color(0.788f, 0.835f, 0.878f);    // C9D5E0
-    private static readonly Color DimColor = new Color(0.424f, 0.486f, 0.545f);      // 6C7C8B
-    private static readonly Color SlotColor = new Color(0.043f, 0.063f, 0.082f, 0.95f);
-    private static readonly Color SlotHoverColor = new Color(0.094f, 0.133f, 0.176f, 0.95f);
+    private static readonly Color IndexColor = UITheme.Accent;    // 8FA4B7
+    private static readonly Color IndexEmptyColor = UITheme.Line;// 34414D
+    private static readonly Color ActiveColor = UITheme.Active;    // D9E3EB
+    private static readonly Color LabelColor = UITheme.Label;    // C9D5E0
+    private static readonly Color DimColor = UITheme.Muted;      // 6C7C8B
+    private static readonly Color SlotColor = UITheme.WithAlpha(UITheme.Surface, 0.95f);
+    private static readonly Color SlotHoverColor = UITheme.WithAlpha(UITheme.SurfaceHover, 0.95f);
 
     public enum State { Filled, Empty, Locked }
 

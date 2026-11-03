@@ -3,6 +3,7 @@ using UnityEngine;
 using UnityEngine.EventSystems;
 using UnityEngine.UI;
 using TMPro;
+using static UIKit;   // CreateLabel, PlaceTopLeft, AddRect ... (UIKit.cs)
 
 // =====================================================================================
 // 서류/사진 자료를 화면 가득 펼쳐서 보여주는 뷰어 (ItemModalController.cs보다 한 단계 위)
@@ -28,6 +29,7 @@ using TMPro;
 //   ← → 넘기기 · 휠 확대·축소 · 끌어서 이동 · Esc 닫기
 //
 // 모양이 전부 선/상자뿐이라 그림 파일 없이 코드로 그린다 (드라이브에서 받을 것 없음).
+// 색은 UITheme, 머리말·닫기 X·테두리 버튼 같은 공용 모양은 UIKit을 쓴다.
 // 화면 좌표는 Figma 1440x1080 기준 그대로다.
 //
 // ===== 씬 배치 (유니티를 잘 모르는 팀원을 위한 설명) =====
@@ -76,23 +78,12 @@ public class DocumentViewerController : MonoBehaviour
     private readonly List<Image> pageSegments = new List<Image>();
     private ArrowView prevArrow, nextArrow;
 
-    // ===== 색 (Figma 청회색 테마 - 대사 기록/세이브 화면과 같은 값) =====
-    private static readonly Color AccentColor   = Hex(0x8FA4B7);
-    private static readonly Color KickerColor   = Hex(0x6F8496);
-    private static readonly Color TitleColor    = Hex(0xE4EAEF);
-    private static readonly Color BodyColor     = Hex(0xD2DAE1);
-    private static readonly Color HintColor     = Hex(0x7B8A98);
-    private static readonly Color EscColor      = Hex(0x6C7C8B);
-    private static readonly Color IconColor     = Hex(0xA9BAC9);
-    private static readonly Color DividerColor  = Hex(0x2A3540);
-    private static readonly Color BoxLineColor  = Hex(0x34414D);
-    private static readonly Color BoxLineHover  = Hex(0x5A6B7B);
-    private static readonly Color ViewportColor = Hex(0x0B1015);
-    private static readonly Color ArrowFill     = new Color(0.063f, 0.086f, 0.114f, 0.85f);  // 10161D 85%
-    private static readonly Color ArrowLineOn   = Hex(0x3A4855);
-    private static readonly Color ArrowLineOff  = Hex(0x26303A);
-    private static readonly Color ChevronOn     = Hex(0xC3D0DC);
-    private static readonly Color ChevronOff    = Hex(0x3E4B57);
+    // ===== 색 =====
+    // 공용 색은 UITheme.cs. 여기에는 이 화면의 넘김 화살표에만 쓰는 색만 둔다.
+    private static readonly Color ArrowFill    = UITheme.Hex(0x10161D, 0.85f);
+    private static readonly Color ArrowLineOff = UITheme.Hex(0x26303A);
+    private static readonly Color ChevronOn    = UITheme.Hex(0xC3D0DC);
+    private static readonly Color ChevronOff   = UITheme.Hex(0x3E4B57);
 
     // ===== 배치 (Figma 1440x1080 기준, 왼쪽 위가 0,0) =====
     private const float ScreenW = 1440f, ScreenH = 1080f;
@@ -121,12 +112,17 @@ public class DocumentViewerController : MonoBehaviour
 
         EnsureUI();
         if (panel != null) panel.SetActive(false);
+
+        // 조사 상세는 퀵바·알림·가방보다 항상 위 층 (UILayers.cs 참고). Esc = 닫기.
+        // (자동으로 만든 화면은 CreateWindow가 이미 했고, 인스펙터로 연결한 화면을 위해 한 번 더 건다)
+        UILayers.Place(panel, UILayer.Detail);
+        ModalStack.Register(panel, Hide);
     }
 
-    // ← → 로 장 넘기기. (Esc로 닫기는 UIManager가 한다)
+    // ← → 로 장 넘기기. 위에 다른 창(세이브 창 등)이 떠 있으면 그쪽 차례이므로 무시한다.
     private void Update()
     {
-        if (!IsOpen) return;
+        if (!IsOpen || ModalStack.IsCoveredByOther(panel)) return;
         if (Input.GetKeyDown(KeyCode.LeftArrow)) PrevPage();
         else if (Input.GetKeyDown(KeyCode.RightArrow)) NextPage();
     }
@@ -186,9 +182,6 @@ public class DocumentViewerController : MonoBehaviour
         if (kickerLabel != null) kickerLabel.text = kicker;
 
         panel.SetActive(true);
-        // 조사 상세는 퀵바/알림 등 다른 UI보다 항상 위에. 같은 Canvas 형제 순서만으로는
-        // 나중에 만들어진 UI가 다시 위로 올라오므로 정렬 순서를 따로 준다 (UITopLayer.cs 참고).
-        UITopLayer.MakeTopmost(panel, UITopLayer.InvestigationDetailOrder);
         BuildPageSegments();
         RefreshPage();
     }
@@ -274,7 +267,7 @@ public class DocumentViewerController : MonoBehaviour
         if (zoomLabel == null) return;
         zoomLabel.text = $"{Mathf.RoundToInt(zoomScale * 100)}%";
         // 확대 중이면 배율 글자를 강조색으로 - "지금 커져 있다"는 걸 한눈에 알게
-        zoomLabel.color = IsZoomed ? AccentColor : BodyColor;
+        zoomLabel.color = IsZoomed ? UITheme.Accent : UITheme.Body;
     }
 
     // ---------------------------------------------------------------------------------
@@ -334,7 +327,7 @@ public class DocumentViewerController : MonoBehaviour
         {
             pageSegmentRoot.gameObject.SetActive(multiPage);
             for (int i = 0; i < pageSegments.Count; i++)
-                pageSegments[i].color = i == pageIndex ? AccentColor : BoxLineColor;
+                pageSegments[i].color = i == pageIndex ? UITheme.Accent : UITheme.Line;
         }
         if (prevButton != null)
         {
@@ -362,7 +355,7 @@ public class DocumentViewerController : MonoBehaviour
         float total = count * segW + (count - 1) * gap;
         for (int i = 0; i < count; i++)
         {
-            var img = AddRect(pageSegmentRoot, "Seg" + i, 0f, 0f, segW, segH, BoxLineColor);
+            var img = AddRect(pageSegmentRoot, "Seg" + i, 0f, 0f, segW, segH, UITheme.Line);
             var rt = img.rectTransform;
             rt.anchorMin = rt.anchorMax = rt.pivot = new Vector2(1f, 1f);
             rt.anchoredPosition = new Vector2(-(total - segW - i * (segW + gap)), 0f);
@@ -379,25 +372,16 @@ public class DocumentViewerController : MonoBehaviour
 
         // FindAnyObjectByType: 씬에서 Canvas 아무거나 하나를 찾는다.
         // (예전 FindObjectOfType은 유니티 6에서 사용 중단되어 경고가 뜬다)
-        if (targetCanvas == null) targetCanvas = FindAnyObjectByType<Canvas>();
+        if (targetCanvas == null) targetCanvas = UILayers.RootCanvas();
         if (targetCanvas == null)
         {
             Debug.LogError("[DocumentViewerController] 씬에 Canvas가 없어 자료 뷰어를 만들 수 없습니다.");
             return;
         }
 
-        // 루트 패널 (화면 전체를 덮음)
-        panel = new GameObject("DocumentViewerPanel", typeof(RectTransform));
-        panel.transform.SetParent(targetCanvas.transform, false);
-        StretchFull(panel.GetComponent<RectTransform>());
-        panel.transform.SetAsLastSibling();
-
-        // 바깥 검은 막 (클릭하면 닫힘) - 퀵바 창/환경설정과 같은 97%
-        var backdrop = new GameObject("Backdrop", typeof(RectTransform), typeof(Image), typeof(Button));
-        backdrop.transform.SetParent(panel.transform, false);
-        StretchFull(backdrop.GetComponent<RectTransform>());
-        backdrop.GetComponent<Image>().color = new Color(0f, 0f, 0f, 0.97f);
-        backdropButton = backdrop.GetComponent<Button>();
+        // 창 (화면 전체를 덮는 검은 막 + 조사 상세 층 + Esc = 닫기). 막을 누르면 닫힌다.
+        panel = CreateWindow(targetCanvas.transform, "DocumentViewerPanel", UILayer.Detail, Hide);
+        backdropButton = panel.AddComponent<Button>();
         backdropButton.transition = Selectable.Transition.None; // 눌렀을 때 색이 변하면 어색하다
         backdropButton.onClick.AddListener(Hide);
 
@@ -408,13 +392,8 @@ public class DocumentViewerController : MonoBehaviour
         box.anchorMin = box.anchorMax = box.pivot = new Vector2(0.5f, 0.5f);
         box.sizeDelta = new Vector2(ScreenW, ScreenH);
 
-        // ----- 머리말 -----
-        AddRect(box, "TopAccent", Margin, 36f, 120f, 3f, AccentColor);
-        kickerLabel = CreateText(box, "Kicker", "EVIDENCE  ·  DOCUMENT", 14, FontStyles.Bold, KickerColor);
-        kickerLabel.characterSpacing = 20f;
-        PlaceTopLeft(kickerLabel.rectTransform, Margin, 52f, 600f, 20f);
-        titleLabel = CreateText(box, "TitleLabel", "", 36, FontStyles.Bold, TitleColor);
-        PlaceTopLeft(titleLabel.rectTransform, Margin, 68f, 900f, 54f);
+        // ----- 머리말 (▬ / EVIDENCE · DOCUMENT / 제목) -----
+        CreateHeader(box, Margin, 36f, "EVIDENCE  ·  DOCUMENT", "", out kickerLabel, out titleLabel);
 
         // 돋보기 칸 [🔍 100% | 원래대로] - 누르면 원래 크기로
         var zoomBox = CreateOutlinedButton(box, "ZoomButton", 1080f, 60f, 176f, 48f, ResetZoom, out var zoomBorder);
@@ -424,30 +403,21 @@ public class DocumentViewerController : MonoBehaviour
         PlaceTopLeft((RectTransform)mag.transform, 14f, 12f, 24f, 24f);
         var magImg = mag.GetComponent<Image>();
         magImg.sprite = CreateMagnifierSprite();
-        magImg.color = IconColor;
+        magImg.color = UITheme.ButtonText;
         magImg.raycastTarget = false;
-        zoomLabel = CreateText(zoomBox.transform, "ZoomLabel", "100%", 16, FontStyles.Bold, BodyColor);
+        zoomLabel = CreateLabel(zoomBox.transform, "ZoomLabel", "100%", 16, FontStyles.Bold, UITheme.Body);
         zoomLabel.alignment = TextAlignmentOptions.MidlineLeft;
         PlaceTopLeft(zoomLabel.rectTransform, 46f, 0f, 54f, 48f);
-        AddRect(zoomBox.transform, "Sep", 100f, 14f, 1f, 20f, BoxLineColor);
-        var reset = CreateText(zoomBox.transform, "ResetLabel", "원래대로", 14, FontStyles.Normal, HintColor);
+        AddRect(zoomBox.transform, "Sep", 100f, 14f, 1f, 20f, UITheme.Line);
+        var reset = CreateLabel(zoomBox.transform, "ResetLabel", "원래대로", 14, FontStyles.Normal, UITheme.Hint);
         reset.alignment = TextAlignmentOptions.MidlineLeft;
         PlaceTopLeft(reset.rectTransform, 112f, 0f, 60f, 48f);
-        zoomBox.gameObject.AddComponent<HoverLine>().Init(zoomBorder, new Graphic[] { reset }, HintColor, IconColor);
+        AddHoverLine(zoomBox.gameObject, zoomBorder, new Graphic[] { reset }, UITheme.Hint, UITheme.ButtonText);
 
         // 닫기 X + ESC
-        var close = CreateOutlinedButton(box, "CloseButton", 1272f, 60f, 48f, 48f, Hide, out var closeBorder);
-        var crossA = AddRect(close.transform, "CrossA", 0f, 0f, 16f, 1.6f, IconColor);
-        var crossB = AddRect(close.transform, "CrossB", 0f, 0f, 16f, 1.6f, IconColor);
-        CenterRotated(crossA.rectTransform, Vector2.zero, 45f);
-        CenterRotated(crossB.rectTransform, Vector2.zero, -45f);
-        close.gameObject.AddComponent<HoverLine>().Init(closeBorder, new Graphic[] { crossA, crossB }, IconColor, TitleColor);
-        var esc = CreateText(box, "EscHint", "ESC", 11, FontStyles.Bold, EscColor);
-        esc.alignment = TextAlignmentOptions.Top;
-        esc.characterSpacing = 10f;
-        PlaceTopLeft(esc.rectTransform, 1272f, 114f, 48f, 16f);
+        CreateCloseButton(box, 1272f, 60f, Hide);
 
-        AddRect(box, "HeadDivider", Margin, 136f, ContentW, 1f, DividerColor);
+        AddRect(box, "HeadDivider", Margin, 136f, ContentW, 1f, UITheme.Divider);
 
         // ----- 자료 칸 -----
         // RectMask2D: 확대했을 때 이 칸 밖으로 나간 부분을 잘라서 제목이나 설명 위를 덮지 않게 한다.
@@ -456,9 +426,9 @@ public class DocumentViewerController : MonoBehaviour
         pageViewport = (RectTransform)viewGo.transform;
         PlaceTopLeft(pageViewport, Margin, ViewportY, ContentW, ViewportH);
         var viewImg = viewGo.GetComponent<Image>();
-        viewImg.color = ViewportColor;
+        viewImg.color = UITheme.Surface;
         viewImg.raycastTarget = false;   // 그림 밖 빈 곳을 누르면 뒤의 검은 막이 받아서 닫힌다
-        AddBorder(pageViewport, DividerColor, 1f);
+        AddBorder(pageViewport, UITheme.Divider, 1f);
 
         // ===== 자료 그림 =====
         // 서류 그림은 A4 세로 비율(992x1403)이라 preserveAspect를 켜두면 세로 길이에 맞춰
@@ -489,7 +459,7 @@ public class DocumentViewerController : MonoBehaviour
 
         // 네 모서리 괄호 (조사 화면의 마우스 올림 표시와 같은 모양)
         const float bl = 28f, bt = 2f, inset = 16f;
-        var bracketColor = new Color(AccentColor.r, AccentColor.g, AccentColor.b, 0.9f);
+        var bracketColor = new Color(UITheme.Accent.r, UITheme.Accent.g, UITheme.Accent.b, 0.9f);
         for (int i = 0; i < 4; i++)
         {
             bool right = i % 2 == 1, bottom = i >= 2;
@@ -506,19 +476,19 @@ public class DocumentViewerController : MonoBehaviour
         nextButton = CreateArrow(pageViewport, "NextButton", ContentW - 40f - 56f, false, NextPage, out nextArrow);
 
         // ----- 아래쪽 -----
-        AddRect(box, "FootDivider", Margin, 884f, ContentW, 1f, DividerColor);
+        AddRect(box, "FootDivider", Margin, 884f, ContentW, 1f, UITheme.Divider);
 
-        descriptionLabel = CreateText(box, "DescriptionLabel", "", 20, FontStyles.Normal, BodyColor);
+        descriptionLabel = CreateLabel(box, "DescriptionLabel", "", 20, FontStyles.Normal, UITheme.Body);
         descriptionLabel.textWrappingMode = TextWrappingModes.Normal;
         descriptionLabel.overflowMode = TextOverflowModes.Ellipsis;
         descriptionLabel.lineSpacing = 20f;
         PlaceTopLeft(descriptionLabel.rectTransform, Margin, 904f, 900f, 100f);
 
         // 쪽수 "01 / 04" - 오른쪽 끝 맞춤
-        pageTotalLabel = CreateText(box, "PageTotal", "/ 01", 16, FontStyles.Bold, KickerColor);
+        pageTotalLabel = CreateLabel(box, "PageTotal", "/ 01", 16, FontStyles.Bold, UITheme.Kicker);
         pageTotalLabel.alignment = TextAlignmentOptions.BottomRight;
         PlaceTopLeft(pageTotalLabel.rectTransform, ScreenW - Margin - 60f, 900f, 60f, 36f);
-        pageLabel = CreateText(box, "PageLabel", "01", 28, FontStyles.Bold, TitleColor);
+        pageLabel = CreateLabel(box, "PageLabel", "01", 28, FontStyles.Bold, UITheme.Title);
         pageLabel.alignment = TextAlignmentOptions.BottomRight;
         PlaceTopLeft(pageLabel.rectTransform, ScreenW - Margin - 60f - 8f - 80f, 898f, 80f, 40f);
 
@@ -527,9 +497,7 @@ public class DocumentViewerController : MonoBehaviour
         pageSegmentRoot = (RectTransform)segGo.transform;
         PlaceTopLeft(pageSegmentRoot, Margin, 948f, ContentW, 3f);
 
-        var hint = CreateText(box, "FootHint", "← → 넘기기   ·   휠 확대·축소   ·   끌어서 이동   ·   Esc 닫기",
-                              15, FontStyles.Normal, HintColor);
-        PlaceTopLeft(hint.rectTransform, Margin, 1020f, ContentW, 22f);
+        CreateFootHint(box, Margin, 1020f, ContentW, "← → 넘기기   ·   휠 확대·축소   ·   끌어서 이동   ·   Esc 닫기");
 
         UpdateZoomLabel();
 
@@ -539,88 +507,8 @@ public class DocumentViewerController : MonoBehaviour
     }
 
     // ---------------------------------------------------------------------------------
-    // 만들기 도우미
+    // 만들기 도우미 (공용은 UIKit.cs - 여기는 이 화면 전용)
     // ---------------------------------------------------------------------------------
-    private static Color Hex(int rgb) =>
-        new Color(((rgb >> 16) & 0xFF) / 255f, ((rgb >> 8) & 0xFF) / 255f, (rgb & 0xFF) / 255f);
-
-    private static void StretchFull(RectTransform rt)
-    {
-        rt.anchorMin = Vector2.zero;
-        rt.anchorMax = Vector2.one;
-        rt.offsetMin = Vector2.zero;
-        rt.offsetMax = Vector2.zero;
-    }
-
-    // Figma 좌표(부모 왼쪽 위 기준, 아래로 +)로 놓는다.
-    private static void PlaceTopLeft(RectTransform rt, float x, float y, float w, float h)
-    {
-        rt.anchorMin = rt.anchorMax = new Vector2(0f, 1f);
-        rt.pivot = new Vector2(0f, 1f);
-        rt.anchoredPosition = new Vector2(x, -y);
-        rt.sizeDelta = new Vector2(w, h);
-    }
-
-    // 부모 가운데 기준으로 놓고 돌린다 (X / 꺾쇠 선 그리기용).
-    private static void CenterRotated(RectTransform rt, Vector2 offset, float angle)
-    {
-        rt.anchorMin = rt.anchorMax = rt.pivot = new Vector2(0.5f, 0.5f);
-        rt.anchoredPosition = offset;
-        rt.localEulerAngles = new Vector3(0f, 0f, angle);
-    }
-
-    private static Image AddRect(Transform parent, string name, float x, float y, float w, float h, Color color)
-    {
-        var go = new GameObject(name, typeof(RectTransform), typeof(Image));
-        go.transform.SetParent(parent, false);
-        PlaceTopLeft((RectTransform)go.transform, x, y, w, h);
-        var img = go.GetComponent<Image>();
-        img.color = color;
-        img.raycastTarget = false;
-        return img;
-    }
-
-    // 상자 테두리를 얇은 선 4개로 그린다. 색을 바꿀 수 있게 4개를 돌려준다.
-    private static Image[] AddBorder(RectTransform target, Color color, float t)
-    {
-        var lines = new Image[4];
-        for (int i = 0; i < 4; i++)
-        {
-            var go = new GameObject("Border" + i, typeof(RectTransform), typeof(Image));
-            go.transform.SetParent(target, false);
-            var rt = (RectTransform)go.transform;
-            switch (i)
-            {
-                case 0: rt.anchorMin = new Vector2(0, 1); rt.anchorMax = new Vector2(1, 1); rt.pivot = new Vector2(0.5f, 1); rt.sizeDelta = new Vector2(0, t); break; // 위
-                case 1: rt.anchorMin = new Vector2(0, 0); rt.anchorMax = new Vector2(1, 0); rt.pivot = new Vector2(0.5f, 0); rt.sizeDelta = new Vector2(0, t); break; // 아래
-                case 2: rt.anchorMin = new Vector2(0, 0); rt.anchorMax = new Vector2(0, 1); rt.pivot = new Vector2(0, 0.5f); rt.sizeDelta = new Vector2(t, 0); break; // 왼쪽
-                default: rt.anchorMin = new Vector2(1, 0); rt.anchorMax = new Vector2(1, 1); rt.pivot = new Vector2(1, 0.5f); rt.sizeDelta = new Vector2(t, 0); break; // 오른쪽
-            }
-            rt.anchoredPosition = Vector2.zero;
-            lines[i] = go.GetComponent<Image>();
-            lines[i].color = color;
-            lines[i].raycastTarget = false;
-        }
-        return lines;
-    }
-
-    // 테두리만 있는 버튼 (돋보기 칸, 닫기). 클릭은 투명한 바탕이 받는다.
-    private static Button CreateOutlinedButton(Transform parent, string name, float x, float y, float w, float h,
-                                               UnityEngine.Events.UnityAction onClick, out Image[] border)
-    {
-        var go = new GameObject(name, typeof(RectTransform), typeof(Image), typeof(Button));
-        go.transform.SetParent(parent, false);
-        var rt = (RectTransform)go.transform;
-        PlaceTopLeft(rt, x, y, w, h);
-        var bg = go.GetComponent<Image>();
-        bg.color = new Color(0f, 0f, 0f, 0f);   // 클릭만 받는 투명 바탕 (Linear 색 공간이라 0.01도 회색으로 보인다 → 0)
-        border = AddBorder(rt, BoxLineColor, 1f);
-        var btn = go.GetComponent<Button>();
-        btn.transition = Selectable.Transition.None;   // 마우스 올림은 HoverLine이 테두리/글자 색으로 보여준다
-        btn.onClick.AddListener(onClick);
-        return btn;
-    }
-
     // 넘김 화살표 56x128 (조사 화면 양옆 화살표와 같은 크기).
     private static Button CreateArrow(RectTransform viewport, string name, float x, bool left,
                                       UnityEngine.Events.UnityAction onClick, out ArrowView view)
@@ -631,7 +519,7 @@ public class DocumentViewerController : MonoBehaviour
         PlaceTopLeft(rt, x, (ViewportH - 128f) * 0.5f, 56f, 128f);
         var bg = go.GetComponent<Image>();
         bg.color = ArrowFill;
-        var border = AddBorder(rt, ArrowLineOn, 1f);
+        var border = AddBorder(rt, UITheme.LineStrong, 1f);
 
         // 꺾쇠 ‹ › 를 짧은 선 두 개로
         float dir = left ? -1f : 1f;
@@ -646,22 +534,6 @@ public class DocumentViewerController : MonoBehaviour
         view = go.AddComponent<ArrowView>();
         view.Init(btn, border, new Graphic[] { a, b });
         return btn;
-    }
-
-    private static TMP_Text CreateText(Transform parent, string name, string text, float size, FontStyles style, Color color)
-    {
-        var go = new GameObject(name, typeof(RectTransform));
-        go.transform.SetParent(parent, false);
-        var tmp = go.AddComponent<TextMeshProUGUI>();
-        tmp.text = text;
-        tmp.fontSize = size;
-        tmp.fontStyle = style;
-        tmp.color = color;
-        tmp.alignment = TextAlignmentOptions.TopLeft;
-        tmp.textWrappingMode = TextWrappingModes.NoWrap;
-        tmp.overflowMode = TextOverflowModes.Ellipsis;
-        tmp.raycastTarget = false; // 글자가 클릭을 가로채지 않게
-        return tmp;
     }
 
     // ===== 돋보기 아이콘을 코드로 그린다 =====
@@ -717,29 +589,6 @@ public class DocumentViewerController : MonoBehaviour
         return magnifierSprite;
     }
 
-    // ===== 마우스를 올리면 테두리와 글자/아이콘을 밝게 (돋보기 칸, 닫기) =====
-    private class HoverLine : MonoBehaviour, IPointerEnterHandler, IPointerExitHandler
-    {
-        private Image[] border;
-        private Graphic[] marks;
-        private Color markNormal, markHover;
-
-        public void Init(Image[] border, Graphic[] marks, Color markNormal, Color markHover)
-        {
-            this.border = border; this.marks = marks; this.markNormal = markNormal; this.markHover = markHover;
-        }
-
-        public void OnPointerEnter(PointerEventData e) => Apply(true);
-        public void OnPointerExit(PointerEventData e) => Apply(false);
-        private void OnDisable() => Apply(false);   // 닫았다 열 때 밝은 색이 남지 않게
-
-        private void Apply(bool hover)
-        {
-            if (border != null) foreach (var l in border) if (l != null) l.color = hover ? BoxLineHover : BoxLineColor;
-            if (marks != null) foreach (var m in marks) if (m != null) m.color = hover ? markHover : markNormal;
-        }
-    }
-
     // ===== 넘김 화살표 모양 (켜짐 / 꺼짐 / 마우스 올림) =====
     // 첫 장에서는 ‹ 가, 마지막 장에서는 › 가 흐려진다.
     private class ArrowView : MonoBehaviour, IPointerEnterHandler, IPointerExitHandler
@@ -761,8 +610,8 @@ public class DocumentViewerController : MonoBehaviour
         public void Refresh()
         {
             bool on = button != null && button.interactable;
-            Color line = !on ? ArrowLineOff : hover ? BoxLineHover : ArrowLineOn;
-            Color mark = !on ? ChevronOff : hover ? TitleColor : ChevronOn;
+            Color line = !on ? ArrowLineOff : hover ? UITheme.LineHover : UITheme.LineStrong;
+            Color mark = !on ? ChevronOff : hover ? UITheme.Title : ChevronOn;
             if (border != null) foreach (var l in border) if (l != null) l.color = line;
             if (chevron != null) foreach (var c in chevron) if (c != null) c.color = mark;
         }
