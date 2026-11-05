@@ -699,6 +699,13 @@ public class DialogueSystem : MonoBehaviour
         // 선택지 버튼 모양 (청회색 테마) - 대본/조사/추리 선택지 모두 이 패널을 같이 쓴다 (ChoicePanelStyle.cs 참고)
         ChoicePanelStyle.Attach(choicePanel, choiceContainer, dialoguePanel);
 
+        // 말풍선 대사 (SpeechBubble.cs) - 화면에 서 있는 인물의 대사는 그 인물 옆 말풍선으로 보여준다.
+        speechBubble = SpeechBubble.Create(dialoguePanel != null ? dialoguePanel.transform : null, sentenceText, continueIndicator);
+#if UNITY_EDITOR
+        // 에디터 Play 중 F2: 줄마다 말풍선/대화창과 위치를 고치는 배치 모드 (BubbleLayoutTool.cs)
+        if (speechBubble != null) gameObject.AddComponent<BubbleLayoutTool>().Init(this, speechBubble);
+#endif
+
         sfxSource = GetComponent<AudioSource>();
         if (sfxSource == null) sfxSource = gameObject.AddComponent<AudioSource>();
         sfxSource.playOnAwake = false;
@@ -880,6 +887,7 @@ public class DialogueSystem : MonoBehaviour
 
         var line = currentDialogue.lines[lineIndex];
         int shownIndex = lineIndex; // 증가 전 값 = 지금 보여줄 줄의 인덱스 (ReadProgressManager 키로 씀)
+        currentShownIndex = shownIndex; // 말풍선 배치표(BubbleLayout)도 같은 번호를 쓴다
         lineIndex++;
 
         // 미니게임/조사/추리로 빠지는 줄도 "플레이어가 여기까지 도달했다"는 사실은 같으므로,
@@ -1256,6 +1264,9 @@ public class DialogueSystem : MonoBehaviour
         }
 
         // ===== 5) 대사 텍스트 타이핑 시작 =====
+        // 말풍선으로 보여줄 수 있는 줄이면 표시해 두고, StartTyping이 글자를 넣은 직후에 말풍선을 띄운다.
+        // (StartTyping은 조사 대사에서도 불리므로, 여기서 표시하지 않은 줄은 항상 아래 대화창으로 나온다)
+        bubbleLineForNextTyping = CanUseSpeechBubble(line) ? line : null;
         StartTyping(line.sentence, line.isLongMonologue, line.longMonologueNewPage);
     }
 
@@ -1315,6 +1326,10 @@ public class DialogueSystem : MonoBehaviour
         Canvas.ForceUpdateCanvases();
         sentenceText.ForceMeshUpdate();
         totalPages = Mathf.Max(1, sentenceText.textInfo.pageCount);
+
+        // 말풍선 / 아래 대화창 전환 (글자가 들어간 뒤라야 말풍선 크기를 잴 수 있다)
+        ApplySpeechBubble(bubbleLineForNextTyping);
+        bubbleLineForNextTyping = null;
 
         currentPage = 1;
         if (longLine && previousLong.Length > 0)
@@ -1846,6 +1861,7 @@ public class DialogueSystem : MonoBehaviour
                 return;
             }
 
+            ApplySpeechBubble(null);
             sentenceText.text = "[대사 세트 종료]";
             return;
         }
@@ -1935,6 +1951,107 @@ public class DialogueSystem : MonoBehaviour
     // 대화창을 끄지(SetActive) 않고 CanvasGroup으로 투명하게만 만든다. 끄면 대사 진행/타이핑
     // 코루틴과 다른 스크립트(조사 대사 등)가 보는 "대화창이 켜져 있나" 상태가 바뀌어 버린다.
     private bool dialogueHidden;
+
+    // ---------------------------------------------------------------------------------
+    // 말풍선 대사 (1차) - SpeechBubble.cs
+    // ---------------------------------------------------------------------------------
+    // 일반 대사(나레이션 아님)는 아래 대화창 대신 말풍선으로 보여준다 - 화자가 서 있으면 그 옆, 없으면 화면 아래 가운데.
+    // 단, 주인공 차재훈의 대사는 원래 대화창 그대로다 (BoxOnlySpeakers).
+    // 타이핑/쪽 넘김/자동 진행/스킵/기록은 아래 대화창이 그대로 하고, 말풍선은 그 글자를 따라 그린다.
+    // 그동안 아래 대화창의 그림·글자·이름 칸·▼은 투명하게 감추고 AUTO/SKIP 버튼만 남긴다.
+    private SpeechBubble speechBubble;
+    private DialogueLine bubbleLineForNextTyping;
+    private bool boxVisualsHidden;
+    private int currentShownIndex = -1;   // 지금 보이는 줄이 시나리오 CSV의 몇 번째 줄인지
+
+    // 말풍선 배치 모드(BubbleLayoutTool)가 "지금 어느 줄인지" 알 때 쓴다.
+    public DialogueLine CurrentLineForBubble => currentLine;
+    public int ShownLineIndex => currentShownIndex;   // CurrentLineIndex는 "다음에 보여줄 줄" 번호라 다르다
+
+    // 배치표를 고친 뒤 지금 줄을 다시 그린다 (말풍선 ↔ 대화창, 위치).
+    public void ReapplySpeechBubble()
+    {
+        if (currentLine == null || longMonologueLayout) return;
+        ApplySpeechBubble(CanUseSpeechBubble(currentLine) ? currentLine : null);
+    }
+
+    // 주인공(차재훈)의 대사는 말풍선 없이 원래 대화창으로 보여준다 - 플레이어 자신의 목소리라서.
+    private static readonly System.Collections.Generic.HashSet<string> BoxOnlySpeakers =
+        new System.Collections.Generic.HashSet<string> { "차재훈", "재훈" };
+
+    // 1) 배치표(BubbleLayout.csv)에 이 줄을 직접 정해 둔 게 있으면 그대로 따른다.
+    // 2) 없으면 자동 규칙: 화자가 있는 일반 대사이고 주인공이 아니면 말풍선.
+    // 긴 독백과 조사 대사는 어느 쪽이든 대화창이다.
+    private bool CanUseSpeechBubble(DialogueLine line)
+    {
+        if (speechBubble == null || line == null || line.isLongMonologue || IsInvestigationActive()) return false;
+        if (line.lineType != LineType.NormalDialogue && line.lineType != LineType.Narration) return false;
+
+        switch (BubbleLayout.GetMode(currentScenarioCsv, currentShownIndex, line.sentence))
+        {
+            case BubbleLayout.Mode.Box: return false;
+            case BubbleLayout.Mode.Bubble: return true;
+        }
+
+        return line.lineType == LineType.NormalDialogue
+            && !string.IsNullOrWhiteSpace(line.speaker)
+            && !BoxOnlySpeakers.Contains(line.speaker.Trim());
+    }
+
+    // line이 null이면 아래 대화창으로 되돌린다.
+    private void ApplySpeechBubble(DialogueLine line)
+    {
+        UnityEngine.UI.Image standing = null;
+        if (line != null && StageController.Instance != null)
+            standing = StageController.Instance.FindSpeakerStanding(line.speaker, line.talkerSlot);
+
+        // 화자가 화면에 서 있으면 그 인물 옆에, 없으면(전화 목소리, 화면 밖 인물 등) 화면 아래 가운데에.
+        bool useBubble = false;
+        if (line != null && speechBubble != null)
+        {
+            string name = line.lineType == LineType.Narration ? "" : line.speaker;
+            if (BubbleLayout.TryGetPosition(currentScenarioCsv, currentShownIndex, line.sentence, out Vector2 fixedPos))
+            {
+                speechBubble.ShowAt(name, fixedPos);   // 배치표에 직접 정해 둔 위치
+                useBubble = true;
+            }
+            else
+            {
+                useBubble = standing != null && speechBubble.Show(name, standing);
+                if (!useBubble) { speechBubble.ShowOffscreen(name); useBubble = true; }
+            }
+        }
+        if (!useBubble && speechBubble != null) speechBubble.Hide();
+        SetBoxVisualsHidden(useBubble);
+    }
+
+    // 아래 대화창의 그림·글자·이름 칸·▼만 투명하게 한다. 끄지(SetActive) 않는 이유: 이것들은
+    // 다른 코드(긴 독백, 조사 대사 모양, ▼ 깜빡임)가 켜고 끄므로, 그 상태를 건드리지 않으려고.
+    private void SetBoxVisualsHidden(bool hide)
+    {
+        if (boxVisualsHidden == hide) return;
+        boxVisualsHidden = hide;
+
+        SetVisualAlpha(dialogueArt, hide);
+        SetVisualAlpha(sentenceText != null ? sentenceText.gameObject : null, hide);
+        SetVisualAlpha(speakerNameBox, hide);
+        SetVisualAlpha(continueIndicator != null ? continueIndicator.gameObject : null, hide);
+
+        // 대화창 그림이 없는 사람(드라이브 파일 없음)은 대화창 자체의 검은 바탕을 감춘다.
+        if (dialogueArt == null && dialoguePanel != null)
+        {
+            var bg = dialoguePanel.GetComponent<UnityEngine.UI.Image>();
+            if (bg != null) bg.enabled = !hide;
+        }
+    }
+
+    private static void SetVisualAlpha(GameObject go, bool hide)
+    {
+        if (go == null) return;
+        var group = go.GetComponent<CanvasGroup>();
+        if (group == null) group = go.AddComponent<CanvasGroup>();
+        group.alpha = hide ? 0f : 1f;
+    }
     private CanvasGroup dialogueCanvasGroup;
 
     // true를 돌려주면 이번 프레임의 입력은 여기서 다 썼다는 뜻 (Update가 바로 끝난다).

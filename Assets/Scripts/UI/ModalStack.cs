@@ -154,6 +154,9 @@ public class ModalStack : MonoBehaviour
         foreach (Transform child in canvas.transform)
         {
             if (!child.gameObject.activeInHierarchy) continue;
+            // 캔버스 맨 아래(첫 번째)에 깔린 것은 화면 바탕이다 - 그 뒤에 가릴 것이 없으므로 창이 아니다
+            // (예: 타이틀의 어두운 Background).
+            if (child.GetSiblingIndex() == 0) continue;
             if (child.GetComponent<ModalWindow>() != null || child.GetComponent<NotAWindow>() != null) continue;
             if (!CoversScreenWithDim(child, screen)) continue;
             if (!warnedObjects.Add(child.gameObject)) continue;   // 같은 것은 한 번만
