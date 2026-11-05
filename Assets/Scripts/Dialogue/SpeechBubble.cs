@@ -46,8 +46,8 @@ public class SpeechBubble : MonoBehaviour
     private const float NameTagHeight = 34f;
 
     // 원래 대화창처럼 뒤가 살짝 비치는 바탕 + 얇은 외곽선
-    private static readonly Color FillColor = UITheme.WithAlpha(UITheme.Panel, 0.82f);
-    private static readonly Color OutlineColor = UITheme.WithAlpha(UITheme.Accent, 0.38f);
+    public static readonly Color FillColor = UITheme.WithAlpha(UITheme.Panel, 0.82f);
+    public static readonly Color OutlineColor = UITheme.WithAlpha(UITheme.Accent, 0.38f);
     private static readonly Color NameFillColor = UITheme.WithAlpha(UITheme.Panel, 0.95f);
     private static readonly Color NameOutlineColor = UITheme.WithAlpha(UITheme.Accent, 0.6f);
 
@@ -410,10 +410,10 @@ public class SpeechBubble : MonoBehaviour
     }
 
     // ===== 모서리가 둥근 흰 사각형을 코드로 만든다 (그림 파일 없이, 9-slice로 늘려 쓴다) =====
-    // 반지름마다 한 장씩 만들어 기억해 둔다.
+    // 반지름마다 한 장씩 만들어 기억해 둔다. 말풍선과 같은 모양을 쓰는 곳(오른쪽 위 AUTO/SKIP 판)에서도 쓴다.
     private static readonly Dictionary<int, Sprite> roundedCache = new Dictionary<int, Sprite>();
 
-    private static Sprite RoundedSprite(float radius)
+    public static Sprite RoundedSprite(float radius)
     {
         int key = Mathf.RoundToInt(radius * 10f);
         if (roundedCache.TryGetValue(key, out var cached) && cached != null) return cached;

@@ -2032,6 +2032,9 @@ public class DialogueSystem : MonoBehaviour
         if (boxVisualsHidden == hide) return;
         boxVisualsHidden = hide;
 
+        // AUTO/SKIP/SKIP ALL/LOG는 말풍선이 떠 있는 동안 화면 오른쪽 위로 옮긴다 (아래 대화창이 비어 보이므로)
+        LayoutQuickButtonsTopRight(hide);
+
         SetVisualAlpha(dialogueArt, hide);
         SetVisualAlpha(sentenceText != null ? sentenceText.gameObject : null, hide);
         SetVisualAlpha(speakerNameBox, hide);
@@ -2043,6 +2046,83 @@ public class DialogueSystem : MonoBehaviour
             var bg = dialoguePanel.GetComponent<UnityEngine.UI.Image>();
             if (bg != null) bg.enabled = !hide;
         }
+    }
+
+    // ===== 말풍선이 떠 있는 동안의 AUTO / SKIP / SKIP ALL / LOG =====
+    // 아래 대화창 그림이 감춰지면 버튼만 흰 선화 위에 덩그러니 남아 잘 안 보인다. 그래서 화면 오른쪽 위
+    // (왼쪽 위 퀵바와 마주 보는 자리)에 말풍선과 같은 반투명 판을 깔고 그 위에 늘어놓는다.
+    // 말풍선이 사라지면 원래 자리(대화창 오른쪽 위 선 위)로 돌아간다.
+    private RectTransform quickButtonsBack;
+    private const float TopRightMargin = 20f;    // 화면 오른쪽 끝에서
+    private const float TopRightTop = 26f;       // 화면 위에서 (왼쪽 위 퀵바와 높이를 맞춤)
+    private const float TopRightHeight = 52f;
+
+    private void LayoutQuickButtonsTopRight(bool on)
+    {
+        if (!quickButtonsMadeByCode) return;
+        if (!on)
+        {
+            if (quickButtonsBack != null) quickButtonsBack.gameObject.SetActive(false);
+            LayoutQuickButtons(longMonologueLayout);
+            return;
+        }
+
+        var canvas = UILayers.RootCanvas();
+        if (canvas == null) return;
+        var cr = (RectTransform)canvas.transform;
+
+        var buttons = new[] { autoButton, skipAlreadyReadButton, skipForceButton, logButton };
+        float[] widths = { 62f, 56f, 92f, 48f };
+        const float gap = 16f, padX = 22f;
+        float total = 0f;
+        for (int i = 0; i < buttons.Length; i++) if (buttons[i] != null) total += widths[i] + gap;
+        total -= gap;
+
+        float right = cr.rect.xMax - TopRightMargin;
+        float top = cr.rect.yMax - TopRightTop;
+        float midY = top - TopRightHeight * 0.5f;
+
+        // 뒤에 까는 반투명 판 (말풍선과 같은 바탕 + 1px 외곽선)
+        if (quickButtonsBack == null)
+        {
+            var back = new GameObject("QuickButtonsBack", typeof(RectTransform), typeof(Image));
+            back.transform.SetParent(dialoguePanel.transform, false);
+            if (autoButton != null) back.transform.SetSiblingIndex(autoButton.transform.GetSiblingIndex());
+            var img = back.GetComponent<Image>();
+            img.sprite = SpeechBubble.RoundedSprite(12f);
+            img.type = Image.Type.Sliced;
+            img.color = SpeechBubble.OutlineColor;
+            img.raycastTarget = false;
+            var fill = new GameObject("Fill", typeof(RectTransform), typeof(Image));
+            fill.transform.SetParent(back.transform, false);
+            var fimg = fill.GetComponent<Image>();
+            fimg.sprite = SpeechBubble.RoundedSprite(11f);
+            fimg.type = Image.Type.Sliced;
+            fimg.color = SpeechBubble.FillColor;
+            fimg.raycastTarget = false;
+            UIKit.Stretch((RectTransform)fill.transform, 1f);
+            quickButtonsBack = (RectTransform)back.transform;
+        }
+        quickButtonsBack.gameObject.SetActive(true);
+        PlaceAtCanvas(quickButtonsBack, cr, new Vector2(right, top), new Vector2(1f, 1f), new Vector2(total + padX * 2f, TopRightHeight));
+
+        // 오른쪽부터 LOG / SKIP ALL / SKIP / AUTO
+        float x = right - padX;
+        for (int i = buttons.Length - 1; i >= 0; i--)
+        {
+            if (buttons[i] == null) continue;
+            PlaceAtCanvas((RectTransform)buttons[i].transform, cr, new Vector2(x, midY), new Vector2(1f, 0.5f), new Vector2(widths[i], 40f));
+            x -= widths[i] + gap;
+        }
+    }
+
+    // 대화창 안의 것을 화면(캔버스) 좌표로 놓는다. 부모(대화창)는 화면 아래 띠라서 화면 좌표로 바꿔 넣는다.
+    private static void PlaceAtCanvas(RectTransform rt, RectTransform canvasRect, Vector2 canvasPos, Vector2 pivot, Vector2 size)
+    {
+        rt.anchorMin = rt.anchorMax = new Vector2(0.5f, 0.5f);
+        rt.pivot = pivot;
+        rt.sizeDelta = size;
+        rt.position = canvasRect.TransformPoint(new Vector3(canvasPos.x, canvasPos.y, 0f));
     }
 
     private static void SetVisualAlpha(GameObject go, bool hide)
