@@ -594,6 +594,16 @@ public class StageController : MonoBehaviour
         }
     }
 
+    // 말하는 인물의 스탠딩 그림을 돌려준다. 화면에 없으면 null.
+    // 말풍선(SpeechBubble)이 인물 옆에 붙을 자리를 찾을 때 쓴다 - null이면 아래 대화창으로 보여준다.
+    public Image FindSpeakerStanding(string speaker, string talkerSpec)
+    {
+        if (standingSlots == null) return null;
+        int slot = ResolveTalkerSlot(speaker, talkerSpec);
+        if (slot < 0 || slot >= standingSlots.Length || standingSlots[slot] == null) return null;
+        return standingSlots[slot].IsShowing ? standingSlots[slot].Image : null;
+    }
+
     // 어느 자리의 캐릭터가 말하고 있는지 알아낸다. 못 찾으면 -1(아무도 입을 안 움직임).
     private int ResolveTalkerSlot(string speaker, string talkerSpec)
     {

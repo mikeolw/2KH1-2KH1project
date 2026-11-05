@@ -37,6 +37,10 @@ public class StandingSlot : MonoBehaviour
 
     private Image image;
 
+    // 지금 올라와 있는 스탠딩 그림 (말풍선이 인물 위치를 찾을 때 쓴다 - SpeechBubble.cs)
+    public Image Image => image;
+    public bool IsShowing => image != null && image.enabled && image.sprite != null;
+
     // 입 다문 그림 / 입 벌린 그림. openMouthSprite가 null이면 립싱크를 하지 않는다.
     private Sprite closedMouthSprite;
     private Sprite openMouthSprite;
