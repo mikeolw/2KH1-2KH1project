@@ -46,6 +46,13 @@ public static class UITheme
     // ----- 막 -----
     public static readonly Color ScreenDim = new Color(0f, 0f, 0f, 0.97f);
 
+    // ----- 서류 형광펜 (DocumentHighlightPlayer) -----
+    // 청회색 테마와 상관없이 종이 위에 긋는 노란 형광펜이다.
+    // HighlightPen은 겹치기(multiply) 셰이더용이라 알파가 "진하기"다.
+    // HighlightPenFallback은 셰이더를 못 찾았을 때 위에 덮어 그리는 예비 색.
+    public static readonly Color HighlightPen         = new Color(0.98f, 0.89f, 0.30f, 0.80f);
+    public static readonly Color HighlightPenFallback = new Color(0.949f, 0.871f, 0.369f, 0.38f);
+
     // 0xRRGGBB → Color. Figma 색 값을 그대로 옮겨 적을 수 있게.
     public static Color Hex(int rgb, float alpha = 1f) =>
         new Color(((rgb >> 16) & 0xFF) / 255f, ((rgb >> 8) & 0xFF) / 255f, (rgb & 0xFF) / 255f, alpha);

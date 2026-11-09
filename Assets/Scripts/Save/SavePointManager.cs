@@ -129,7 +129,9 @@ public class SavePointManager : MonoBehaviour
                 : new System.Collections.Generic.List<string>(),
             noteAutoEntries = NoteManager.Instance != null
                 ? NoteManager.Instance.GetAutoEntryDefinitions()
-                : new System.Collections.Generic.List<SavedAutoNote>()
+                : new System.Collections.Generic.List<SavedAutoNote>(),
+            revealedHighlights = DocumentHighlights.ExportProgress(),
+            inspectedHotspots = InvestigationController.ExportInspected()
         };
 
         // 미니게임 2(진행형 타임어택)가 지금 돌아가는 중이면 남은 시간도 같이 저장해둔다.
@@ -177,6 +179,11 @@ public class SavePointManager : MonoBehaviour
             NoteManager.Instance.RestoreEntries(data.noteEntryIds);
         }
 
+        // 자료 뷰어에서 이미 그어진 형광펜도 되돌린다 (다시 펼쳐도 독백이 또 나오지 않게).
+        DocumentHighlights.ImportProgress(data.revealedHighlights);
+        // 조사 화면에서 이미 눌러 본 오브젝트도 되돌린다 (체크 표시 + "조사 그만하기" 경고).
+        InvestigationController.ImportInspected(data.inspectedHotspots);
+
         // 저장 시점에 타임어택이 돌고 있었다면 남은 시간 그대로 이어서 재생한다.
         // (TimeAttackController.cs의 RestoreTimer()/SaveToSlot() 주석 참고)
         if (data.timeAttackRunning && TimeAttackController.Instance != null)
@@ -198,6 +205,11 @@ public class SavePointManager : MonoBehaviour
         LastSavePointId = null;
         CanSave = false;
         playTimeSeconds = 0f;
+        // 지난 플레이에서 그어진 형광펜이 새 게임에 남아 있으면 독백이 안 뜬다.
+        DocumentHighlights.ResetProgress();
+        // 지난 플레이에서 누른 조사 오브젝트 기록도 비운다 (안 비우면 새 게임에서 체크가 이미
+        // 붙어 있고 "아직 살펴볼 곳" 경고도 안 뜬다).
+        InvestigationController.ResetInspected();
     }
 
     // 세이브 슬롯 목록에 "1시간 23분" 같이 표시할 때 쓰는 도우미.

@@ -31,11 +31,11 @@ public class DocumentHighlightPlayer : MonoBehaviour
     // 겹치기(multiply) 셰이더로 그린다. 흰 종이만 노래지고 검은 글자는 검은 채로 남는다.
     // 알파는 투명도가 아니라 "진하기"다. 0.8이면 종이가 또렷한 형광 노랑이 된다.
     // (Assets/Shaders/UIMultiply.shader 윗부분 참고)
-    private static readonly Color PenColor = new Color(0.98f, 0.89f, 0.30f, 0.80f);
+    private static readonly Color PenColor = UITheme.HighlightPen;
 
     // 셰이더를 못 찾았을 때 쓸 예비 색. 예전처럼 위에 덮는 방식이라 글자가 조금 흐려지지만
     // 아예 안 보이는 것보다는 낫다. (보통은 쓰이지 않는다)
-    private static readonly Color PenFallbackColor = new Color(0.949f, 0.871f, 0.369f, 0.38f);
+    private static readonly Color PenFallbackColor = UITheme.HighlightPenFallback;
     private const string MultiplyShader = "2KH1/UI Multiply";
     private static Material penMaterial;
     private static bool penMaterialTried;
@@ -78,6 +78,7 @@ public class DocumentHighlightPlayer : MonoBehaviour
     private Coroutine running;
     private bool typing;                       // 글자가 찍히는 중
     private string fullText = "";
+    private bool bubbleWanted;                 // 지금 줄의 말풍선을 띄워야 하는가 (칸 밖이라 잠시 숨겨도 true)
 
     // 뷰어가 "지금 누르면 닫을까, 다음 줄로 갈까, 다음 장으로 갈까"를 판단할 때 쓴다
     public bool HasSpots => spots.Count > 0;
@@ -336,6 +337,9 @@ public class DocumentHighlightPlayer : MonoBehaviour
     {
         if (bubble == null || i < 0 || i >= pens.Count || pens[i] == null) return;
 
+        // 이 줄의 말풍선을 "보여주고 싶은 상태"로 기억한다. 아래에서 자료 칸 밖이라 잠시
+        // 숨기더라도, 다시 굴려서 칸 안으로 돌아오면 Reposition이 이 값을 보고 다시 띄운다.
+        bubbleWanted = true;
         bubbleName.text = string.IsNullOrEmpty(speaker) ? DocumentHighlights.DefaultSpeaker : speaker;
         bubble.gameObject.SetActive(true);
 
@@ -373,15 +377,21 @@ public class DocumentHighlightPlayer : MonoBehaviour
 
     private void HideBubble()
     {
+        bubbleWanted = false;
         if (bubble != null) bubble.gameObject.SetActive(false);
     }
 
     // 확대하거나 굴렸을 때 말풍선이 따라오게 (뷰어가 매번 부른다)
+    //
+    // ShowBubbleAt은 크기를 재려고 말풍선 글을 "다 나온 문장"으로 바꿔 넣는다. 글자가 한 자씩
+    // 찍히는 중에 그대로 두면, 문장이 통째로 나온 뒤에 TypeOut이 남은 글자를 또 이어 붙여서
+    // 독백이 두 번 겹쳐 보였다. 그래서 지금까지 찍혀 있던 글을 기억해 두었다가 되돌린다.
     public void Reposition()
     {
-        if (bubble == null || !bubble.gameObject.activeSelf) return;
+        if (bubble == null || !bubbleWanted) return;
         if (index < 0 || index >= spots.Count) return;
+        string shown = bubbleText.text;
         ShowBubbleAt(index, spots[index].speaker);
-        if (!typing) bubbleText.text = fullText;
+        bubbleText.text = typing ? shown : fullText;
     }
 }

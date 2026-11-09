@@ -53,6 +53,17 @@ public class SaveData
     // (acquiredItemIds가 HashSet 대신 List를 쓰는 것과 같은 이유).
     public List<SavedAutoNote> noteAutoEntries = new List<SavedAutoNote>();
 
+    // ===== 자료 뷰어에서 이미 그어진 형광펜 =====
+    // "그림이름#순서" 목록 (DocumentHighlights.Spot.Key). 이게 없으면 불러온 뒤 같은 서류를
+    // 펼쳤을 때 이미 본 독백이 처음부터 다시 나온다. 예전 세이브 파일에는 이 칸이 없어서
+    // 빈 목록으로 읽힌다 (그때는 형광펜이 처음부터 다시 재생될 뿐 문제는 없다).
+    public List<string> revealedHighlights = new List<string>();
+
+    // ===== 조사 화면에서 한 번이라도 누른 오브젝트 =====
+    // "화면ID|오브젝트키" 목록. 체크 표시와 "조사 그만하기" 경고가 이걸 본다.
+    // 예전 세이브 파일에는 없어서 빈 목록으로 읽힌다.
+    public List<string> inspectedHotspots = new List<string>();
+
     // ===== 미니게임 2(진행형 타임어택) 상태 =====
     // 타이머는 CSV의 특정 줄(제한시간이 적힌 Minigame 행)을 실제로 지나갈 때만 켜진다.
     // 그런데 저장은 그보다 뒤에 있는 세이브포인트에서도 가능해서, 그 지점에서 저장한 걸
