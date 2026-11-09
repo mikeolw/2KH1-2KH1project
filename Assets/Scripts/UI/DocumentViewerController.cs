@@ -121,7 +121,9 @@ public class DocumentViewerController : MonoBehaviour
     private const float ZoomStep = 0.5f;   // Ctrl+휠 한 칸
     private const float ZoomFloor = 0.2f;  // 아무리 줄여도 이보다 작게는 안 만든다
     private const float WheelScroll = 90f; // 휠 한 칸에 위아래로 움직이는 거리
-    private const float KeyScroll = 40f;   // ↑ ↓ 한 번에 움직이는 거리
+    // ↑ ↓ 를 누르고 있을 때 1초에 움직이는 거리. 프레임마다 고정 거리로 움직이면
+    // 컴퓨터가 빠를수록(fps가 높을수록) 더 빨리 굴러가므로 시간에 맞춘다.
+    private const float KeyScrollPerSecond = 1200f;
     private float zoomScale = 1f;
     // 이 자료에서 더 줄일 수 있는 한계. "쪽 전체가 딱 보이는 배율"로 ApplyPageSize가 정한다.
     // (가로로 넓은 자료는 1배가 이미 전체라서 1)
@@ -159,8 +161,8 @@ public class DocumentViewerController : MonoBehaviour
         if (Input.GetKeyDown(KeyCode.LeftArrow)) PrevPage();
         else if (Input.GetKeyDown(KeyCode.RightArrow)) NextPage();
         // 위아래는 꾹 누르고 있으면 계속 굴러가야 한다(GetKeyDown이 아니라 GetKey).
-        else if (Input.GetKey(KeyCode.UpArrow)) ScrollBy(-KeyScroll);
-        else if (Input.GetKey(KeyCode.DownArrow)) ScrollBy(KeyScroll);
+        else if (Input.GetKey(KeyCode.UpArrow)) ScrollBy(-KeyScrollPerSecond * Time.unscaledDeltaTime);
+        else if (Input.GetKey(KeyCode.DownArrow)) ScrollBy(KeyScrollPerSecond * Time.unscaledDeltaTime);
     }
 
     // ---------------------------------------------------------------------------------

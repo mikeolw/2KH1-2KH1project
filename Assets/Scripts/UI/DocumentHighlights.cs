@@ -152,10 +152,10 @@ public static class DocumentHighlights
         return list.Count;
     }
 
-    // 새 게임을 시작할 때 (GameFlowManager 등에서 부르면 된다)
+    // 새 게임을 시작할 때 (SavePointManager.ResetForNewGame이 부른다)
     public static void ResetProgress() => revealed.Clear();
 
-    // 세이브에 넣고 뺄 때 쓴다. 지금은 뷰어를 닫았다 열어도 남는 정도까지만 쓰고 있다.
+    // 세이브에 넣고 뺄 때 쓴다 (SavePointManager.SaveToSlot / RestoreFrom).
     public static List<string> ExportProgress() => new List<string>(revealed);
     public static void ImportProgress(IEnumerable<string> keys)
     {
