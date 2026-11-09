@@ -754,6 +754,10 @@ public class InvestigationController : MonoBehaviour
 
         inSession = true;
         IsShowingTalkLine = false;
+        // 지난 조사에서 남은 "이어지는 줄/선택지"가 이번 조사로 넘어오지 않게 확실히 비운다.
+        // (정상 종료라면 Exit()에서 이미 비워지지만, 어떤 경로로 들어오든 새 조사는 깨끗한
+        //  상태에서 시작해야 한다)
+        ClearPendingLineState();
         onExitCallback = onExit;
         activeScreenId = investigationId.Trim();
 
@@ -950,6 +954,16 @@ public class InvestigationController : MonoBehaviour
         inSession = false;
         IsShowingTalkLine = false;
 
+        // ===== 읽다 만 조사 대사를 여기서 완전히 버린다 =====
+        // 오브젝트 대사를 끝까지 읽지 않고 "조사 그만하기"를 누르면, 아직 안 보여준
+        // "이어지는 줄"(pendingFollowUps)과 선택지가 그대로 남아 있었다. 이 조사에서는
+        // 더 이상 보여줄 기회가 없으므로 다음 조사까지 살아남았고, 다음 챕터에서 조사
+        // 화면이 열려 안내문을 넘기는 순간 DismissTalkLine()이 그 남은 줄을 꺼내서
+        // 지난 챕터의 조사 지문이 난데없이 출력되는 문제가 있었다.
+        ClearPendingLineState();
+        // 대화창에 절반만 찍힌 그 줄도 같이 버린다 (남은 쪽이 뒤에 이어 나오지 않게).
+        DialogueSystem.Instance?.AbandonInvestigationLine();
+
         // 대화창은 여기서 켜지 않는다. 조사 직후 줄은 암전(ShowLineWithFade)으로 이어지는데,
         // 여기서 켜면 암전이 진행되는 동안 직전 대사가 남은 대화창이 그대로 떠 있었다.
         // 대화창은 다음 대사가 실제로 표시되는 순간 DialogueSystem.ShowDialoguePanel()이 켠다.
@@ -992,11 +1006,23 @@ public class InvestigationController : MonoBehaviour
         activeScreenId = null;
         visitedScreenIds.Clear();
         onExitCallback = null;
+        ClearPendingLineState();
+        DialogueSystem.Instance?.AbandonInvestigationLine();
+
+        SetDialogueVisible(true);
+    }
+
+    // ===== 오브젝트 하나를 누른 뒤에만 쓰이는 임시 상태를 전부 비운다 =====
+    // 조사를 끝낼 때(Exit/ForceExit)와 새로 시작할 때(Enter) 부른다. 여기에 적힌 값들은
+    // "지금 보여주고 있는 줄"에 딸린 것이라 조사가 끝나면 아무 의미가 없는데, 남겨두면
+    // 다음 조사에서 엉뚱한 때에 튀어나온다 (Exit()의 주석 참고).
+    private void ClearPendingLineState()
+    {
+        pendingFollowUps = null;
+        followUpDefaultSpeaker = "";
         pendingTalkChoices = null;
         pendingTalkChoiceSource = null;
         pendingAfterDismiss = null;
-
-        SetDialogueVisible(true);
     }
 
     // ---------------------------------------------------------------------------------

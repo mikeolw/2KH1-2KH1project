@@ -1809,6 +1809,36 @@ public class DialogueSystem : MonoBehaviour
         StartTyping(sentence, longMonologue, newLongScreen, true);
     }
 
+    // ===== 읽다 만 조사 대사를 버린다 =====
+    // 조사 대사를 끝까지 읽지 않은 채 "조사 그만하기"로 조사를 끝냈을 때
+    // InvestigationController.Exit()가 부른다. 대화창에는 그 줄이 그대로 남아 있고,
+    // 여러 쪽짜리였다면 "아직 읽을 쪽이 남았다"(HasMorePages)는 상태까지 남는다. 그대로
+    // 두면 조사가 끝난 뒤의 첫 클릭이 다음 대사가 아니라 그 남은 쪽을 넘기는 데 쓰여서,
+    // 지난 조사의 지문이 다음 챕터 화면 위에 다시 나타난다.
+    // 대화창을 켜지는 않는다 - 조사 직후에는 암전이 끝나는 순간 다음 대사가 켠다
+    // (InvestigationController.Exit 주석 참고).
+    public void AbandonInvestigationLine()
+    {
+        StopTypingRoutine();
+        StopAutoAdvanceRoutine();
+
+        currentFullSentence = "";
+        currentPage = 1;
+        totalPages = 1;
+
+        if (sentenceText != null)
+        {
+            sentenceText.text = "";
+            sentenceText.pageToDisplay = 1;
+            sentenceText.maxVisibleCharacters = 0;
+        }
+        SetSpeakerName("");
+
+        // 큰 글자 화면(LongMonologue)으로 보여주던 조사 대사였다면 쌓인 글도 비운다.
+        // (SetLongMonologueLayout(false)가 longMonologueBuffer를 비운다)
+        if (longBufferFromInvestigation) SetLongMonologueLayout(false);
+    }
+
     // 화자 이름을 굵게 표시한다.
     // TextMeshPro의 <b> 태그를 쓰지 않고 fontStyle을 쓰는 이유: 태그를 문자열에 섞으면
     // 이름에 '<'가 들어간 경우 등에 깨질 수 있고, 나중에 이름 칸 디자인을 바꿀 때도
