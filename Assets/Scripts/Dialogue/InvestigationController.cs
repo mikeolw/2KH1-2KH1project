@@ -1618,6 +1618,13 @@ public class InvestigationController : MonoBehaviour
     // InvestigatableObject.OnClickInspect()가 호출한다.
     public void Inspect(InvestigatableObject obj)
     {
+        // ===== 선택지가 떠 있는 동안에는 다른 오브젝트를 조사할 수 없다 =====
+        // 선택지는 반드시 골라야 끝나는 질문이다. 그 전에 다른 오브젝트를 누르게 두면
+        // 질문이 뜬 채로 다른 대사가 겹친다. 선택지를 고르기 전까지 오브젝트 클릭은 무시한다.
+        // (선택지 버튼, 수첩·핸드폰·가방·설정은 오브젝트가 아니라서 그대로 눌린다.)
+        var choiceUi = DialogueSystem.Instance;
+        if (choiceUi != null && choiceUi.choicePanel != null && choiceUi.choicePanel.activeSelf) return;
+
         // ===== 대사가 떠 있는데 다른 오브젝트를 눌렀다 =====
         // 오브젝트 버튼은 대사창 클릭("다음")으로 치지 않아서, 안 닫으면 이전 대사가 그대로
         // 남는다 (자료 뷰어를 열었다 닫아도 뒤에 남아 있던 문제). 다른 것을 눌렀다는 건 그 대사를
