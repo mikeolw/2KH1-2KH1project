@@ -1302,6 +1302,7 @@ public class InvestigationController : MonoBehaviour
         io.itemId = data.itemId;
         io.spriteName = data.spriteName;
         io.talkSpeaker = string.IsNullOrEmpty(data.speaker) ? data.objectName : data.speaker;
+        io.explicitSpeaker = data.speaker;
         io.talkSentence = data.text;
         io.longMonologue = data.longMonologue;
         io.followUpLines = data.followUps;
@@ -1848,7 +1849,13 @@ public class InvestigationController : MonoBehaviour
         else
         {
             // 조사 설명은 지문처럼 화자 없이 보여준다.
-            ShowLineInDialogue("", obj.description, obj.longMonologue);
+            // 단, CSV Speaker 칸에 이름을 적어둔 경우(예: 07 사무실의 직원들)는 첫 줄에도 그 이름을 띄운다.
+            // 이어지는 줄(followUps)은 원래 자기 Speaker를 쓰므로 이렇게 해야 첫 줄과 일관된다.
+            // 지문으로 두고 싶으면 Speaker 칸을 비우면 된다.
+            // 주인공(차재훈)의 혼잣말 조사(책상 서랍 등)는 기존처럼 이름 없는 지문으로 둔다.
+            string descSpeaker = obj.explicitSpeaker ?? "";
+            if (descSpeaker == "차재훈") descSpeaker = "";
+            ShowLineInDialogue(descSpeaker, obj.description, obj.longMonologue);
         }
     }
 

@@ -107,6 +107,9 @@ public class InvestigatableObject : MonoBehaviour
 
     [Header("Talk 타입 전용")]
     public string talkSpeaker;         // 대사창에 표시할 화자 이름
+    // CSV의 Speaker 칸에 "직접 적은" 값만 담는다 (talkSpeaker는 비면 objectName으로 채워져서 구분이 안 된다).
+    // Description 타입이어도 이 값이 있으면 첫 대사에 화자 이름을 띄우는 데 쓴다.
+    public string explicitSpeaker;
     [TextArea(2, 5)]
     public string talkSentence;        // 대사창에 표시할 대사 내용
 
