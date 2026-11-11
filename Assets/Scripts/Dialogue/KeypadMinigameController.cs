@@ -54,6 +54,10 @@ public class KeypadMinigameController : MonoBehaviour
     [Tooltip("틀렸을 때 빨간색을 보여주고 입력을 지우기까지의 시간.")]
     public float failHoldSeconds = 0.7f;
 
+    [Header("타임어택 연동")]
+    [Tooltip("타임어택이 돌아가는 중에 비밀번호를 틀리면 깎이는 시간(초).")]
+    public float wrongAnswerPenaltySeconds = 5f;
+
     public bool IsActive => root != null && root.activeSelf;
 
     private GameObject root;
@@ -154,6 +158,8 @@ public class KeypadMinigameController : MonoBehaviour
     private void Update()
     {
         if (!IsActive || locked || resolved) return;
+        // 수첩·핸드폰·가방·설정 창이 위에 떠 있으면 그쪽 차례다 (숫자 키가 키패드로 새지 않게).
+        if (ModalStack.IsAnyOpen) return;
 
         // 키보드로도 칠 수 있게 한다. 숫자 패드를 마우스로만 누르게 하면
         // "번호를 입력한다"는 행동치고 손이 많이 간다.
@@ -223,6 +229,10 @@ public class KeypadMinigameController : MonoBehaviour
 
         if (input.ToString() == answer)
         {
+            // 금고가 열리는 순간이 타임어택의 도착점이다. 열리는 연출 동안 시간이 더 흘러
+            // 억울하게 시간 초과가 나지 않도록 맞힌 즉시 끈다 (안 돌아가는 중이면 무시).
+            TimeAttackController.Instance?.StopIfRunning();
+
             locked = true;
             displayBg.color = okColor;
             displayText.color = Color.black;
@@ -233,6 +243,9 @@ public class KeypadMinigameController : MonoBehaviour
         }
 
         wrongCount++;
+        // 틀리면 타임어택 시간이 깎인다 (안 돌아가는 중이면 무시).
+        // 0초가 되면 TimeAttackController가 알아서 실패 엔딩으로 넘긴다.
+        TimeAttackController.Instance?.ApplyPenalty(wrongAnswerPenaltySeconds);
         locked = true;
         displayBg.color = failColor;
         messageText.color = failColor;
@@ -302,6 +315,18 @@ public class KeypadMinigameController : MonoBehaviour
         rootRect.offsetMax = Vector2.zero;
         root.GetComponent<Image>().color = new Color(0f, 0f, 0f, 0.75f);
         ModalStack.MarkNotWindow(root, "금고 키패드 미니게임. 게임 단계라 창이 아니다 (대사 막기는 IsActive).");
+
+        // ===== 퀵바(수첩/핸드폰/가방/설정)는 키패드 중에도 눌려야 한다 =====
+        // 이 막은 맨 나중에 만들어져 퀵바 위에 올라타서, 퀵바 클릭을 막아 버렸다.
+        // 퀵바 바로 아래 순서로 내려 보낸다. 수첩·핸드폰 같은 창은 층(UILayer.Panel)이 있어
+        // 이 막과 상관없이 항상 키패드 위에 열린다.
+        var quickBar = GameObject.Find("QuickBarPanel");
+        if (quickBar != null)
+        {
+            var barTop = quickBar.transform;
+            while (barTop.parent != null && barTop.parent != targetCanvas.transform) barTop = barTop.parent;
+            if (barTop.parent == targetCanvas.transform) root.transform.SetSiblingIndex(barTop.GetSiblingIndex());
+        }
 
         // 키패드 본체 (미니게임 공통 카드: 어두운 면 + 테두리 + 위쪽 강조선)
         var panel = NewRect("Panel", root.transform, new Vector2(420f, 660f), Vector2.zero);
