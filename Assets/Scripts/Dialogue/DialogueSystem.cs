@@ -963,6 +963,12 @@ public class DialogueSystem : MonoBehaviour
                     line.minigameHint,
                     onSuccessCallback: () => ShowNextSentence()
                 );
+
+                // 위에서 대화창을 켜 뒀으므로, 키패드가 실제로 떠 있으면 다시 끈다.
+                // (안 끄면 직전 대사가 키패드 뒤에 그대로 남는다. 스킵으로 들어올 때 특히 눈에 띈다.)
+                // 다음 일반 대사의 ShowDialoguePanel()이 다시 켜 준다.
+                if (KeypadMinigameController.Instance.IsActive && dialoguePanel != null)
+                    dialoguePanel.SetActive(false);
                 return;
             }
 
@@ -2202,6 +2208,24 @@ public class DialogueSystem : MonoBehaviour
             return true;
         }
         return false;
+    }
+
+    // 자료 뷰어(서류/사진)가 열려 있는 동안 뒤의 대화창을 투명하게 가린다.
+    // 뷰어 아래쪽 막이 반투명이라 조사 안내 대사가 자료 위로 비쳐 보이던 문제 때문이다.
+    // 대사 진행 상태(dialogueHidden, 자동/스킵 예약)는 건드리지 않고 투명도만 바꾼다.
+    // 닫을 때는 사용자가 ↓키로 숨겨 둔 상태(dialogueHidden)를 그대로 되살린다.
+    public void SetCoveredByViewer(bool covered)
+    {
+        if (dialoguePanel == null) return;
+        if (dialogueCanvasGroup == null)
+        {
+            dialogueCanvasGroup = dialoguePanel.GetComponent<CanvasGroup>();
+            if (dialogueCanvasGroup == null) dialogueCanvasGroup = dialoguePanel.AddComponent<CanvasGroup>();
+        }
+
+        bool visible = !covered && !dialogueHidden;
+        dialogueCanvasGroup.alpha = visible ? 1f : 0f;
+        dialogueCanvasGroup.blocksRaycasts = visible;
     }
 
     private void SetDialogueHidden(bool hidden)

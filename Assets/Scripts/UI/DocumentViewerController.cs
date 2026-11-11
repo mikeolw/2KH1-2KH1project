@@ -222,6 +222,7 @@ public class DocumentViewerController : MonoBehaviour
         if (descriptionLabel != null) descriptionLabel.text = description;
         if (kickerLabel != null) kickerLabel.text = kicker;
 
+        DialogueSystem.Instance?.SetCoveredByViewer(true);   // 뒤의 조사 안내 대사가 비쳐 보이지 않게
         panel.SetActive(true);
         BuildPageSegments();
         RefreshPage();
@@ -235,6 +236,7 @@ public class DocumentViewerController : MonoBehaviour
         ResetZoom();   // 확대한 채로 닫으면 다음에 열 때도 확대되어 있다
         if (panel != null) panel.SetActive(false);
         pages.Clear();
+        if (wasOpen) DialogueSystem.Instance?.SetCoveredByViewer(false);
         if (wasOpen) OnHidden?.Invoke();
     }
 

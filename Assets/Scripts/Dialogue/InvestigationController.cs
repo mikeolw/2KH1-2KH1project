@@ -1608,6 +1608,19 @@ public class InvestigationController : MonoBehaviour
     // InvestigatableObject.OnClickInspect()가 호출한다.
     public void Inspect(InvestigatableObject obj)
     {
+        // ===== 대사가 떠 있는데 다른 오브젝트를 눌렀다 =====
+        // 오브젝트 버튼은 대사창 클릭("다음")으로 치지 않아서, 안 닫으면 이전 대사가 그대로
+        // 남는다 (자료 뷰어를 열었다 닫아도 뒤에 남아 있던 문제). 다른 것을 눌렀다는 건 그 대사를
+        // 다 봤다는 뜻이므로 끝낸 것으로 보고 대화창을 닫는다.
+        // 미뤄 둔 선택지는 버리고, pendingAfterDismiss(자동 이동 검사)는 그대로 둔다.
+        if (IsShowingTalkLine)
+        {
+            IsShowingTalkLine = false;
+            pendingTalkChoices = null;
+            pendingTalkChoiceSource = null;
+            SetDialogueVisible(false);
+        }
+
         // 이전 오브젝트의 이어지는 대사가 남아 있으면 버린다 (다른 오브젝트를 눌렀을 때 섞이지 않게).
         pendingFollowUps = null;
 
