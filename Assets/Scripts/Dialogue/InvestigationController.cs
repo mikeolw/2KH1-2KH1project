@@ -72,6 +72,10 @@ public class InvestigationController : MonoBehaviour
     // "조사 대사 닫기"로 돌린다.
     public bool IsShowingTalkLine { get; private set; }
 
+    // 지금 떠 있는 대사가 오브젝트를 눌러서 뜬 것인가 (ShowLineInDialogue 참고).
+    // true면 화살표 이동을 막고, false(화면 진입 안내문 등)면 화살표를 누르는 순간 대사를 닫고 이동한다.
+    private bool talkLineFromObject;
+
     // 지금 보여주고 있는 Talk 대사를 닫으면(DismissTalkLine) 이어서 띄울 선택지.
     // Inspect()가 Talk 오브젝트에 선택지가 달려 있을 때 채워둔다 (ShowTalkChoices 참고).
     private List<InvestigationTalkChoice> pendingTalkChoices;
@@ -1292,9 +1296,23 @@ public class InvestigationController : MonoBehaviour
         // (화살표를 눌러도 아무 일도 안 일어난다. 대사를 넘기거나 선택지를 고르면 다시 눌린다.)
         button.onClick.AddListener(() =>
         {
-            if (IsShowingTalkLine) return;
             var ds = DialogueSystem.Instance;
             if (ds != null && ds.choicePanel != null && ds.choicePanel.activeSelf) return;
+
+            if (IsShowingTalkLine)
+            {
+                // 오브젝트를 눌러서 뜬 대사는 끝까지 읽어야 한다.
+                if (talkLineFromObject) return;
+
+                // 화면에 들어올 때 뜬 안내문처럼 누른 것 없이 뜬 대사는, 화살표를 누르면
+                // 읽은 것으로 보고 닫은 뒤 이동한다 (남은 줄·미뤄 둔 일도 같이 정리한다).
+                IsShowingTalkLine = false;
+                pendingFollowUps = null;
+                pendingTalkChoices = null;
+                pendingTalkChoiceSource = null;
+                pendingAfterDismiss = null;
+                SetDialogueVisible(false);
+            }
             NavigateToLinkedScreen(targetScreenId);
         });
 
@@ -1708,7 +1726,7 @@ public class InvestigationController : MonoBehaviour
                 obj.gameObject.name == ResourceRoomDoorHotspotKey &&
                 HasAllResourceRoomClues())
             {
-                ShowLineInDialogue("", "다시 들어갈 필요는 없을 것 같다. 가져온 자료를 확인해 보자.");
+                ShowLineInDialogue("", "다시 들어갈 필요는 없을 것 같다. 가져온 자료를 확인해 보자.", fromObject: true);
                 return;
             }
 
@@ -1727,7 +1745,7 @@ public class InvestigationController : MonoBehaviour
         if (!string.IsNullOrEmpty(obj.requiredItemId) &&
             (InventoryManager.Instance == null || !InventoryManager.Instance.HasItem(obj.requiredItemId.Trim())))
         {
-            ShowLineInDialogue("", obj.requiredItemMissingText);
+            ShowLineInDialogue("", obj.requiredItemMissingText, fromObject: true);
             return;
         }
 
@@ -1887,7 +1905,7 @@ public class InvestigationController : MonoBehaviour
         if (obj.type == HotspotType.Talk)
         {
             string speaker = string.IsNullOrEmpty(obj.talkSpeaker) ? obj.objectName : obj.talkSpeaker;
-            ShowLineInDialogue(speaker, obj.talkSentence, obj.longMonologue);
+            ShowLineInDialogue(speaker, obj.talkSentence, obj.longMonologue, fromObject: true);
         }
         else
         {
@@ -1898,7 +1916,7 @@ public class InvestigationController : MonoBehaviour
             // 주인공(차재훈)의 혼잣말 조사(책상 서랍 등)는 기존처럼 이름 없는 지문으로 둔다.
             string descSpeaker = obj.explicitSpeaker ?? "";
             if (descSpeaker == "차재훈") descSpeaker = "";
-            ShowLineInDialogue(descSpeaker, obj.description, obj.longMonologue);
+            ShowLineInDialogue(descSpeaker, obj.description, obj.longMonologue, fromObject: true);
         }
     }
 
@@ -1906,8 +1924,14 @@ public class InvestigationController : MonoBehaviour
     // longMonologue가 true면 작은 검은 대화창 대신 화면 가득 큰 글자로 보여준다 (CSV의 LongMonologue 칸).
     // newLongScreen이 true면 앞에 쌓인 글을 지우고 새 화면에서 시작한다 (CSV의 LongMonologueNewPage 칸).
     // 오브젝트를 처음 누르는 첫 줄은 항상 새 화면이고, 이어지는 줄만 LongMonologue가 연달아 TRUE면 아래로 쌓인다.
-    private void ShowLineInDialogue(string speaker, string sentence, bool longMonologue = false, bool newLongScreen = true)
+    //
+    // fromObject: 오브젝트를 눌러서 뜬 대사인가. 화면에 들어올 때 뜨는 안내문처럼 누른 것 없이
+    // 뜬 대사는 false다. 화살표가 이동을 막을지 정할 때 쓴다 (CreateNavArrow 참고).
+    // 이어지는 줄(followUps)은 첫 줄의 값을 그대로 물려받는다.
+    private void ShowLineInDialogue(string speaker, string sentence, bool longMonologue = false, bool newLongScreen = true,
+                                    bool fromObject = false)
     {
+        if (!IsShowingTalkLine) talkLineFromObject = fromObject;
         IsShowingTalkLine = true;
         SetDialogueVisible(true);
 
@@ -2043,7 +2067,7 @@ public class InvestigationController : MonoBehaviour
         if (!string.IsNullOrWhiteSpace(choice.responseText))
         {
             // 대답도 대사 한 줄이므로 평소 Talk 흐름과 똑같이 보여주고 닫는다.
-            ShowLineInDialogue(choice.responseSpeaker, choice.responseText);
+            ShowLineInDialogue(choice.responseSpeaker, choice.responseText, fromObject: true);
         }
         else
         {
