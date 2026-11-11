@@ -1286,7 +1286,17 @@ public class InvestigationController : MonoBehaviour
             tmp.raycastTarget = false;
         }
 
-        button.onClick.AddListener(() => NavigateToLinkedScreen(targetScreenId));
+        // ===== 대사가 떠 있거나 선택지가 떠 있는 동안에는 화면을 옮기지 않는다 =====
+        // 서기처럼 대사 끝에 선택지가 붙는 오브젝트는, 대사를 다 읽고 선택지를 골라야 끝난다.
+        // 그 전에 화살표로 다른 화면으로 가 버리면 대화창과 선택지가 엉뚱한 화면에 남는다.
+        // (화살표를 눌러도 아무 일도 안 일어난다. 대사를 넘기거나 선택지를 고르면 다시 눌린다.)
+        button.onClick.AddListener(() =>
+        {
+            if (IsShowingTalkLine) return;
+            var ds = DialogueSystem.Instance;
+            if (ds != null && ds.choicePanel != null && ds.choicePanel.activeSelf) return;
+            NavigateToLinkedScreen(targetScreenId);
+        });
 
         // 코드로 만든 글자라 기본 글꼴에는 한글이 없다(여기선 '>' '<' 뿐이라 실제로는
         // 문제 없지만, 다른 버튼들과 같은 방식을 맞춰 둔다).
