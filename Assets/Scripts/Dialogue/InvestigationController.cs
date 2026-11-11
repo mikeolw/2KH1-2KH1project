@@ -91,6 +91,11 @@ public class InvestigationController : MonoBehaviour
     private const string ResourceRoomDoorScreenId = "BG_07_InvestigationSite_04";
     private const string ResourceRoomDoorHotspotKey = "Hotspot_ResourceRoomdoor";
 
+    // 사장실 앞(_06)에 처음 도착하면 "#07 사장실 진입" 저장 창을 띄운다.
+    // 화살표로 자료실 앞과 왔다갔다해도 한 번만 뜨도록 표시 아이템을 남긴다.
+    private const string CeoRoomFrontScreenId = "BG_07_InvestigationSite_06";
+    private const string CeoRoomSaveShownFlag = "ceo_room_save_shown";
+
     // 지금 보여주고 있는 대사를 닫으면(DismissTalkLine) 실행할 일. pendingTalkChoices와
     // 같은 자리에서 쓰이지만 선택지가 아니라 "그냥 할 일 하나"를 미뤄두는 용도다 - 예)
     // 아이템을 얻어 자동 이동 조건이 채워졌을 때, 그 아이템을 보여주는 대사를 다 읽기도
@@ -1180,6 +1185,14 @@ public class InvestigationController : MonoBehaviour
         visitedScreenIds.Add(activeScreenId);
 
         EnterScreen(activeScreenId, targetScreen);
+
+        // 사장실 앞에 처음 도착한 순간 저장 창을 띄운다 (화면을 먼저 그린 뒤 그 위에 뜬다).
+        if (string.Equals(targetId, CeoRoomFrontScreenId, StringComparison.OrdinalIgnoreCase) &&
+            InventoryManager.Instance != null && !InventoryManager.Instance.HasItem(CeoRoomSaveShownFlag))
+        {
+            InventoryManager.Instance.AddItem(CeoRoomSaveShownFlag);
+            DialogueSystem.Instance?.ReachSavePointAtNextLine("#07 사장실 진입");
+        }
     }
 
     // 지금 화면에 AutoExit 조건(ScreenData.autoExitRequiredItemIds)이 걸려 있고, 그 아이템을

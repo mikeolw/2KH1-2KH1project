@@ -47,6 +47,16 @@ public class DialogueSystem : MonoBehaviour
     private string currentScenarioCsv = "";
     public string CurrentScenarioCsv => currentScenarioCsv;
 
+    // CSV 줄이 아니라 "조사 중 어떤 화면에 도착한 순간"에 세이브포인트를 찍고 싶을 때 쓴다
+    // (예: #07 자료실을 마치고 화살표로 사장실 앞에 도착했을 때).
+    // lineIndex는 "다음에 보여줄 줄"이라서, 지금 조사 줄 바로 다음의 Investigate 줄(= 그 화면을
+    // 여는 줄)이 저장 위치가 된다. 불러오면 그 화면이 바로 열린다.
+    public void ReachSavePointAtNextLine(string savePointId)
+    {
+        if (SavePointManager.Instance == null) return;
+        SavePointManager.Instance.ReachSavePoint(savePointId, currentScenarioCsv, lineIndex);
+    }
+
     // 지금 몇 번째 줄까지 진행했는지. lineIndex는 "다음에 보여줄 줄"을 가리키므로,
     // 이어하기를 할 때 이 값을 그대로 lineIndex에 넣으면 저장 시점의 다음 줄부터 이어진다.
     public int CurrentLineIndex => lineIndex;
