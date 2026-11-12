@@ -33,6 +33,7 @@ public class HotspotHoverFocus : MonoBehaviour, IPointerEnterHandler, IPointerEx
         // 대사가 떠 있는 동안에는 표시하지 않는다 (대사를 읽는 중에 이름표가 깜빡이면 거슬린다).
         // (다 출력돼서 다른 오브젝트를 누를 수 있는 상태면 평소처럼 표시한다.)
         if (DialogueSystem.Instance != null && DialogueSystem.Instance.ObjectClickAdvancesDialogue) return;
+        if (InvestigationController.Instance != null && InvestigationController.Instance.IsMinigamePending) return;
         Show();
         PlayHoverSound();
     }
@@ -60,6 +61,7 @@ public class HotspotHoverFocus : MonoBehaviour, IPointerEnterHandler, IPointerEx
     {
         if (!shown) return;
         if (DialogueSystem.Instance != null && DialogueSystem.Instance.ObjectClickAdvancesDialogue) Hide();
+        else if (InvestigationController.Instance != null && InvestigationController.Instance.IsMinigamePending) Hide();
     }
 
     private void Show()

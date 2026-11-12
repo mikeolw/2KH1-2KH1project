@@ -165,6 +165,8 @@ public class InvestigatableObject : MonoBehaviour
 
         var ds = DialogueSystem.Instance;
         bool flat = ds != null && (ds.ObjectClickAdvancesDialogue || ds.SwallowObjectClick);
+        // 미션 카드를 기다리는 동안은 눌러도 반응이 없으니 어두워지지도 않게 한다.
+        if (InvestigationController.Instance != null && InvestigationController.Instance.IsMinigamePending) flat = true;
         if (flat == colorsFlattened) return;
         colorsFlattened = flat;
 

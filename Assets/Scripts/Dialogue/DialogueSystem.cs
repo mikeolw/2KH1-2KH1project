@@ -2299,6 +2299,17 @@ public class DialogueSystem : MonoBehaviour
         }
     }
 
+    // 조사 대사("다음")를 한 칸 넘긴다. Update()의 조사 모드 처리와 같은 동작이다.
+    // 오브젝트 버튼은 위 클릭 감지에서 제외되므로, 막아 둔 문을 눌렀을 때 대사만 넘기고 싶으면
+    // InvestigationController가 이 함수를 부른다.
+    public void AdvanceInvestigationLine()
+    {
+        if (InvestigationController.Instance == null || !InvestigationController.Instance.IsShowingTalkLine) return;
+        if (isTyping) CompleteTypingImmediately();
+        else if (HasMorePages) ShowNextPage();
+        else InvestigationController.Instance.DismissTalkLine();
+    }
+
     void Update()
     {
         // 새로 누를 때마다 "이 클릭은 대사 진행에 썼다" 표시를 지운다 (IsPointerOverButton이 다시 켠다).

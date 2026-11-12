@@ -874,10 +874,33 @@ public class InvestigationController : MonoBehaviour
 
         // 저장 창이 떠 있으면(예: 사장실 앞 도착) 창이 닫힌 뒤에 미션 카드를 띄운다.
         // 자료실처럼 "저장 -> 미션 카드" 순서로 하나씩 보이게 하기 위해서다.
+        // 카드가 뜰 때까지(= '시작'을 누를 수 있게 될 때까지)는 오브젝트(문)를 누를 수 없게 막는다.
+        pendingMinigameScreenId = screenId;
         StartCoroutine(StartScreenMinigameAfterSave(screenId, screen.minigameLabel, passedFlag));
     }
 
+    // 화면 미니게임 카드가 아직 뜨지 않고 대기 중인 화면 id (없으면 null).
+    // 대기 중에는 Inspect()가 오브젝트 클릭을 무시한다. 카드가 뜨면 막(dim)이 클릭을 막는다.
+    private string pendingMinigameScreenId;
+
+    // 미션 카드를 띄우려고 기다리는 중인가. 이 동안 오브젝트는 눌러도 반응하지 않으므로
+    // 올림/누름 색(어두워짐)과 마우스 올림 표시(괄호/이름표/소리)도 내지 않는다.
+    public bool IsMinigamePending => pendingMinigameScreenId != null && pendingMinigameScreenId == activeScreenId;
+
     private System.Collections.IEnumerator StartScreenMinigameAfterSave(string screenId, string label, string passedFlag)
+    {
+        try
+        {
+            yield return StartScreenMinigameAfterSaveInner(screenId, label, passedFlag);
+        }
+        finally
+        {
+            // 카드가 떴거나, 화면을 옮겼거나, 조사가 끝났거나 - 어느 경우든 대기는 끝났다.
+            if (pendingMinigameScreenId == screenId) pendingMinigameScreenId = null;
+        }
+    }
+
+    private System.Collections.IEnumerator StartScreenMinigameAfterSaveInner(string screenId, string label, string passedFlag)
     {
         // 한 프레임 기다린 뒤 저장 창을 확인한다. 화살표로 도착했을 때는 EnterScreen() 바로 뒤에
         // 저장 창이 열리는데(NavigateToLinkedScreen), 기다리지 않고 검사하면 아직 닫혀 있어서
@@ -1682,6 +1705,17 @@ public class InvestigationController : MonoBehaviour
     // InvestigatableObject.OnClickInspect()가 호출한다.
     public void Inspect(InvestigatableObject obj)
     {
+        // 미션 카드가 뜨기 전(저장 창/안내 대사 대기 중)에는 문을 누를 수 없다.
+        // 카드의 '시작'을 눌러야 조사를 이어갈 수 있다.
+        // 다만 "문을 열어 진입할 수 있을 것 같다" 같은 안내 대사가 떠 있으면, 문을 눌러도
+        // 그 대사는 평소처럼 다음으로 넘어간다 (문 조사는 하지 않고 대사만 넘긴다).
+        if (MinigameController.Instance != null && MinigameController.Instance.IsActive) return;
+        if (pendingMinigameScreenId != null && pendingMinigameScreenId == activeScreenId)
+        {
+            if (IsShowingTalkLine) DialogueSystem.Instance?.AdvanceInvestigationLine();
+            return;
+        }
+
         // ===== 선택지가 떠 있는 동안에는 다른 오브젝트를 조사할 수 없다 =====
         // 선택지는 반드시 골라야 끝나는 질문이다. 그 전에 다른 오브젝트를 누르게 두면
         // 질문이 뜬 채로 다른 대사가 겹친다. 선택지를 고르기 전까지 오브젝트 클릭은 무시한다.
