@@ -54,10 +54,25 @@ public class DialogueSystem : MonoBehaviour
     // (예: #07 자료실을 마치고 화살표로 사장실 앞에 도착했을 때).
     // lineIndex는 "다음에 보여줄 줄"이라서, 지금 조사 줄 바로 다음의 Investigate 줄(= 그 화면을
     // 여는 줄)이 저장 위치가 된다. 불러오면 그 화면이 바로 열린다.
-    public void ReachSavePointAtNextLine(string savePointId)
+    //
+    // screenId : 지금 도착한 조사 화면 id. 다음 줄이 바로 그 화면을 여는 조사 줄이면 저장한 뒤
+    //            그 줄은 건너뛴다. 이미 그 화면에 와 있는데 조사가 끝나고 같은 줄이 또 실행되면
+    //            같은 화면이 다시 열려서(문을 눌러도 아무 일도 안 일어나 보임) 다음으로 못 넘어간다.
+    public void ReachSavePointAtNextLine(string savePointId, string screenId)
     {
         if (SavePointManager.Instance == null) return;
         SavePointManager.Instance.ReachSavePoint(savePointId, currentScenarioCsv, lineIndex);
+
+        if (currentDialogue != null && currentDialogue.lines != null &&
+            lineIndex >= 0 && lineIndex < currentDialogue.lines.Count)
+        {
+            var next = currentDialogue.lines[lineIndex];
+            if (next.isInvestigation && !string.IsNullOrWhiteSpace(next.investigationId) &&
+                string.Equals(next.investigationId.Trim(), screenId, System.StringComparison.OrdinalIgnoreCase))
+            {
+                lineIndex++;
+            }
+        }
     }
 
     // 지금 몇 번째 줄까지 진행했는지. lineIndex는 "다음에 보여줄 줄"을 가리키므로,

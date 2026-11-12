@@ -879,6 +879,10 @@ public class InvestigationController : MonoBehaviour
 
     private System.Collections.IEnumerator StartScreenMinigameAfterSave(string screenId, string label, string passedFlag)
     {
+        // 한 프레임 기다린 뒤 저장 창을 확인한다. 화살표로 도착했을 때는 EnterScreen() 바로 뒤에
+        // 저장 창이 열리는데(NavigateToLinkedScreen), 기다리지 않고 검사하면 아직 닫혀 있어서
+        // 미션 카드가 저장 창보다 먼저 떠 버린다.
+        yield return null;
         while (SaveSlotDialog.Instance != null && SaveSlotDialog.Instance.IsOpen) yield return null;
 
         // 기다리는 사이 다른 화면으로 옮겼거나 조사가 끝났으면 띄우지 않는다.
@@ -1235,7 +1239,7 @@ public class InvestigationController : MonoBehaviour
         if (showCeoSave)
         {
             InventoryManager.Instance.AddItem(CeoRoomSaveShownFlag);
-            DialogueSystem.Instance?.ReachSavePointAtNextLine("#07 사장실 진입");
+            DialogueSystem.Instance?.ReachSavePointAtNextLine("#07 사장실 진입", targetId);
         }
 
         EnterScreen(activeScreenId, targetScreen);
