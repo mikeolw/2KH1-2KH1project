@@ -72,6 +72,10 @@ public class InvestigationController : MonoBehaviour
     // "조사 대사 닫기"로 돌린다.
     public bool IsShowingTalkLine { get; private set; }
 
+    // 지금 줄 뒤에 이어서 보여줄 줄이나 선택지가 남아 있는가 (남아 있으면 오브젝트 클릭으로 끊지 않는다).
+    public bool HasPendingTalkFollowUp =>
+        (pendingFollowUps != null && pendingFollowUps.Count > 0) || pendingTalkChoices != null;
+
     // 지금 떠 있는 대사가 오브젝트를 눌러서 뜬 것인가 (ShowLineInDialogue 참고).
     // true면 화살표 이동을 막고, false(화면 진입 안내문 등)면 화살표를 누르는 순간 대사를 닫고 이동한다.
     private bool talkLineFromObject;

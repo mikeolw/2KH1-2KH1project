@@ -31,7 +31,8 @@ public class HotspotHoverFocus : MonoBehaviour, IPointerEnterHandler, IPointerEx
     public void OnPointerEnter(PointerEventData eventData)
     {
         // 대사가 떠 있는 동안에는 표시하지 않는다 (대사를 읽는 중에 이름표가 깜빡이면 거슬린다).
-        if (InvestigationController.Instance != null && InvestigationController.Instance.IsShowingTalkLine) return;
+        // (다 출력돼서 다른 오브젝트를 누를 수 있는 상태면 평소처럼 표시한다.)
+        if (DialogueSystem.Instance != null && DialogueSystem.Instance.ObjectClickAdvancesDialogue) return;
         Show();
         PlayHoverSound();
     }
@@ -50,8 +51,20 @@ public class HotspotHoverFocus : MonoBehaviour, IPointerEnterHandler, IPointerEx
     private void OnDisable() => Hide();
     private void OnDestroy() => Hide();
 
+    // 오브젝트에 마우스를 올린 채로 대사가 시작되면 괄호/이름표가 남아 있다가, 대사를 넘기려고
+    // 클릭하는 순간 갑자기 사라져서 "클릭할 때 오브젝트가 변하는" 것처럼 보였다.
+    // 대사로 클릭이 쓰이는 동안에는 미리 치워 둬서 클릭해도 화면이 달라지지 않게 한다.
+    private bool shown;
+
+    private void Update()
+    {
+        if (!shown) return;
+        if (DialogueSystem.Instance != null && DialogueSystem.Instance.ObjectClickAdvancesDialogue) Hide();
+    }
+
     private void Show()
     {
+        shown = true;
         var self = transform as RectTransform;
         var parent = transform.parent as RectTransform;
         if (self == null || parent == null) return;
@@ -83,6 +96,7 @@ public class HotspotHoverFocus : MonoBehaviour, IPointerEnterHandler, IPointerEx
 
     private void Hide()
     {
+        shown = false;
         if (transform.parent == null) return;
         var layer = transform.parent.Find(LayerName);
         if (layer != null) layer.gameObject.SetActive(false);

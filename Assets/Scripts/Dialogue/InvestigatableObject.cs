@@ -144,9 +144,49 @@ public class InvestigatableObject : MonoBehaviour
     public string afterItemId;
     public string afterTargetScreenId;
 
+    // ===== 대사를 넘기는 클릭에는 올림/누름/선택 색(살짝 어두워짐)을 쓰지 않는다 =====
+    // 대사가 아직 찍히는 중이거나 넘길 줄이 남아 있으면 색을 평소 색과 같게 맞춘다.
+    // 문장이 다 출력돼서 오브젝트를 조사할 수 있는 상태가 되면 원래 색 설정으로 돌려, 올리거나
+    // 누르면 기존처럼 어두워진다.
+    // 단, 오브젝트를 눌러서 문장을 완성시킨 그 클릭이 끝나기 전에는 고정을 풀지 않는다
+    // (SwallowObjectClick). 풀어 버리면 마우스가 올라가 있던 오브젝트가 그 순간 어두워진다.
+    private UnityEngine.UI.Button hotspotButton;
+    private UnityEngine.UI.ColorBlock originalColors;
+    private bool colorsFlattened;
+
+    private void Update()
+    {
+        if (hotspotButton == null)
+        {
+            hotspotButton = GetComponent<UnityEngine.UI.Button>();
+            if (hotspotButton == null) { enabled = false; return; }
+            originalColors = hotspotButton.colors;
+        }
+
+        var ds = DialogueSystem.Instance;
+        bool flat = ds != null && (ds.ObjectClickAdvancesDialogue || ds.SwallowObjectClick);
+        if (flat == colorsFlattened) return;
+        colorsFlattened = flat;
+
+        if (flat)
+        {
+            originalColors = hotspotButton.colors;
+            var c = originalColors;
+            c.highlightedColor = c.pressedColor = c.selectedColor = c.normalColor;
+            hotspotButton.colors = c;
+        }
+        else
+        {
+            hotspotButton.colors = originalColors;
+        }
+    }
+
     // 이 오브젝트의 Button 컴포넌트 OnClick()에 연결해서 쓴다.
+
     public void OnClickInspect()
     {
+        // 대사가 떠 있을 때 누른 클릭은 대사 진행에 쓰였으므로 오브젝트 조사로 넘기지 않는다.
+        if (DialogueSystem.Instance != null && DialogueSystem.Instance.SwallowObjectClick) return;
         InvestigationController.Instance.Inspect(this);
     }
 

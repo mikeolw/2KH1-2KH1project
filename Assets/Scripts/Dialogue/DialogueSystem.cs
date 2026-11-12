@@ -2259,6 +2259,9 @@ public class DialogueSystem : MonoBehaviour
 
     void Update()
     {
+        // 새로 누를 때마다 "이 클릭은 대사 진행에 썼다" 표시를 지운다 (IsPointerOverButton이 다시 켠다).
+        if (Input.GetMouseButtonDown(0)) SwallowObjectClick = false;
+
         // "계속" 표시(▼) 깜빡임은 입력과 무관하게 항상 갱신한다.
         Update_ContinueIndicator();
 
@@ -2367,6 +2370,24 @@ public class DialogueSystem : MonoBehaviour
     private readonly List<RaycastResult> raycastResults = new List<RaycastResult>();
     private PointerEventData reusablePointerData;
 
+    // 대사를 넘기려고 오브젝트를 누른 클릭이면 true. 같은 클릭이 버튼을 뗄 때 오브젝트 조사로
+    // 이어지지 않도록 InvestigatableObject.OnClickInspect가 확인한다. 다음 마우스 누름에서 풀린다.
+    public bool SwallowObjectClick { get; private set; }
+
+    // 지금 오브젝트를 누르면 대사가 진행되는 상태인가.
+    // 대사가 아직 찍히는 중이거나, 넘길 쪽/줄/선택지가 남아 있으면 true (오브젝트는 눌리지 않는다).
+    // 마지막 줄까지 전부 출력됐으면 false: 이때 다른 오브젝트를 누르면 그 오브젝트를 조사한다.
+    public bool ObjectClickAdvancesDialogue
+    {
+        get
+        {
+            if (dialoguePanel == null || !dialoguePanel.activeInHierarchy) return false;
+            if (isTyping || HasMorePages) return true;
+            var inv = InvestigationController.Instance;
+            return inv != null && inv.HasPendingTalkFollowUp;
+        }
+    }
+
     private bool IsPointerOverButton()
     {
         if (EventSystem.current == null) return false;
@@ -2380,10 +2401,27 @@ public class DialogueSystem : MonoBehaviour
         raycastResults.Clear();
         EventSystem.current.RaycastAll(reusablePointerData, raycastResults);
 
+        // RaycastAll 결과는 화면 앞쪽(위에 보이는 것)부터 순서대로 들어 있다.
+        // 위에서부터 보다가 대화창에 먼저 닿으면 "대화창을 클릭한 것"이다. 대화창에 가려진
+        // 뒤쪽 오브젝트 버튼은 눌린 것으로 치지 않는다 (대사 진행). 대화창 밖의 오브젝트
+        // 버튼이 먼저 닿으면 그 버튼이 눌린 것이므로 대사를 넘기지 않는다.
+        //
+        // 대사가 떠 있는 동안에는 조사 오브젝트 버튼도 "버튼"으로 치지 않는다. 오브젝트를 눌러도
+        // 대사가 진행되고, 그 클릭으로 오브젝트가 조사되지는 않게 SwallowObjectClick을 켠다.
+        bool dialogueShowing = ObjectClickAdvancesDialogue;
+        Transform panelTf = dialoguePanel != null ? dialoguePanel.transform : null;
+        if (Input.GetMouseButtonDown(0)) SwallowObjectClick = false;   // 새로 누를 때마다 처음부터
         foreach (var result in raycastResults)
         {
-            if (result.gameObject.GetComponentInParent<Button>() != null)
+            var hit = result.gameObject;
+            if (panelTf != null && hit.transform.IsChildOf(panelTf)) return false;
+            if (hit.GetComponentInParent<Button>() != null)
             {
+                if (dialogueShowing && hit.GetComponentInParent<InvestigatableObject>() != null)
+                {
+                    if (Input.GetMouseButtonDown(0)) SwallowObjectClick = true;
+                    return false;
+                }
                 return true;
             }
         }
