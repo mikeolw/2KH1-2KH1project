@@ -135,6 +135,15 @@ public class InvestigationController : MonoBehaviour
         TextKey("BG_07_InvestigationSite_05", "Hotspot_Documents_F02R_Clue2"),
     };
 
+    // ===== 이미 할 일을 끝낸 오브젝트를 다시 누르면 보여줄 "평소 대사"의 출처 =====
+    // 키: 다시 누르는 오브젝트(화면+핫스팟), 값: 대사를 빌려올 줄(화면+핫스팟).
+    // 예) #07 서랍은 열쇠를 얻은 뒤에는 #01 내 책상 서랍의 대사를 다시 보여준다.
+    private static readonly Dictionary<string, (string screenId, string hotspotKey)> RepeatLineSources =
+        new Dictionary<string, (string screenId, string hotspotKey)>(StringComparer.OrdinalIgnoreCase)
+    {
+        { TextKey("BG_07_InvestigationSite_01", "Hotspot_Drawer"), ("BG_01_MyDesk", "Hotspot_Drawer") },
+    };
+
     // ===== "엉뚱한 곳"을 조사하면 타임어택 시간이 깎이는 오브젝트들 =====
     // 자료실(_05)의 진짜 단서(Hotspot_..._Clue)가 아닌 옆의 가짜 서류 더미, 사장실(_07)의
     // 커튼/책장/사장 책상처럼 "뒤져볼 법하지만 정답은 아닌" 자리를 조사하면 시간을 낭비했다는
@@ -1754,6 +1763,21 @@ public class InvestigationController : MonoBehaviour
             {
                 ShowLineInDialogue("", "다시 들어갈 필요는 없을 것 같다. 가져온 자료를 확인해 보자.", fromObject: true);
                 return;
+            }
+
+            // ===== 예외: 열쇠를 얻은 뒤의 #07 서랍은 #01 책상 서랍의 평소 대사를 보여준다 =====
+            // 새 CSV 컬럼 없이, 대사 원문은 코드에 적지 않고 #01 서랍 줄(CSV)에서 읽어 온다.
+            if (string.IsNullOrEmpty(obj.afterTargetScreenId) &&
+                activeScreenId != null &&
+                RepeatLineSources.TryGetValue(TextKey(activeScreenId, obj.gameObject.name), out var src) &&
+                screenData != null && screenData.TryGetValue(src.screenId, out var srcScreen))
+            {
+                var srcHotspot = srcScreen.hotspots.Find(h => h.key == src.hotspotKey);
+                if (srcHotspot != null && !string.IsNullOrWhiteSpace(srcHotspot.text))
+                {
+                    ShowLineInDialogue("", srcHotspot.text.Trim(), fromObject: true);
+                    return;
+                }
             }
 
             if (!string.IsNullOrEmpty(obj.afterTargetScreenId))
