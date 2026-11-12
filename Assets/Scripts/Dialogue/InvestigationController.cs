@@ -222,6 +222,20 @@ public class InvestigationController : MonoBehaviour
     // 같은 InvestigationId+HotspotKey로 여러 줄을 적으면 그 줄 순서대로 선택지 버튼이 뜬다.
     private const string InvestigationTalkChoicesCsv = "Dialogues/InvestigationTalkChoices";
 
+    // ===== 경찰서(#03)의 아이: 다른 오브젝트를 2개 조사해야 나타났다가, 대사 뒤 뛰어서 사라진다 =====
+    // 새 CSV 컬럼 없이(팀 규칙) 화면/오브젝트 이름을 코드에 적어 식별한다 (자료실 문 예외와 같은 방식).
+    //   - 아이를 뺀 이 화면의 다른 오브젝트(사람 포함)를 PoliceChildRevealCount개 누르면 아이가 나타난다.
+    //   - 아이를 누르면 CSV에 적힌 대사가 나오고, 그 대사를 닫는 순간 발소리와 함께 사라진다.
+    //   - 한 번 사라지면 다시 나타나지 않는다 (표시 아이템 PoliceChildGoneFlag, 세이브에도 남는다).
+    private const string PoliceScreenId = "BG_03_Police";
+    private const string PoliceChildKey = "Hotspot_Child";
+    private const int PoliceChildRevealCount = 2;
+    private const string PoliceChildGoneFlag = "police_child_gone";
+    private const string PoliceChildLeaveSfx = "Sounds/SFX/runningFootsteps";
+
+    // 아이의 대사를 닫으면 사라져야 하는 상태인가 (DismissTalkLine / FinishPoliceChildIfPending 참고).
+    private bool policeChildVanishPending;
+
     // 같은 키로 적은 둘째 줄부터의 대사 목록을 합친 줄(row)에 담아두는 임시 칸 이름 (LoadDataIfNeeded 참고).
     private const string FollowUpsKey = "__FollowUps";
 
@@ -980,8 +994,14 @@ public class InvestigationController : MonoBehaviour
     {
         if (!inSession) return;
 
-        // 대사창에 안내문이든 오브젝트 대사든 떠 있어도, 살펴볼 곳이 남았으면 경고를 띄운다.
-        // (대사 위에 경고가 덮이고, 닫으면 남은 줄/선택지가 이어진다)
+        // 오브젝트를 눌러 뜬 대사(이어지는 줄 포함)나 선택지가 끝나기 전에는 조사를 그만둘 수 없다.
+        // (화살표 이동을 막는 것과 같은 기준 - CreateNavArrow 참고)
+        var ds = DialogueSystem.Instance;
+        if (ds != null && ds.choicePanel != null && ds.choicePanel.activeSelf) return;
+        if (IsShowingTalkLine && talkLineFromObject) return;
+
+        // 화면에 들어올 때 뜬 안내문이 떠 있는 채로 눌렀는데 살펴볼 곳이 남았으면 경고를 띄운다.
+        // (안내문 위에 경고가 덮이고, 닫으면 남은 줄이 이어진다)
         if (!exitWarningShown && CountUninspectedHotspots() > 0)
         {
             exitWarningShown = true;
@@ -1019,6 +1039,9 @@ public class InvestigationController : MonoBehaviour
     //     : 세이브를 불러오면 "누른 기록"은 비어도 가방은 그대로라 이걸로 판단해야 한다
     private bool IsStillWorthInspecting(string screenId, HotspotData data)
     {
+        // 아직 나타나지 않았거나 이미 사라진 경찰서 아이 (CreateHotspot과 같은 기준)
+        if (IsPoliceChild(screenId, data.key) && !ShouldShowPoliceChild()) return false;
+
         // 장식(스탠딩/소품)과, 그림도 배치 좌표도 없어 화면에 만들어지지 않는 오브젝트
         // (CreateHotspot과 같은 기준)
         if (data.type == HotspotType.Standing || data.type == HotspotType.Prop) return false;
@@ -1390,9 +1413,62 @@ public class InvestigationController : MonoBehaviour
         UIFontHelper.ApplyToChildren(go);
     }
 
+    // ---------------------------------------------------------------------------------
+    // 경찰서 아이 (등장 조건 / 등장 / 퇴장)
+    // ---------------------------------------------------------------------------------
+    private static bool IsPoliceChild(string screenId, string hotspotKey)
+    {
+        return string.Equals(screenId, PoliceScreenId, StringComparison.OrdinalIgnoreCase) && hotspotKey == PoliceChildKey;
+    }
+
+    // 지금 아이가 화면에 있어야 하는가: 아직 사라진 적 없고, 다른 오브젝트를 충분히 조사했다.
+    private static bool ShouldShowPoliceChild()
+    {
+        if (InventoryManager.Instance != null && InventoryManager.Instance.HasItem(PoliceChildGoneFlag)) return false;
+
+        int count = 0;
+        string prefix = PoliceScreenId + "|";
+        string childKey = TextKey(PoliceScreenId, PoliceChildKey);
+        foreach (string k in inspectedHotspots)
+        {
+            if (k.StartsWith(prefix, StringComparison.OrdinalIgnoreCase) && k != childKey) count++;
+        }
+        return count >= PoliceChildRevealCount;
+    }
+
+    // 오브젝트를 누를 때마다 부른다. 조건이 채워진 순간 아이를 만든다.
+    private void RevealPoliceChildIfNeeded()
+    {
+        if (!string.Equals(activeScreenId, PoliceScreenId, StringComparison.OrdinalIgnoreCase) || hotspotRoot == null) return;
+        if (hotspotRoot.transform.Find(PoliceChildKey) != null || !ShouldShowPoliceChild()) return;
+        if (!screenData.TryGetValue(activeScreenId, out ScreenData screen)) return;
+
+        var data = screen.hotspots.Find(h => h.key == PoliceChildKey);
+        if (data != null) CreateHotspot(data);
+    }
+
+    // 아이의 대사를 닫는 순간 발소리와 함께 아이를 지운다. 대기 중이 아니면 아무 일도 하지 않는다.
+    private void FinishPoliceChildIfPending()
+    {
+        if (!policeChildVanishPending) return;
+        policeChildVanishPending = false;
+
+        InventoryManager.Instance?.AddItem(PoliceChildGoneFlag);
+        AudioManager.PlaySfx(PoliceChildLeaveSfx);
+
+        if (hotspotRoot != null)
+        {
+            var child = hotspotRoot.transform.Find(PoliceChildKey);
+            if (child != null) Destroy(child.gameObject);
+        }
+    }
+
     // 조사 오브젝트 하나를 만든다.
     private void CreateHotspot(HotspotData data)
     {
+        // 경찰서 아이는 조건이 채워지기 전(또는 이미 사라진 뒤)에는 만들지 않는다.
+        if (IsPoliceChild(activeScreenId, data.key) && !ShouldShowPoliceChild()) return;
+
         // ===== 장식(Standing/Prop)은 아예 다른 방식으로 만든다 =====
         // 누를 수 없어야 하므로 Button도 InvestigatableObject도 붙이지 않는다.
         if (data.type == HotspotType.Standing || data.type == HotspotType.Prop)
@@ -1734,6 +1810,7 @@ public class InvestigationController : MonoBehaviour
             pendingTalkChoices = null;
             pendingTalkChoiceSource = null;
             SetDialogueVisible(false);
+            FinishPoliceChildIfPending();   // 아이 대사가 다 뜬 뒤 다른 오브젝트를 눌러도 아이는 사라진다
         }
 
         // 이전 오브젝트의 이어지는 대사가 남아 있으면 버린다 (다른 오브젝트를 눌렀을 때 섞이지 않게).
@@ -1741,6 +1818,9 @@ public class InvestigationController : MonoBehaviour
 
         // 한 번이라도 누른 오브젝트에는 작은 체크를 붙인다 (CreateHotspot 아래 MarkInspected 참고).
         MarkInspected(obj);
+
+        // 경찰서: 다른 오브젝트를 충분히 조사했으면 아이가 나타난다.
+        RevealPoliceChildIfNeeded();
 
         // ===== "엉뚱한 곳" 페널티 =====
         // 다른 처리(아이템 지급, 선택지 등)와는 완전히 별개로, 눌린 오브젝트가 WrongHotspots에
@@ -2007,6 +2087,9 @@ public class InvestigationController : MonoBehaviour
                 : "";
         }
 
+        // 경찰서 아이: 이 대사를 닫으면 사라진다 (DismissTalkLine에서 처리).
+        policeChildVanishPending = IsPoliceChild(activeScreenId, obj.gameObject.name);
+
         if (obj.type == HotspotType.Talk)
         {
             string speaker = string.IsNullOrEmpty(obj.talkSpeaker) ? obj.objectName : obj.talkSpeaker;
@@ -2063,6 +2146,9 @@ public class InvestigationController : MonoBehaviour
         }
 
         IsShowingTalkLine = false;
+
+        // 방금 닫은 대사가 경찰서 아이의 것이었다면 발소리와 함께 아이가 사라진다.
+        FinishPoliceChildIfPending();
 
         // 방금 닫은 대사에 선택지가 달려 있었다면, 대화창은 그대로 둔 채 선택지를 이어서 띄운다
         // (Inspect()에서 pendingTalkChoices에 미리 담아둔다).
