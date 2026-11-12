@@ -859,8 +859,21 @@ public class InvestigationController : MonoBehaviour
             return;
         }
 
+        // 저장 창이 떠 있으면(예: 사장실 앞 도착) 창이 닫힌 뒤에 미션 카드를 띄운다.
+        // 자료실처럼 "저장 -> 미션 카드" 순서로 하나씩 보이게 하기 위해서다.
+        StartCoroutine(StartScreenMinigameAfterSave(screenId, screen.minigameLabel, passedFlag));
+    }
+
+    private System.Collections.IEnumerator StartScreenMinigameAfterSave(string screenId, string label, string passedFlag)
+    {
+        while (SaveSlotDialog.Instance != null && SaveSlotDialog.Instance.IsOpen) yield return null;
+
+        // 기다리는 사이 다른 화면으로 옮겼거나 조사가 끝났으면 띄우지 않는다.
+        if (!inSession || activeScreenId != screenId) yield break;
+        if (MinigameController.Instance == null) yield break;
+
         MinigameController.Instance.StartMinigame(
-            screen.minigameLabel,
+            label,
             onSuccessCallback: () => InventoryManager.Instance?.AddItem(passedFlag),
             // 지금은 항상 성공하는 스텁이라 실패 경로가 없다 (MinigameController.cs 상단 주석 참고).
             onFailCallback: null);
@@ -1193,15 +1206,18 @@ public class InvestigationController : MonoBehaviour
         activeScreenId = targetId;
         visitedScreenIds.Add(activeScreenId);
 
-        EnterScreen(activeScreenId, targetScreen);
-
-        // 사장실 앞에 처음 도착한 순간 저장 창을 띄운다 (화면을 먼저 그린 뒤 그 위에 뜬다).
-        if (string.Equals(targetId, CeoRoomFrontScreenId, StringComparison.OrdinalIgnoreCase) &&
-            InventoryManager.Instance != null && !InventoryManager.Instance.HasItem(CeoRoomSaveShownFlag))
+        // 사장실 앞에 처음 도착한 순간 저장 창을 띄운다.
+        // EnterScreen()보다 먼저 열어야, 그 안에서 시작하는 미션 카드가 저장 창이 닫힐 때까지
+        // 기다린다 (EnterScreen의 StartScreenMinigameAfterSave 참고). 화면(배경)은 그 아래에 그려진다.
+        bool showCeoSave = string.Equals(targetId, CeoRoomFrontScreenId, StringComparison.OrdinalIgnoreCase) &&
+            InventoryManager.Instance != null && !InventoryManager.Instance.HasItem(CeoRoomSaveShownFlag);
+        if (showCeoSave)
         {
             InventoryManager.Instance.AddItem(CeoRoomSaveShownFlag);
             DialogueSystem.Instance?.ReachSavePointAtNextLine("#07 사장실 진입");
         }
+
+        EnterScreen(activeScreenId, targetScreen);
     }
 
     // 지금 화면에 AutoExit 조건(ScreenData.autoExitRequiredItemIds)이 걸려 있고, 그 아이템을
