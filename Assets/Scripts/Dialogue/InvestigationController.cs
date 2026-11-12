@@ -119,8 +119,13 @@ public class InvestigationController : MonoBehaviour
     // 자료실 단서 세 개가 전부 이 방식이라, 세 개를 다 읽고 닫아야 자동 이동
     // 조건(CheckAutoExit)이 검사된다(대사 없이 뷰어만 열리면 그 순간 조용히 채워져버려
     // 부자연스럽다).
+    //
+    // ===== #01 내 책상의 서류도 여기에 넣는다 =====
+    // 같은 서류를 #07에서 제대로 조사(뷰어 + 형광펜)할 수 있어서, #01에서는 뷰어를 열지 않고
+    // 대사(InvestigationData.csv의 Text 칸)만 보여준다. Description 타입이라 아이템은 얻지 않는다.
     private static readonly HashSet<string> ItemHotspotsSkipAutoViewer = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
     {
+        TextKey("BG_01_MyDesk", "Hotspot_Documents"),
         TextKey("BG_07_InvestigationSite_05", "Hotspot_Documents_F01R_Clue"),
         TextKey("BG_07_InvestigationSite_05", "Hotspot_Documents_F02R_Clue1"),
         TextKey("BG_07_InvestigationSite_05", "Hotspot_Documents_F02R_Clue2"),
