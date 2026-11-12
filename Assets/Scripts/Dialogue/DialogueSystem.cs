@@ -42,6 +42,9 @@ public class DialogueSystem : MonoBehaviour
     public DialogueData currentDialogue;
     private int lineIndex = 0;
 
+    // 조사 줄의 세이브포인트 창을 이미 보여준(또는 불러오기로 건너뛰어야 하는) 줄 번호. 같은 줄에서 창이 두 번 뜨는 것을 막는다.
+    private int suppressSaveIndex = -1;
+
     // 지금 진행 중인 CSV 파일 이름(확장자 제외). 세이브/로드에서 "어디까지 봤는지"를
     // 기록하고 복원하는 데 쓴다 (SavePointManager.cs 참고).
     private string currentScenarioCsv = "";
@@ -782,6 +785,9 @@ public class DialogueSystem : MonoBehaviour
         // 대비해 범위를 잘라준다. 안 그러면 바로 "대사 세트 종료"로 튕긴다.
         lineIndex = Mathf.Clamp(startLineIndex, 0, data.lines != null ? data.lines.Count : 0);
 
+        // 세이브를 불러와 곧바로 "세이브포인트인 조사 줄"에서 시작하면, 저장 창이 또 뜨지 않게 한다.
+        suppressSaveIndex = startLineIndex > 0 ? lineIndex : -1;
+
         if (choicePanel != null) choicePanel.SetActive(false);
 
         // ===== 세이브를 불러왔을 때 엉뚱한 대사가 잠깐 보이는 문제 =====
@@ -1003,6 +1009,22 @@ public class DialogueSystem : MonoBehaviour
             {
                 Debug.LogWarning("[DialogueSystem] InvestigationController가 없어 조사를 건너뜁니다.");
                 ShowNextSentence();
+                return;
+            }
+
+            // 조사 줄에 IsSavePoint=TRUE가 적혀 있으면 조사 화면을 열기 전에 저장 창을 띄운다
+            // (이 분기는 DisplayLine()을 거치지 않아서 여기서 따로 처리해야 한다. 예: #02 해안도로).
+            // lineIndex는 이미 1 늘어난 값이라, 불러왔을 때 이 조사 화면이 다시 열리도록 1을 뺀다.
+            // 저장 창이 닫히면 ShowNextSentence()가 불리므로, lineIndex를 이 조사 줄로 되돌려 두면
+            // 창을 닫은 뒤 같은 줄이 다시 와서 조사 화면이 열린다 (이번에는 suppressSaveIndex로 저장 창을 건너뜀).
+            if (line.isSavePoint && SavePointManager.Instance != null &&
+                SaveSlotDialog.Instance != null && suppressSaveIndex != shownIndex)
+            {
+                suppressSaveIndex = shownIndex;
+                lineIndex = shownIndex;
+                // 저장 창 뒤로 직전 대사창이 비쳐 보이지 않게 끈다 (조사 화면은 대화창 없이 열린다).
+                if (dialoguePanel != null) dialoguePanel.SetActive(false);
+                SavePointManager.Instance.ReachSavePoint(line.savePointId, currentScenarioCsv, shownIndex);
                 return;
             }
 
@@ -2606,6 +2628,10 @@ public class DialogueSystem : MonoBehaviour
                 var investigateLine = new DialogueLine();
                 investigateLine.isInvestigation = true;
                 investigateLine.investigationId = GetField(data[i], "InvestigationId");
+
+                // 조사 줄에도 IsSavePoint를 적을 수 있다 (예: #02 해안도로). 처리는 ShowNextSentence() 참고.
+                investigateLine.isSavePoint = GetField(data[i], "IsSavePoint").ToLower() == "true";
+                investigateLine.savePointId = GetField(data[i], "SavePointId");
 
                 // 이 줄의 BGM/SFX 칸도 읽어둔다 (ApplySoundColumns() 상단 주석 참고 - 원래
                 // 여기가 빠져 있어서 조사 줄에서 세이브를 불러오면 BGM이 안 나오는 버그가 있었다.
