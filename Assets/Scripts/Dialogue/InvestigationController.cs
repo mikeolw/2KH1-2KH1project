@@ -885,6 +885,13 @@ public class InvestigationController : MonoBehaviour
         if (!inSession || activeScreenId != screenId) yield break;
         if (MinigameController.Instance == null) yield break;
 
+        // 안내 대사가 아직 떠 있으면 닫힐 때까지 기다린다 (닫히면 대화창이 꺼진다).
+        while (IsShowingTalkLine) yield return null;
+        if (!inSession || activeScreenId != screenId) yield break;
+
+        // 대화창이 켜져 있으면 끈다. 미션 카드 뒤로 AUTO/SKIP 버튼과 대화창이 비쳐 보이지 않게.
+        SetDialogueVisible(false);
+
         MinigameController.Instance.StartMinigame(
             label,
             onSuccessCallback: () => InventoryManager.Instance?.AddItem(passedFlag),

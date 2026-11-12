@@ -986,6 +986,11 @@ public class DialogueSystem : MonoBehaviour
                 onSuccessCallback: () => ShowNextSentence(),
                 onFailCallback: () => GameFlowManager.Instance.TriggerEnding(line.minigameFailEnding)
             );
+
+            // 위에서 대화창을 켜 뒀으므로, 미션 카드가 실제로 떠 있으면 다시 끈다 (키패드와 같은 이유).
+            // 다음 일반 대사의 ShowDialoguePanel()이 다시 켜 준다.
+            if (MinigameController.Instance.IsActive && dialoguePanel != null)
+                dialoguePanel.SetActive(false);
             return;
         }
 
