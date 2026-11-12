@@ -61,7 +61,6 @@ public class DocumentHighlightPlayer : MonoBehaviour
     private const float ScrollTime = 0.26f;    // 그 줄로 자료를 굴리는 시간
     private const float TypeInterval = 0.03f;  // 글자 한 자 간격
     private const float LineBreakPause = 0.14f;
-
     // 말풍선
     private const float BubbleMaxW = 470f, BubblePadX = 26f, BubblePadTop = 26f, BubblePadBottom = 20f;
     private const float BubbleFont = 24f, NameFont = 19f;
@@ -168,8 +167,13 @@ public class DocumentHighlightPlayer : MonoBehaviour
 
         running = null;
 
-        // 3) 말풍선. 대사가 없으면(드라이브 파일이 없거나 비워둔 칸) 조용히 넘어간다.
-        if (!spot.HasText) yield break;
+        // 3) 말풍선. 대사가 없는 칸(드라이브 파일이 없거나 비워둔 칸)은 클릭을 기다리지 않고
+        //    바로 다음 칸을 긋는다. 대사가 있는 칸이 나오거나 끝까지 갈 때까지 이어진다.
+        if (!spot.HasText)
+        {
+            Advance();
+            yield break;
+        }
         ShowBubbleAt(i, spot.speaker);
         yield return StartCoroutine(TypeOut(fullText));
     }
@@ -206,6 +210,11 @@ public class DocumentHighlightPlayer : MonoBehaviour
                 ShowBubbleAt(index, spot.speaker);
                 bubbleText.text = spot.text;
                 if (bubbleArrow != null) bubbleArrow.gameObject.SetActive(true);
+            }
+            else if (index < spots.Count - 1)
+            {
+                // 대사 없는 칸을 건너뛰는 중이었다면 멈추지 말고 다음 칸으로 이어간다
+                Advance();
             }
         }
     }
