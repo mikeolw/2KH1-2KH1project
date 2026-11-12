@@ -2456,7 +2456,14 @@ public class DialogueSystem : MonoBehaviour
         foreach (var result in raycastResults)
         {
             var hit = result.gameObject;
-            if (panelTf != null && hit.transform.IsChildOf(panelTf)) return false;
+            // AUTO/SKIP/SKIP ALL/LOG도 대화창의 자식이지만 "버튼"이다 - 이걸 대화창 클릭으로 치면 버튼을
+            // 누르는 순간 대사가 먼저 한 줄 넘어가고(말풍선 ↔ 대화창 전환으로 버튼이 자리를 옮김),
+            // 손을 뗄 때는 버튼이 이미 다른 자리라서 onClick이 안 불렸다.
+            if (panelTf != null && hit.transform.IsChildOf(panelTf))
+            {
+                var panelButton = hit.GetComponentInParent<Button>();
+                return panelButton != null && panelButton.transform.IsChildOf(panelTf);
+            }
             if (hit.GetComponentInParent<Button>() != null)
             {
                 if (dialogueShowing && hit.GetComponentInParent<InvestigatableObject>() != null)
