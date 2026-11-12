@@ -1810,7 +1810,17 @@ public class InvestigationController : MonoBehaviour
             // 붙을 수 있으므로 타입은 보지 않고 talkChoices 존재 여부만 본다.
             bool hasChoices = obj.talkChoices != null && obj.talkChoices.Count > 0;
 
-            if (!hasWrittenNote && !hasChoices)
+            // ===== 사람과 나눈 대화는 수첩에 그대로 따라 적지 않는다 =====
+            // 대화 전체가 수첩에 박히면 메모가 아니라 대본이 된다. 말을 거는 오브젝트(Talk)와,
+            // 차재훈이 아닌 사람이 말하는 지문(예: #07 사무실 직원)은 자동 메모를 건너뛴다.
+            // 차재훈의 혼잣말(책상 서랍 등)은 그대로 적힌다. NoteEntries.csv에 직접 적은
+            // 메모는 이 검사와 상관없이 위의 hasWrittenNote로 적힌다.
+            string explicitWho = obj.explicitSpeaker ?? "";
+            bool isConversation = obj.type == HotspotType.Talk ||
+                                  (!string.IsNullOrEmpty(explicitWho) && explicitWho != "차재훈");
+            bool skipAutoNote = isConversation;
+
+            if (!hasWrittenNote && !hasChoices && !skipAutoNote)
             {
                 // Talk 타입은 대사이므로 "누가 이렇게 말했다" 형태로, 나머지는 조사 설명 그대로 적는다.
                 string noteBody = obj.type == HotspotType.Talk ? obj.talkSentence : obj.description;
