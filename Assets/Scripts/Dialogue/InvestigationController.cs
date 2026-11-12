@@ -1804,6 +1804,14 @@ public class InvestigationController : MonoBehaviour
         // 남는다 (자료 뷰어를 열었다 닫아도 뒤에 남아 있던 문제). 다른 것을 눌렀다는 건 그 대사를
         // 다 봤다는 뜻이므로 끝낸 것으로 보고 대화창을 닫는다.
         // 미뤄 둔 선택지는 버리고, pendingAfterDismiss(자동 이동 검사)는 그대로 둔다.
+        // 아이의 대사가 떠 있는데 그 아이를 다시 누르면 대사를 처음부터 다시 띄우지 않고 다음 진행으로 넘긴다
+        // (대사를 닫으면 아이가 사라진다 - DismissTalkLine / FinishPoliceChildIfPending 참고).
+        if (IsShowingTalkLine && policeChildVanishPending && IsPoliceChild(activeScreenId, obj.gameObject.name))
+        {
+            DialogueSystem.Instance?.AdvanceInvestigationLine();
+            return;
+        }
+
         if (IsShowingTalkLine)
         {
             IsShowingTalkLine = false;
