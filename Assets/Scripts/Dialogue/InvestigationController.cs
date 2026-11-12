@@ -933,8 +933,9 @@ public class InvestigationController : MonoBehaviour
     {
         if (!inSession) return;
 
-        // 다른 대사(선택지·후속 처리가 걸려 있을 수 있음)가 떠 있는 중에는 끼어들지 않고 예전처럼 나간다.
-        if (!exitWarningShown && !IsShowingTalkLine && CountUninspectedHotspots() > 0)
+        // 대사창에 안내문이든 오브젝트 대사든 떠 있어도, 살펴볼 곳이 남았으면 경고를 띄운다.
+        // (대사 위에 경고가 덮이고, 닫으면 남은 줄/선택지가 이어진다)
+        if (!exitWarningShown && CountUninspectedHotspots() > 0)
         {
             exitWarningShown = true;
             ShowLineInDialogue("", exitWarningText);
