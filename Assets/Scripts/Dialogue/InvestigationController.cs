@@ -231,7 +231,7 @@ public class InvestigationController : MonoBehaviour
     private const string PoliceChildKey = "Hotspot_Child";
     private const int PoliceChildRevealCount = 2;
     private const string PoliceChildGoneFlag = "police_child_gone";
-    private const string PoliceChildLeaveSfx = "Sounds/SFX/runningFootsteps";
+    private const string PoliceChildLeaveSfx = "Sounds/SFX/RunningFootsteps";
 
     // 아이의 대사를 닫으면 사라져야 하는 상태인가 (DismissTalkLine / FinishPoliceChildIfPending 참고).
     private bool policeChildVanishPending;
