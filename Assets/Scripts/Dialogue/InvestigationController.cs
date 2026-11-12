@@ -104,6 +104,18 @@ public class InvestigationController : MonoBehaviour
     private const string CeoRoomFrontScreenId = "BG_07_InvestigationSite_06";
     private const string CeoRoomSaveShownFlag = "ceo_room_save_shown";
 
+    // ===== 자료실 / 사장실 문 여는 소리 =====
+    //   자료실: 문 앞 타이밍 클릭 미니게임에 성공했을 때 (StartResourceRoomSneakMinigame).
+    //   사장실: 사장실 문(Hotspot_CEORoomDoor)을 눌렀을 때 (Inspect의 EXIT 분기).
+    private const string DoorOpenSfx = "Sounds/SFX/OpenDoorSFX";
+    private const string CeoRoomDoorHotspotKey = "Hotspot_CEORoomDoor";
+
+    // ===== 사장실 트로피: 비밀번호 힌트를 찾은 뒤 누르면 쇠 떨어지는 소리 =====
+    // 힌트(safe_hint_note)가 없으면 안내문만 뜨고 이 분기까지 오지 않으므로 소리도 나지 않는다.
+    private const string TrophySfx = "Sounds/SFX/DropTheMetal_SFX";
+    private const string CeoRoomInsideScreenId = "BG_07_InvestigationSite_07";
+    private const string TrophyHotspotKey = "Hotspot_Trophy";
+
     // 지금 보여주고 있는 대사를 닫으면(DismissTalkLine) 실행할 일. pendingTalkChoices와
     // 같은 자리에서 쓰이지만 선택지가 아니라 "그냥 할 일 하나"를 미뤄두는 용도다 - 예)
     // 아이템을 얻어 자동 이동 조건이 채워졌을 때, 그 아이템을 보여주는 대사를 다 읽기도
@@ -231,7 +243,17 @@ public class InvestigationController : MonoBehaviour
     private const string PoliceChildKey = "Hotspot_Child";
     private const int PoliceChildRevealCount = 2;
     private const string PoliceChildGoneFlag = "police_child_gone";
-    private const string PoliceChildLeaveSfx = "Sounds/SFX/RunningFootsteps";
+    private const string PoliceChildLeaveSfx = "Sounds/SFX/RunningFootsteps_SFX";
+
+    // ===== 이벤트 07 사무실: 직원을 누르면 타자 소리 =====
+    // 새 CSV 컬럼 없이(팀 규칙) 화면/오브젝트 이름을 코드에 적어 식별한다.
+    //   Hotspot_Officer2(대리) = 빠른 타자, Hotspot_Officer3(신입) = 느린 타자. 누를 때마다 난다.
+    private const string OfficeScreenId = "BG_07_InvestigationSite_02";
+    private static readonly Dictionary<string, string> OfficeTypingSfx = new Dictionary<string, string>
+    {
+        { "Hotspot_Officer2", "Sounds/SFX/KeyboardFast_SFX" },
+        { "Hotspot_Officer3", "Sounds/SFX/Keyboard_SFX" },
+    };
 
     // 아이의 대사를 닫으면 사라져야 하는 상태인가 (DismissTalkLine / FinishPoliceChildIfPending 참고).
     private bool policeChildVanishPending;
@@ -935,7 +957,17 @@ public class InvestigationController : MonoBehaviour
 
         MinigameController.Instance.StartMinigame(
             label,
-            onSuccessCallback: () => InventoryManager.Instance?.AddItem(passedFlag),
+            onSuccessCallback: () =>
+            {
+                InventoryManager.Instance?.AddItem(passedFlag);
+
+                // '시작'을 누른 뒤에 이 화면의 안내문을 띄운다 (ShowScreenContent에서 미뤄 둔 것).
+                if (inSession && activeScreenId == screenId && screenData != null
+                    && screenData.TryGetValue(screenId, out ScreenData introScreen))
+                {
+                    ShowIntroText(introScreen);
+                }
+            },
             // 지금은 항상 성공하는 스텁이라 실패 경로가 없다 (MinigameController.cs 상단 주석 참고).
             onFailCallback: null);
     }
@@ -963,6 +995,27 @@ public class InvestigationController : MonoBehaviour
         BuildHotspots(screen);
 
         // 3) 안내문을 대화창에 띄운다.
+        // 이 화면에 미션 카드가 뜰 예정이면 안내문은 미루고, 카드의 '시작'을 누른 뒤에 띄운다
+        // (StartScreenMinigameAfterSaveInner 참고). 예) 자료실 앞 "문을 열어 진입할 수 있을 것 같다.",
+        // 자료실 안 "자료실 내부다. 책등에 제목이 적혀 있다."
+        if (!WillShowMissionCard(activeScreenId, screen) && ShowIntroText(screen)) return;
+
+        // 안내문이 없거나 미뤘으면 대화창은 비워둔다(조사 화면을 가리지 않게).
+        SetDialogueVisible(false);
+    }
+
+    // 이 화면을 열면 미션 카드가 뜰 것인가 (EnterScreen의 판정과 같은 조건).
+    private bool WillShowMissionCard(string screenId, ScreenData screen)
+    {
+        if (string.IsNullOrEmpty(screenId) || screen == null) return false;
+        if (string.IsNullOrEmpty(screen.minigameLabel) || !HasAllItems(screen.minigameRequiredItemIds)) return false;
+        if (InventoryManager.Instance != null && InventoryManager.Instance.HasItem(ScreenMinigamePassedFlag(screenId))) return false;
+        return MinigameController.Instance != null;
+    }
+
+    // 화면 안내문을 대화창에 띄운다. 띄웠으면 true, 띄울 안내문이 없거나 일부러 건너뛰었으면 false.
+    private bool ShowIntroText(ScreenData screen)
+    {
         // ===== 자료실 앞은 일을 끝낸 뒤에 다시 와도 같은 안내를 하면 안 된다 =====
         // _04의 안내문은 "문을 열어 진입할 수 있을 것 같다"처럼 아직 들어가기 전을 말한다.
         // 그런데 자료실에서 증거를 다 모아 나온 뒤에도 이 복도를 다시 지나갈 수 있어서
@@ -974,15 +1027,9 @@ public class InvestigationController : MonoBehaviour
                          && ReferenceEquals(doorScreen, screen)
                          && HasAllResourceRoomClues();
 
-        if (!skipIntro && !string.IsNullOrWhiteSpace(screen.introText))
-        {
-            ShowLineInDialogue("", screen.introText, screen.introLongMonologue);
-        }
-        else
-        {
-            // 안내문이 없으면 대화창은 비워둔다(조사 화면을 가리지 않게).
-            SetDialogueVisible(false);
-        }
+        if (skipIntro || string.IsNullOrWhiteSpace(screen.introText)) return false;
+        ShowLineInDialogue("", screen.introText, screen.introLongMonologue);
+        return true;
     }
 
     // "조사 그만하기" 버튼을 눌렀을 때.
@@ -1830,6 +1877,13 @@ public class InvestigationController : MonoBehaviour
         // 경찰서: 다른 오브젝트를 충분히 조사했으면 아이가 나타난다.
         RevealPoliceChildIfNeeded();
 
+        // 이벤트 07 사무실의 직원 두 명은 누르면 타자 소리가 난다.
+        if (string.Equals(activeScreenId, OfficeScreenId, StringComparison.OrdinalIgnoreCase)
+            && OfficeTypingSfx.TryGetValue(obj.gameObject.name, out string typingSfx))
+        {
+            AudioManager.PlaySfxIfIdle(typingSfx);   // 앞 소리가 아직 나는 중이면 겹치지 않게 건너뛴다
+        }
+
         // ===== "엉뚱한 곳" 페널티 =====
         // 다른 처리(아이템 지급, 선택지 등)와는 완전히 별개로, 눌린 오브젝트가 WrongHotspots에
         // 있으면 매번(다시 눌러도 그때마다) 시간을 깎는다. 이 오브젝트들엔 RequiredItemId나
@@ -1946,6 +2000,12 @@ public class InvestigationController : MonoBehaviour
             string target = obj.afterTargetScreenId.Trim();
             if (string.Equals(target, "EXIT", StringComparison.OrdinalIgnoreCase))
             {
+                // 사장실 문을 누르면 문 여는 소리 (다른 EXIT 오브젝트는 소리 없음)
+                if (activeScreenId == CeoRoomFrontScreenId && obj.gameObject.name == CeoRoomDoorHotspotKey)
+                    AudioManager.PlaySfxIfIdle(DoorOpenSfx);
+                // 사장실 트로피를 누르면(힌트를 찾은 뒤) 쇠 떨어지는 소리
+                if (activeScreenId == CeoRoomInsideScreenId && obj.gameObject.name == TrophyHotspotKey)
+                    AudioManager.PlaySfxIfIdle(TrophySfx);
                 Exit();
             }
             else
@@ -2306,6 +2366,7 @@ public class InvestigationController : MonoBehaviour
         TimingClickMinigameController.Instance.StartGame(
             onSuccessCallback: () =>
             {
+                AudioManager.PlaySfxIfIdle(DoorOpenSfx);   // 자료실 문이 열리는 소리
                 if (!string.IsNullOrWhiteSpace(choice.itemId) && InventoryManager.Instance != null)
                 {
                     InventoryManager.Instance.AddItem(choice.itemId.Trim());

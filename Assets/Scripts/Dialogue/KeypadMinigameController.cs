@@ -119,7 +119,12 @@ public class KeypadMinigameController : MonoBehaviour
 
         root.SetActive(true);
         RedrawDisplay();
+        AudioManager.PlaySfx(KeypadOpenSfx);   // 키패드가 뜰 때 시계 소리
     }
+
+    // 효과음 파일 (Assets/Resources/ 아래, 확장자 없이)
+    private const string KeypadOpenSfx = "Sounds/SFX/Clock_SFX";
+    private const string KeypadCorrectSfx = "Sounds/SFX/AccessGranted_SFX";
 
     // "800504+3" 처럼 적혀 있으면 시저 암호를 적용한 값을 돌려주고,
     // "133837" 처럼 숫자만 적혀 있으면 그대로 돌려준다. 둘 다 아니면 빈 문자열.
@@ -238,6 +243,7 @@ public class KeypadMinigameController : MonoBehaviour
             displayText.color = Color.black;
             messageText.color = okColor;
             messageText.text = "맞았다. 금고가 열린다.";
+            AudioManager.PlaySfx(KeypadCorrectSfx);   // 암호를 맞힌 순간 (겹치지 않게 막지 않고 항상 낸다)
             Invoke(nameof(Success), successHoldSeconds);
             return;
         }
