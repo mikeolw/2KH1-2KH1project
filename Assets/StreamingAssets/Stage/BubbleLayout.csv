@@ -73,7 +73,7 @@ scenario_02,59,bubble,-323,-208,d18bc45f
 scenario_02,60,bubble,-381,23,ec1844e1
 scenario_02,61,bubble,-370,79,84ad2f9e
 scenario_02,62,bubble,-421,68,535d667e
-scenario_02,63,bubble,,,aaf57d9b
+scenario_02,63,bubble,-314,-163,aaf57d9b
 scenario_02,64,bubble,-321,6,fc6da81a
 scenario_02,65,bubble,483,222,f30e3f55
 scenario_02,66,bubble,-354,-159,86089d0d
@@ -94,9 +94,11 @@ scenario_02,92,bubble,82,197,67e52149
 scenario_02,95,bubble,40,191,f30e3f55
 scenario_02,97,bubble,-40,-79,b579b1d7
 scenario_02,100,bubble,-24,106,f6031f72
+scenario_02,102,bubble,-94,78,84e06c5b
 scenario_02,103,bubble,-136,29,1dbbc3fd
 scenario_02,104,bubble,-42,60,a65db3ca
 scenario_02,106,bubble,-134,35,9e7699a6
+scenario_02,108,bubble,-105,89,143b6cbc
 scenario_02,110,bubble,60,180,ab3423f9
 scenario_02,112,bubble,56,162,ab3423f9
 scenario_02,114,bubble,38,124,ee1d7dbf
@@ -135,8 +137,8 @@ scenario_02,186,bubble,299,-72,2bc08f99
 scenario_02,188,bubble,301,210,28256a95
 scenario_02,189,bubble,298,-96,06c21092
 scenario_02,190,bubble,287,-85,af48f5bc
-scenario_02,191,bubble,365,-134,329d75dc
-scenario_02,192,bubble,374,-150,aed77a42
+scenario_02,191,bubble,316,-96,329d75dc
+scenario_02,192,bubble,291,-81,aed77a42
 scenario_02,194,bubble,332,-103,18c394c7
 scenario_02,195,bubble,339,-121,f3dcedcf
 scenario_02,197,bubble,321,-115,67e52149
