@@ -13,9 +13,9 @@ using UnityEngine.UI;
 //
 //   (화면이 0.5초 만에 검게 어두워진다)
 //
-//                       BAD END  ·  03
-//                         검은 바다
-//                           ────
+//                       BAD END  ·  03        ← 작은 흰 글씨
+//                         검은 바다           ← 큰 흰 글씨 (버튼과 같은 글꼴, 보통 굵기)
+//                           ───
 //                       [  타이틀로  ]        ← 조금 늦게 나타난다
 //
 // ===== 엔딩 이름 바꾸는 법 =====
@@ -98,24 +98,27 @@ public class EndingCardUI : MonoBehaviour
         textGroup.alpha = 0f;
         textGroup.blocksRaycasts = false;
 
-        bool bad = entry.kind == "BAD END";
-        var kind = MinigameTheme.AddText(trt, "Kind", 20, bad ? MinigameTheme.Danger : MinigameTheme.Accent);
-        MinigameTheme.Center(kind.rectTransform, new Vector2(800f, 30f), new Vector2(0f, 96f));
-        kind.fontStyle = FontStyles.Bold;
-        kind.characterSpacing = 28f;
+        // ===== 글씨 =====
+        // [타이틀로] 버튼과 같은 글꼴·같은 굵기(보통)로 맞춘다. 예전에는 Bold를 걸었는데, 이 글꼴에는
+        // 굵은 글꼴이 따로 없어서 획을 억지로 부풀린 모양이 되어 어색했다. 색도 둘 다 흰색으로 통일.
+        // 위 줄(BAD END · 06)은 작게, 자간을 조금 벌려 제목을 받쳐 주는 정도로만 둔다.
+        var kind = MinigameTheme.AddText(trt, "Kind", 18, MinigameTheme.TextBright);
+        MinigameTheme.Center(kind.rectTransform, new Vector2(800f, 28f), new Vector2(0f, 84f));
+        kind.fontStyle = FontStyles.Normal;
+        kind.characterSpacing = 10f;
         kind.text = $"{entry.kind}  ·  {number:00}";
 
-        var title = MinigameTheme.AddText(trt, "Name", 56, MinigameTheme.TextBright);
-        MinigameTheme.Center(title.rectTransform, new Vector2(1100f, 80f), new Vector2(0f, 26f));
-        title.fontStyle = FontStyles.Bold;
-        title.characterSpacing = 6f;
+        var title = MinigameTheme.AddText(trt, "Name", 48, MinigameTheme.TextBright);
+        MinigameTheme.Center(title.rectTransform, new Vector2(1100f, 72f), new Vector2(0f, 28f));
+        title.fontStyle = FontStyles.Normal;
+        title.characterSpacing = 2f;
         title.text = entry.name;
 
         var rule = MinigameTheme.AddImage(trt, "Rule", MinigameTheme.Line);
-        MinigameTheme.Center(rule.rectTransform, new Vector2(64f, 2f), new Vector2(0f, -36f));
+        MinigameTheme.Center(rule.rectTransform, new Vector2(48f, 1f), new Vector2(0f, -24f));
 
         // [타이틀로]
-        button = MinigameTheme.MakeButton(transform, "Btn_Title", "타이틀로", new Vector2(240f, 56f), new Vector2(0f, -140f), Finish);
+        button = MinigameTheme.MakeButton(transform, "Btn_Title", "타이틀로", new Vector2(220f, 52f), new Vector2(0f, -112f), Finish, 20f);
         buttonGroup = button.gameObject.AddComponent<CanvasGroup>();
         buttonGroup.alpha = 0f;
         buttonGroup.interactable = false;
@@ -135,7 +138,17 @@ public class EndingCardUI : MonoBehaviour
         backGroup.alpha = 1f;
 
         yield return new WaitForSecondsRealtime(TextDelaySeconds);
-        yield return Fade(textGroup, TextFadeSeconds);
+        // 글자는 나타나면서 살짝(12px) 떠오른다. 그냥 켜지는 것보다 덜 딱딱해 보인다.
+        var textRt = (RectTransform)textGroup.transform;
+        for (float t = 0f; t < TextFadeSeconds; t += Time.unscaledDeltaTime)
+        {
+            float k = 1f - Mathf.Pow(1f - t / TextFadeSeconds, 3f);   // 처음 빠르고 끝에 부드럽게
+            textGroup.alpha = k;
+            textRt.anchoredPosition = new Vector2(0f, Mathf.Lerp(-12f, 0f, k));
+            yield return null;
+        }
+        textGroup.alpha = 1f;
+        textRt.anchoredPosition = Vector2.zero;
 
         yield return new WaitForSecondsRealtime(ButtonDelaySeconds);
         buttonGroup.interactable = true;
