@@ -212,12 +212,13 @@ public class SavePointManager : MonoBehaviour
         InvestigationController.ResetInspected();
     }
 
-    // 세이브 슬롯 목록에 "1시간 23분" 같이 표시할 때 쓰는 도우미.
+    // 세이브 슬롯 목록에 "01:23:45" (시:분:초) 같이 표시할 때 쓰는 도우미.
     public static string FormatPlayTime(float seconds)
     {
         int total = Mathf.Max(0, Mathf.FloorToInt(seconds));
         int hours = total / 3600;
         int minutes = (total % 3600) / 60;
-        return hours > 0 ? $"{hours}시간 {minutes}분" : $"{minutes}분";
+        int secs = total % 60;
+        return $"{hours:00}:{minutes:00}:{secs:00}";
     }
 }

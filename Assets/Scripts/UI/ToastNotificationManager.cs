@@ -48,6 +48,7 @@ public class ToastNotificationManager : MonoBehaviour
 
     private readonly Queue<ToastRequest> queue = new Queue<ToastRequest>();
     private bool isShowing;
+    private int suppressedNoteFrame = -1;   // 메모장 얻기 전이라 알림을 건너뛴 프레임 번호
 
     private void Awake()
     {
@@ -91,10 +92,27 @@ public class ToastNotificationManager : MonoBehaviour
         if (info == null) return;
 
         Enqueue("ITEM", $"{info.displayName} 획득", info.GetIcon());
+
+        // 메모장을 얻는 순간, 같은 프레임에 이미 적힌 메모가 있으면 그 알림을 이어서 띄운다.
+        if (itemId == UIManager.NoteUnlockItemId && suppressedNoteFrame == Time.frameCount)
+        {
+            suppressedNoteFrame = -1;
+            Enqueue("NOTE", "새 메모가 추가되었습니다", null);
+        }
     }
 
     private void OnNoteAdded()
     {
+        // 메모장을 얻기 전에는 알림을 띄우지 않는다 (메모장에는 평소처럼 기록된다).
+        // 단, 메모장을 줍는 그 조사에서는 메모가 아이템보다 먼저 적힌다(InvestigationController가
+        // 수첩 기록 -> AddItem 순서). 그래서 같은 프레임에 억제된 메모가 있었다면
+        // 메모장 획득 순간(OnItemAdded)에 알림을 대신 띄운다.
+        if (!UIManager.IsNoteUnlocked)
+        {
+            suppressedNoteFrame = Time.frameCount;
+            return;
+        }
+
         // 메모 내용은 스포일러가 될 수 있어 보여주지 않고, 추가되었다는 사실만 알린다.
         Enqueue("NOTE", "새 메모가 추가되었습니다", null);
     }

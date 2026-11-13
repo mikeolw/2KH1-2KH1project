@@ -391,9 +391,14 @@ public class NotePanelUI : MonoBehaviour
         return "메모";
     }
 
+    // Assets/Resources/Sounds/SFX/PageTurn_SFX.mp3
+    private const string PageTurnSfx = "Sounds/SFX/PageTurn_SFX";
+
     private void GoToSpread(int index)
     {
         if (index < 0 || index >= SpreadCount || index == currentSpread) return;
+        // 장을 넘길 때 종이 넘기는 소리 (‹ › 버튼과 ←/→ 키가 모두 여기를 지난다)
+        AudioManager.PlaySfx(PageTurnSfx, 0.1f);
         ShowSpread(index);
     }
 

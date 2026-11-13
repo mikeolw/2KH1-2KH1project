@@ -115,6 +115,23 @@ public class AudioManager : MonoBehaviour
         PlaySfx(m.LoadClip(resourcePath));
     }
 
+    // 이 함수로 낸 효과음이 아직 끝나지 않았으면, 새로 부른 소리는 아예 내지 않는다 (겹치지 않게).
+    // 길이가 긴 효과음(타자 소리, 문 소리 등)이 연달아 눌러져도 먼저 나던 소리가 끝까지 들린다.
+    // 이 함수를 쓰지 않는 소리(클릭, 마우스 올림 등)는 영향을 주지도 받지도 않는다.
+    private float exclusiveSfxBusyUntil;
+
+    public static void PlaySfxIfIdle(string resourcePath)
+    {
+        if (string.IsNullOrEmpty(resourcePath)) return;
+        var m = Ensure();
+        if (Time.unscaledTime < m.exclusiveSfxBusyUntil) return;
+
+        var clip = m.LoadClip(resourcePath);
+        if (clip == null) return;
+        m.exclusiveSfxBusyUntil = Time.unscaledTime + clip.length;
+        PlaySfx(clip);
+    }
+
     // 한 번 읽은 소리는 기억해 둔다. 없는 파일도 "없음"으로 기억해서 경고는 한 번만 띄운다.
     private AudioClip LoadClip(string resourcePath)
     {

@@ -72,6 +72,14 @@ public class InvestigationController : MonoBehaviour
     // "조사 대사 닫기"로 돌린다.
     public bool IsShowingTalkLine { get; private set; }
 
+    // 지금 줄 뒤에 이어서 보여줄 줄이나 선택지가 남아 있는가 (남아 있으면 오브젝트 클릭으로 끊지 않는다).
+    public bool HasPendingTalkFollowUp =>
+        (pendingFollowUps != null && pendingFollowUps.Count > 0) || pendingTalkChoices != null;
+
+    // 지금 떠 있는 대사가 오브젝트를 눌러서 뜬 것인가 (ShowLineInDialogue 참고).
+    // true면 화살표 이동을 막고, false(화면 진입 안내문 등)면 화살표를 누르는 순간 대사를 닫고 이동한다.
+    private bool talkLineFromObject;
+
     // 지금 보여주고 있는 Talk 대사를 닫으면(DismissTalkLine) 이어서 띄울 선택지.
     // Inspect()가 Talk 오브젝트에 선택지가 달려 있을 때 채워둔다 (ShowTalkChoices 참고).
     private List<InvestigationTalkChoice> pendingTalkChoices;
@@ -90,6 +98,23 @@ public class InvestigationController : MonoBehaviour
     // 목록(배열/HashSet)으로 바꾸고 OnTalkChoiceSelected()의 판정도 그에 맞게 넓히면 된다.
     private const string ResourceRoomDoorScreenId = "BG_07_InvestigationSite_04";
     private const string ResourceRoomDoorHotspotKey = "Hotspot_ResourceRoomdoor";
+
+    // 사장실 앞(_06)에 처음 도착하면 "#07 사장실 진입" 저장 창을 띄운다.
+    // 화살표로 자료실 앞과 왔다갔다해도 한 번만 뜨도록 표시 아이템을 남긴다.
+    private const string CeoRoomFrontScreenId = "BG_07_InvestigationSite_06";
+    private const string CeoRoomSaveShownFlag = "ceo_room_save_shown";
+
+    // ===== 자료실 / 사장실 문 여는 소리 =====
+    //   자료실: 문 앞 타이밍 클릭 미니게임에 성공했을 때 (StartResourceRoomSneakMinigame).
+    //   사장실: 사장실 문(Hotspot_CEORoomDoor)을 눌렀을 때 (Inspect의 EXIT 분기).
+    private const string DoorOpenSfx = "Sounds/SFX/OpenDoorSFX";
+    private const string CeoRoomDoorHotspotKey = "Hotspot_CEORoomDoor";
+
+    // ===== 사장실 트로피: 비밀번호 힌트를 찾은 뒤 누르면 쇠 떨어지는 소리 =====
+    // 힌트(safe_hint_note)가 없으면 안내문만 뜨고 이 분기까지 오지 않으므로 소리도 나지 않는다.
+    private const string TrophySfx = "Sounds/SFX/DropTheMetal_SFX";
+    private const string CeoRoomInsideScreenId = "BG_07_InvestigationSite_07";
+    private const string TrophyHotspotKey = "Hotspot_Trophy";
 
     // 지금 보여주고 있는 대사를 닫으면(DismissTalkLine) 실행할 일. pendingTalkChoices와
     // 같은 자리에서 쓰이지만 선택지가 아니라 "그냥 할 일 하나"를 미뤄두는 용도다 - 예)
@@ -110,11 +135,25 @@ public class InvestigationController : MonoBehaviour
     // 자료실 단서 세 개가 전부 이 방식이라, 세 개를 다 읽고 닫아야 자동 이동
     // 조건(CheckAutoExit)이 검사된다(대사 없이 뷰어만 열리면 그 순간 조용히 채워져버려
     // 부자연스럽다).
+    //
+    // ===== #01 내 책상의 서류도 여기에 넣는다 =====
+    // 같은 서류를 #07에서 제대로 조사(뷰어 + 형광펜)할 수 있어서, #01에서는 뷰어를 열지 않고
+    // 대사(InvestigationData.csv의 Text 칸)만 보여준다. Description 타입이라 아이템은 얻지 않는다.
     private static readonly HashSet<string> ItemHotspotsSkipAutoViewer = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
     {
+        TextKey("BG_01_MyDesk", "Hotspot_Documents"),
         TextKey("BG_07_InvestigationSite_05", "Hotspot_Documents_F01R_Clue"),
         TextKey("BG_07_InvestigationSite_05", "Hotspot_Documents_F02R_Clue1"),
         TextKey("BG_07_InvestigationSite_05", "Hotspot_Documents_F02R_Clue2"),
+    };
+
+    // ===== 이미 할 일을 끝낸 오브젝트를 다시 누르면 보여줄 "평소 대사"의 출처 =====
+    // 키: 다시 누르는 오브젝트(화면+핫스팟), 값: 대사를 빌려올 줄(화면+핫스팟).
+    // 예) #07 서랍은 열쇠를 얻은 뒤에는 #01 내 책상 서랍의 대사를 다시 보여준다.
+    private static readonly Dictionary<string, (string screenId, string hotspotKey)> RepeatLineSources =
+        new Dictionary<string, (string screenId, string hotspotKey)>(StringComparer.OrdinalIgnoreCase)
+    {
+        { TextKey("BG_07_InvestigationSite_01", "Hotspot_Drawer"), ("BG_01_MyDesk", "Hotspot_Drawer") },
     };
 
     // ===== "엉뚱한 곳"을 조사하면 타임어택 시간이 깎이는 오브젝트들 =====
@@ -194,6 +233,30 @@ public class InvestigationController : MonoBehaviour
     //   - TargetEnding   : 비어있지 않으면 이 보기를 고르는 즉시 그 엔딩으로 직행
     // 같은 InvestigationId+HotspotKey로 여러 줄을 적으면 그 줄 순서대로 선택지 버튼이 뜬다.
     private const string InvestigationTalkChoicesCsv = "Dialogues/InvestigationTalkChoices";
+
+    // ===== 경찰서(#03)의 아이: 다른 오브젝트를 2개 조사해야 나타났다가, 대사 뒤 뛰어서 사라진다 =====
+    // 새 CSV 컬럼 없이(팀 규칙) 화면/오브젝트 이름을 코드에 적어 식별한다 (자료실 문 예외와 같은 방식).
+    //   - 아이를 뺀 이 화면의 다른 오브젝트(사람 포함)를 PoliceChildRevealCount개 누르면 아이가 나타난다.
+    //   - 아이를 누르면 CSV에 적힌 대사가 나오고, 그 대사를 닫는 순간 발소리와 함께 사라진다.
+    //   - 한 번 사라지면 다시 나타나지 않는다 (표시 아이템 PoliceChildGoneFlag, 세이브에도 남는다).
+    private const string PoliceScreenId = "BG_03_Police";
+    private const string PoliceChildKey = "Hotspot_Child";
+    private const int PoliceChildRevealCount = 2;
+    private const string PoliceChildGoneFlag = "police_child_gone";
+    private const string PoliceChildLeaveSfx = "Sounds/SFX/RunningFootsteps_SFX";
+
+    // ===== 이벤트 07 사무실: 직원을 누르면 타자 소리 =====
+    // 새 CSV 컬럼 없이(팀 규칙) 화면/오브젝트 이름을 코드에 적어 식별한다.
+    //   Hotspot_Officer2(대리) = 빠른 타자, Hotspot_Officer3(신입) = 느린 타자. 누를 때마다 난다.
+    private const string OfficeScreenId = "BG_07_InvestigationSite_02";
+    private static readonly Dictionary<string, string> OfficeTypingSfx = new Dictionary<string, string>
+    {
+        { "Hotspot_Officer2", "Sounds/SFX/KeyboardFast_SFX" },
+        { "Hotspot_Officer3", "Sounds/SFX/Keyboard_SFX" },
+    };
+
+    // 아이의 대사를 닫으면 사라져야 하는 상태인가 (DismissTalkLine / FinishPoliceChildIfPending 참고).
+    private bool policeChildVanishPending;
 
     // 같은 키로 적은 둘째 줄부터의 대사 목록을 합친 줄(row)에 담아두는 임시 칸 이름 (LoadDataIfNeeded 참고).
     private const string FollowUpsKey = "__FollowUps";
@@ -845,9 +908,66 @@ public class InvestigationController : MonoBehaviour
             return;
         }
 
+        // 저장 창이 떠 있으면(예: 사장실 앞 도착) 창이 닫힌 뒤에 미션 카드를 띄운다.
+        // 자료실처럼 "저장 -> 미션 카드" 순서로 하나씩 보이게 하기 위해서다.
+        // 카드가 뜰 때까지(= '시작'을 누를 수 있게 될 때까지)는 오브젝트(문)를 누를 수 없게 막는다.
+        pendingMinigameScreenId = screenId;
+        StartCoroutine(StartScreenMinigameAfterSave(screenId, screen.minigameLabel, passedFlag));
+    }
+
+    // 화면 미니게임 카드가 아직 뜨지 않고 대기 중인 화면 id (없으면 null).
+    // 대기 중에는 Inspect()가 오브젝트 클릭을 무시한다. 카드가 뜨면 막(dim)이 클릭을 막는다.
+    private string pendingMinigameScreenId;
+
+    // 미션 카드를 띄우려고 기다리는 중인가. 이 동안 오브젝트는 눌러도 반응하지 않으므로
+    // 올림/누름 색(어두워짐)과 마우스 올림 표시(괄호/이름표/소리)도 내지 않는다.
+    public bool IsMinigamePending => pendingMinigameScreenId != null && pendingMinigameScreenId == activeScreenId;
+
+    private System.Collections.IEnumerator StartScreenMinigameAfterSave(string screenId, string label, string passedFlag)
+    {
+        try
+        {
+            yield return StartScreenMinigameAfterSaveInner(screenId, label, passedFlag);
+        }
+        finally
+        {
+            // 카드가 떴거나, 화면을 옮겼거나, 조사가 끝났거나 - 어느 경우든 대기는 끝났다.
+            if (pendingMinigameScreenId == screenId) pendingMinigameScreenId = null;
+        }
+    }
+
+    private System.Collections.IEnumerator StartScreenMinigameAfterSaveInner(string screenId, string label, string passedFlag)
+    {
+        // 한 프레임 기다린 뒤 저장 창을 확인한다. 화살표로 도착했을 때는 EnterScreen() 바로 뒤에
+        // 저장 창이 열리는데(NavigateToLinkedScreen), 기다리지 않고 검사하면 아직 닫혀 있어서
+        // 미션 카드가 저장 창보다 먼저 떠 버린다.
+        yield return null;
+        while (SaveSlotDialog.Instance != null && SaveSlotDialog.Instance.IsOpen) yield return null;
+
+        // 기다리는 사이 다른 화면으로 옮겼거나 조사가 끝났으면 띄우지 않는다.
+        if (!inSession || activeScreenId != screenId) yield break;
+        if (MinigameController.Instance == null) yield break;
+
+        // 안내 대사가 아직 떠 있으면 닫힐 때까지 기다린다 (닫히면 대화창이 꺼진다).
+        while (IsShowingTalkLine) yield return null;
+        if (!inSession || activeScreenId != screenId) yield break;
+
+        // 대화창이 켜져 있으면 끈다. 미션 카드 뒤로 AUTO/SKIP 버튼과 대화창이 비쳐 보이지 않게.
+        SetDialogueVisible(false);
+
         MinigameController.Instance.StartMinigame(
-            screen.minigameLabel,
-            onSuccessCallback: () => InventoryManager.Instance?.AddItem(passedFlag),
+            label,
+            onSuccessCallback: () =>
+            {
+                InventoryManager.Instance?.AddItem(passedFlag);
+
+                // '시작'을 누른 뒤에 이 화면의 안내문을 띄운다 (ShowScreenContent에서 미뤄 둔 것).
+                if (inSession && activeScreenId == screenId && screenData != null
+                    && screenData.TryGetValue(screenId, out ScreenData introScreen))
+                {
+                    ShowIntroText(introScreen);
+                }
+            },
             // 지금은 항상 성공하는 스텁이라 실패 경로가 없다 (MinigameController.cs 상단 주석 참고).
             onFailCallback: null);
     }
@@ -875,6 +995,27 @@ public class InvestigationController : MonoBehaviour
         BuildHotspots(screen);
 
         // 3) 안내문을 대화창에 띄운다.
+        // 이 화면에 미션 카드가 뜰 예정이면 안내문은 미루고, 카드의 '시작'을 누른 뒤에 띄운다
+        // (StartScreenMinigameAfterSaveInner 참고). 예) 자료실 앞 "문을 열어 진입할 수 있을 것 같다.",
+        // 자료실 안 "자료실 내부다. 책등에 제목이 적혀 있다."
+        if (!WillShowMissionCard(activeScreenId, screen) && ShowIntroText(screen)) return;
+
+        // 안내문이 없거나 미뤘으면 대화창은 비워둔다(조사 화면을 가리지 않게).
+        SetDialogueVisible(false);
+    }
+
+    // 이 화면을 열면 미션 카드가 뜰 것인가 (EnterScreen의 판정과 같은 조건).
+    private bool WillShowMissionCard(string screenId, ScreenData screen)
+    {
+        if (string.IsNullOrEmpty(screenId) || screen == null) return false;
+        if (string.IsNullOrEmpty(screen.minigameLabel) || !HasAllItems(screen.minigameRequiredItemIds)) return false;
+        if (InventoryManager.Instance != null && InventoryManager.Instance.HasItem(ScreenMinigamePassedFlag(screenId))) return false;
+        return MinigameController.Instance != null;
+    }
+
+    // 화면 안내문을 대화창에 띄운다. 띄웠으면 true, 띄울 안내문이 없거나 일부러 건너뛰었으면 false.
+    private bool ShowIntroText(ScreenData screen)
+    {
         // ===== 자료실 앞은 일을 끝낸 뒤에 다시 와도 같은 안내를 하면 안 된다 =====
         // _04의 안내문은 "문을 열어 진입할 수 있을 것 같다"처럼 아직 들어가기 전을 말한다.
         // 그런데 자료실에서 증거를 다 모아 나온 뒤에도 이 복도를 다시 지나갈 수 있어서
@@ -886,15 +1027,9 @@ public class InvestigationController : MonoBehaviour
                          && ReferenceEquals(doorScreen, screen)
                          && HasAllResourceRoomClues();
 
-        if (!skipIntro && !string.IsNullOrWhiteSpace(screen.introText))
-        {
-            ShowLineInDialogue("", screen.introText, screen.introLongMonologue);
-        }
-        else
-        {
-            // 안내문이 없으면 대화창은 비워둔다(조사 화면을 가리지 않게).
-            SetDialogueVisible(false);
-        }
+        if (skipIntro || string.IsNullOrWhiteSpace(screen.introText)) return false;
+        ShowLineInDialogue("", screen.introText, screen.introLongMonologue);
+        return true;
     }
 
     // "조사 그만하기" 버튼을 눌렀을 때.
@@ -906,8 +1041,15 @@ public class InvestigationController : MonoBehaviour
     {
         if (!inSession) return;
 
-        // 다른 대사(선택지·후속 처리가 걸려 있을 수 있음)가 떠 있는 중에는 끼어들지 않고 예전처럼 나간다.
-        if (!exitWarningShown && !IsShowingTalkLine && CountUninspectedHotspots() > 0)
+        // 오브젝트를 눌러 뜬 대사(이어지는 줄 포함)나 선택지가 끝나기 전에는 조사를 그만둘 수 없다.
+        // (화살표 이동을 막는 것과 같은 기준 - CreateNavArrow 참고)
+        var ds = DialogueSystem.Instance;
+        if (ds != null && ds.choicePanel != null && ds.choicePanel.activeSelf) return;
+        if (IsShowingTalkLine && talkLineFromObject) return;
+
+        // 화면에 들어올 때 뜬 안내문이 떠 있는 채로 눌렀는데 살펴볼 곳이 남았으면 경고를 띄운다.
+        // (안내문 위에 경고가 덮이고, 닫으면 남은 줄이 이어진다)
+        if (!exitWarningShown && CountUninspectedHotspots() > 0)
         {
             exitWarningShown = true;
             ShowLineInDialogue("", exitWarningText);
@@ -944,6 +1086,9 @@ public class InvestigationController : MonoBehaviour
     //     : 세이브를 불러오면 "누른 기록"은 비어도 가방은 그대로라 이걸로 판단해야 한다
     private bool IsStillWorthInspecting(string screenId, HotspotData data)
     {
+        // 아직 나타나지 않았거나 이미 사라진 경찰서 아이 (CreateHotspot과 같은 기준)
+        if (IsPoliceChild(screenId, data.key) && !ShouldShowPoliceChild()) return false;
+
         // 장식(스탠딩/소품)과, 그림도 배치 좌표도 없어 화면에 만들어지지 않는 오브젝트
         // (CreateHotspot과 같은 기준)
         if (data.type == HotspotType.Standing || data.type == HotspotType.Prop) return false;
@@ -1179,6 +1324,17 @@ public class InvestigationController : MonoBehaviour
         activeScreenId = targetId;
         visitedScreenIds.Add(activeScreenId);
 
+        // 사장실 앞에 처음 도착한 순간 저장 창을 띄운다.
+        // EnterScreen()보다 먼저 열어야, 그 안에서 시작하는 미션 카드가 저장 창이 닫힐 때까지
+        // 기다린다 (EnterScreen의 StartScreenMinigameAfterSave 참고). 화면(배경)은 그 아래에 그려진다.
+        bool showCeoSave = string.Equals(targetId, CeoRoomFrontScreenId, StringComparison.OrdinalIgnoreCase) &&
+            InventoryManager.Instance != null && !InventoryManager.Instance.HasItem(CeoRoomSaveShownFlag);
+        if (showCeoSave)
+        {
+            InventoryManager.Instance.AddItem(CeoRoomSaveShownFlag);
+            DialogueSystem.Instance?.ReachSavePointAtNextLine("#07 사장실 진입", targetId);
+        }
+
         EnterScreen(activeScreenId, targetScreen);
     }
 
@@ -1273,16 +1429,93 @@ public class InvestigationController : MonoBehaviour
             tmp.raycastTarget = false;
         }
 
-        button.onClick.AddListener(() => NavigateToLinkedScreen(targetScreenId));
+        // ===== 대사가 떠 있거나 선택지가 떠 있는 동안에는 화면을 옮기지 않는다 =====
+        // 서기처럼 대사 끝에 선택지가 붙는 오브젝트는, 대사를 다 읽고 선택지를 골라야 끝난다.
+        // 그 전에 화살표로 다른 화면으로 가 버리면 대화창과 선택지가 엉뚱한 화면에 남는다.
+        // (화살표를 눌러도 아무 일도 안 일어난다. 대사를 넘기거나 선택지를 고르면 다시 눌린다.)
+        button.onClick.AddListener(() =>
+        {
+            var ds = DialogueSystem.Instance;
+            if (ds != null && ds.choicePanel != null && ds.choicePanel.activeSelf) return;
+
+            if (IsShowingTalkLine)
+            {
+                // 오브젝트를 눌러서 뜬 대사는 끝까지 읽어야 한다.
+                if (talkLineFromObject) return;
+
+                // 화면에 들어올 때 뜬 안내문처럼 누른 것 없이 뜬 대사는, 화살표를 누르면
+                // 읽은 것으로 보고 닫은 뒤 이동한다 (남은 줄·미뤄 둔 일도 같이 정리한다).
+                IsShowingTalkLine = false;
+                pendingFollowUps = null;
+                pendingTalkChoices = null;
+                pendingTalkChoiceSource = null;
+                pendingAfterDismiss = null;
+                SetDialogueVisible(false);
+            }
+            NavigateToLinkedScreen(targetScreenId);
+        });
 
         // 코드로 만든 글자라 기본 글꼴에는 한글이 없다(여기선 '>' '<' 뿐이라 실제로는
         // 문제 없지만, 다른 버튼들과 같은 방식을 맞춰 둔다).
         UIFontHelper.ApplyToChildren(go);
     }
 
+    // ---------------------------------------------------------------------------------
+    // 경찰서 아이 (등장 조건 / 등장 / 퇴장)
+    // ---------------------------------------------------------------------------------
+    private static bool IsPoliceChild(string screenId, string hotspotKey)
+    {
+        return string.Equals(screenId, PoliceScreenId, StringComparison.OrdinalIgnoreCase) && hotspotKey == PoliceChildKey;
+    }
+
+    // 지금 아이가 화면에 있어야 하는가: 아직 사라진 적 없고, 다른 오브젝트를 충분히 조사했다.
+    private static bool ShouldShowPoliceChild()
+    {
+        if (InventoryManager.Instance != null && InventoryManager.Instance.HasItem(PoliceChildGoneFlag)) return false;
+
+        int count = 0;
+        string prefix = PoliceScreenId + "|";
+        string childKey = TextKey(PoliceScreenId, PoliceChildKey);
+        foreach (string k in inspectedHotspots)
+        {
+            if (k.StartsWith(prefix, StringComparison.OrdinalIgnoreCase) && k != childKey) count++;
+        }
+        return count >= PoliceChildRevealCount;
+    }
+
+    // 오브젝트를 누를 때마다 부른다. 조건이 채워진 순간 아이를 만든다.
+    private void RevealPoliceChildIfNeeded()
+    {
+        if (!string.Equals(activeScreenId, PoliceScreenId, StringComparison.OrdinalIgnoreCase) || hotspotRoot == null) return;
+        if (hotspotRoot.transform.Find(PoliceChildKey) != null || !ShouldShowPoliceChild()) return;
+        if (!screenData.TryGetValue(activeScreenId, out ScreenData screen)) return;
+
+        var data = screen.hotspots.Find(h => h.key == PoliceChildKey);
+        if (data != null) CreateHotspot(data);
+    }
+
+    // 아이의 대사를 닫는 순간 발소리와 함께 아이를 지운다. 대기 중이 아니면 아무 일도 하지 않는다.
+    private void FinishPoliceChildIfPending()
+    {
+        if (!policeChildVanishPending) return;
+        policeChildVanishPending = false;
+
+        InventoryManager.Instance?.AddItem(PoliceChildGoneFlag);
+        AudioManager.PlaySfx(PoliceChildLeaveSfx);
+
+        if (hotspotRoot != null)
+        {
+            var child = hotspotRoot.transform.Find(PoliceChildKey);
+            if (child != null) Destroy(child.gameObject);
+        }
+    }
+
     // 조사 오브젝트 하나를 만든다.
     private void CreateHotspot(HotspotData data)
     {
+        // 경찰서 아이는 조건이 채워지기 전(또는 이미 사라진 뒤)에는 만들지 않는다.
+        if (IsPoliceChild(activeScreenId, data.key) && !ShouldShowPoliceChild()) return;
+
         // ===== 장식(Standing/Prop)은 아예 다른 방식으로 만든다 =====
         // 누를 수 없어야 하므로 Button도 InvestigatableObject도 붙이지 않는다.
         if (data.type == HotspotType.Standing || data.type == HotspotType.Prop)
@@ -1302,6 +1535,7 @@ public class InvestigationController : MonoBehaviour
         io.itemId = data.itemId;
         io.spriteName = data.spriteName;
         io.talkSpeaker = string.IsNullOrEmpty(data.speaker) ? data.objectName : data.speaker;
+        io.explicitSpeaker = data.speaker;
         io.talkSentence = data.text;
         io.longMonologue = data.longMonologue;
         io.followUpLines = data.followUps;
@@ -1594,11 +1828,61 @@ public class InvestigationController : MonoBehaviour
     // InvestigatableObject.OnClickInspect()가 호출한다.
     public void Inspect(InvestigatableObject obj)
     {
+        // 미션 카드가 뜨기 전(저장 창/안내 대사 대기 중)에는 문을 누를 수 없다.
+        // 카드의 '시작'을 눌러야 조사를 이어갈 수 있다.
+        // 다만 "문을 열어 진입할 수 있을 것 같다" 같은 안내 대사가 떠 있으면, 문을 눌러도
+        // 그 대사는 평소처럼 다음으로 넘어간다 (문 조사는 하지 않고 대사만 넘긴다).
+        if (MinigameController.Instance != null && MinigameController.Instance.IsActive) return;
+        if (pendingMinigameScreenId != null && pendingMinigameScreenId == activeScreenId)
+        {
+            if (IsShowingTalkLine) DialogueSystem.Instance?.AdvanceInvestigationLine();
+            return;
+        }
+
+        // ===== 선택지가 떠 있는 동안에는 다른 오브젝트를 조사할 수 없다 =====
+        // 선택지는 반드시 골라야 끝나는 질문이다. 그 전에 다른 오브젝트를 누르게 두면
+        // 질문이 뜬 채로 다른 대사가 겹친다. 선택지를 고르기 전까지 오브젝트 클릭은 무시한다.
+        // (선택지 버튼, 수첩·핸드폰·가방·설정은 오브젝트가 아니라서 그대로 눌린다.)
+        var choiceUi = DialogueSystem.Instance;
+        if (choiceUi != null && choiceUi.choicePanel != null && choiceUi.choicePanel.activeSelf) return;
+
+        // ===== 대사가 떠 있는데 다른 오브젝트를 눌렀다 =====
+        // 오브젝트 버튼은 대사창 클릭("다음")으로 치지 않아서, 안 닫으면 이전 대사가 그대로
+        // 남는다 (자료 뷰어를 열었다 닫아도 뒤에 남아 있던 문제). 다른 것을 눌렀다는 건 그 대사를
+        // 다 봤다는 뜻이므로 끝낸 것으로 보고 대화창을 닫는다.
+        // 미뤄 둔 선택지는 버리고, pendingAfterDismiss(자동 이동 검사)는 그대로 둔다.
+        // 아이의 대사가 떠 있는데 그 아이를 다시 누르면 대사를 처음부터 다시 띄우지 않고 다음 진행으로 넘긴다
+        // (대사를 닫으면 아이가 사라진다 - DismissTalkLine / FinishPoliceChildIfPending 참고).
+        if (IsShowingTalkLine && policeChildVanishPending && IsPoliceChild(activeScreenId, obj.gameObject.name))
+        {
+            DialogueSystem.Instance?.AdvanceInvestigationLine();
+            return;
+        }
+
+        if (IsShowingTalkLine)
+        {
+            IsShowingTalkLine = false;
+            pendingTalkChoices = null;
+            pendingTalkChoiceSource = null;
+            SetDialogueVisible(false);
+            FinishPoliceChildIfPending();   // 아이 대사가 다 뜬 뒤 다른 오브젝트를 눌러도 아이는 사라진다
+        }
+
         // 이전 오브젝트의 이어지는 대사가 남아 있으면 버린다 (다른 오브젝트를 눌렀을 때 섞이지 않게).
         pendingFollowUps = null;
 
         // 한 번이라도 누른 오브젝트에는 작은 체크를 붙인다 (CreateHotspot 아래 MarkInspected 참고).
         MarkInspected(obj);
+
+        // 경찰서: 다른 오브젝트를 충분히 조사했으면 아이가 나타난다.
+        RevealPoliceChildIfNeeded();
+
+        // 이벤트 07 사무실의 직원 두 명은 누르면 타자 소리가 난다.
+        if (string.Equals(activeScreenId, OfficeScreenId, StringComparison.OrdinalIgnoreCase)
+            && OfficeTypingSfx.TryGetValue(obj.gameObject.name, out string typingSfx))
+        {
+            AudioManager.PlaySfxIfIdle(typingSfx);   // 앞 소리가 아직 나는 중이면 겹치지 않게 건너뛴다
+        }
 
         // ===== "엉뚱한 곳" 페널티 =====
         // 다른 처리(아이템 지급, 선택지 등)와는 완전히 별개로, 눌린 오브젝트가 WrongHotspots에
@@ -1664,8 +1948,23 @@ public class InvestigationController : MonoBehaviour
                 obj.gameObject.name == ResourceRoomDoorHotspotKey &&
                 HasAllResourceRoomClues())
             {
-                ShowLineInDialogue("", "다시 들어갈 필요는 없을 것 같다. 가져온 자료를 확인해 보자.");
+                ShowLineInDialogue("", "다시 들어갈 필요는 없을 것 같다. 가져온 자료를 확인해 보자.", fromObject: true);
                 return;
+            }
+
+            // ===== 예외: 열쇠를 얻은 뒤의 #07 서랍은 #01 책상 서랍의 평소 대사를 보여준다 =====
+            // 새 CSV 컬럼 없이, 대사 원문은 코드에 적지 않고 #01 서랍 줄(CSV)에서 읽어 온다.
+            if (string.IsNullOrEmpty(obj.afterTargetScreenId) &&
+                activeScreenId != null &&
+                RepeatLineSources.TryGetValue(TextKey(activeScreenId, obj.gameObject.name), out var src) &&
+                screenData != null && screenData.TryGetValue(src.screenId, out var srcScreen))
+            {
+                var srcHotspot = srcScreen.hotspots.Find(h => h.key == src.hotspotKey);
+                if (srcHotspot != null && !string.IsNullOrWhiteSpace(srcHotspot.text))
+                {
+                    ShowLineInDialogue("", srcHotspot.text.Trim(), fromObject: true);
+                    return;
+                }
             }
 
             if (!string.IsNullOrEmpty(obj.afterTargetScreenId))
@@ -1683,7 +1982,7 @@ public class InvestigationController : MonoBehaviour
         if (!string.IsNullOrEmpty(obj.requiredItemId) &&
             (InventoryManager.Instance == null || !InventoryManager.Instance.HasItem(obj.requiredItemId.Trim())))
         {
-            ShowLineInDialogue("", obj.requiredItemMissingText);
+            ShowLineInDialogue("", obj.requiredItemMissingText, fromObject: true);
             return;
         }
 
@@ -1701,6 +2000,12 @@ public class InvestigationController : MonoBehaviour
             string target = obj.afterTargetScreenId.Trim();
             if (string.Equals(target, "EXIT", StringComparison.OrdinalIgnoreCase))
             {
+                // 사장실 문을 누르면 문 여는 소리 (다른 EXIT 오브젝트는 소리 없음)
+                if (activeScreenId == CeoRoomFrontScreenId && obj.gameObject.name == CeoRoomDoorHotspotKey)
+                    AudioManager.PlaySfxIfIdle(DoorOpenSfx);
+                // 사장실 트로피를 누르면(힌트를 찾은 뒤) 쇠 떨어지는 소리
+                if (activeScreenId == CeoRoomInsideScreenId && obj.gameObject.name == TrophyHotspotKey)
+                    AudioManager.PlaySfxIfIdle(TrophySfx);
                 Exit();
             }
             else
@@ -1743,7 +2048,17 @@ public class InvestigationController : MonoBehaviour
             // 붙을 수 있으므로 타입은 보지 않고 talkChoices 존재 여부만 본다.
             bool hasChoices = obj.talkChoices != null && obj.talkChoices.Count > 0;
 
-            if (!hasWrittenNote && !hasChoices)
+            // ===== 사람과 나눈 대화는 수첩에 그대로 따라 적지 않는다 =====
+            // 대화 전체가 수첩에 박히면 메모가 아니라 대본이 된다. 말을 거는 오브젝트(Talk)와,
+            // 차재훈이 아닌 사람이 말하는 지문(예: #07 사무실 직원)은 자동 메모를 건너뛴다.
+            // 차재훈의 혼잣말(책상 서랍 등)은 그대로 적힌다. NoteEntries.csv에 직접 적은
+            // 메모는 이 검사와 상관없이 위의 hasWrittenNote로 적힌다.
+            string explicitWho = obj.explicitSpeaker ?? "";
+            bool isConversation = obj.type == HotspotType.Talk ||
+                                  (!string.IsNullOrEmpty(explicitWho) && explicitWho != "차재훈");
+            bool skipAutoNote = isConversation;
+
+            if (!hasWrittenNote && !hasChoices && !skipAutoNote)
             {
                 // Talk 타입은 대사이므로 "누가 이렇게 말했다" 형태로, 나머지는 조사 설명 그대로 적는다.
                 string noteBody = obj.type == HotspotType.Talk ? obj.talkSentence : obj.description;
@@ -1840,15 +2155,24 @@ public class InvestigationController : MonoBehaviour
                 : "";
         }
 
+        // 경찰서 아이: 이 대사를 닫으면 사라진다 (DismissTalkLine에서 처리).
+        policeChildVanishPending = IsPoliceChild(activeScreenId, obj.gameObject.name);
+
         if (obj.type == HotspotType.Talk)
         {
             string speaker = string.IsNullOrEmpty(obj.talkSpeaker) ? obj.objectName : obj.talkSpeaker;
-            ShowLineInDialogue(speaker, obj.talkSentence, obj.longMonologue);
+            ShowLineInDialogue(speaker, obj.talkSentence, obj.longMonologue, fromObject: true);
         }
         else
         {
             // 조사 설명은 지문처럼 화자 없이 보여준다.
-            ShowLineInDialogue("", obj.description, obj.longMonologue);
+            // 단, CSV Speaker 칸에 이름을 적어둔 경우(예: 07 사무실의 직원들)는 첫 줄에도 그 이름을 띄운다.
+            // 이어지는 줄(followUps)은 원래 자기 Speaker를 쓰므로 이렇게 해야 첫 줄과 일관된다.
+            // 지문으로 두고 싶으면 Speaker 칸을 비우면 된다.
+            // 주인공(차재훈)의 혼잣말 조사(책상 서랍 등)는 기존처럼 이름 없는 지문으로 둔다.
+            string descSpeaker = obj.explicitSpeaker ?? "";
+            if (descSpeaker == "차재훈") descSpeaker = "";
+            ShowLineInDialogue(descSpeaker, obj.description, obj.longMonologue, fromObject: true);
         }
     }
 
@@ -1856,8 +2180,14 @@ public class InvestigationController : MonoBehaviour
     // longMonologue가 true면 작은 검은 대화창 대신 화면 가득 큰 글자로 보여준다 (CSV의 LongMonologue 칸).
     // newLongScreen이 true면 앞에 쌓인 글을 지우고 새 화면에서 시작한다 (CSV의 LongMonologueNewPage 칸).
     // 오브젝트를 처음 누르는 첫 줄은 항상 새 화면이고, 이어지는 줄만 LongMonologue가 연달아 TRUE면 아래로 쌓인다.
-    private void ShowLineInDialogue(string speaker, string sentence, bool longMonologue = false, bool newLongScreen = true)
+    //
+    // fromObject: 오브젝트를 눌러서 뜬 대사인가. 화면에 들어올 때 뜨는 안내문처럼 누른 것 없이
+    // 뜬 대사는 false다. 화살표가 이동을 막을지 정할 때 쓴다 (CreateNavArrow 참고).
+    // 이어지는 줄(followUps)은 첫 줄의 값을 그대로 물려받는다.
+    private void ShowLineInDialogue(string speaker, string sentence, bool longMonologue = false, bool newLongScreen = true,
+                                    bool fromObject = false)
     {
+        if (!IsShowingTalkLine) talkLineFromObject = fromObject;
         IsShowingTalkLine = true;
         SetDialogueVisible(true);
 
@@ -1884,6 +2214,9 @@ public class InvestigationController : MonoBehaviour
         }
 
         IsShowingTalkLine = false;
+
+        // 방금 닫은 대사가 경찰서 아이의 것이었다면 발소리와 함께 아이가 사라진다.
+        FinishPoliceChildIfPending();
 
         // 방금 닫은 대사에 선택지가 달려 있었다면, 대화창은 그대로 둔 채 선택지를 이어서 띄운다
         // (Inspect()에서 pendingTalkChoices에 미리 담아둔다).
@@ -1993,7 +2326,7 @@ public class InvestigationController : MonoBehaviour
         if (!string.IsNullOrWhiteSpace(choice.responseText))
         {
             // 대답도 대사 한 줄이므로 평소 Talk 흐름과 똑같이 보여주고 닫는다.
-            ShowLineInDialogue(choice.responseSpeaker, choice.responseText);
+            ShowLineInDialogue(choice.responseSpeaker, choice.responseText, fromObject: true);
         }
         else
         {
@@ -2033,6 +2366,7 @@ public class InvestigationController : MonoBehaviour
         TimingClickMinigameController.Instance.StartGame(
             onSuccessCallback: () =>
             {
+                AudioManager.PlaySfxIfIdle(DoorOpenSfx);   // 자료실 문이 열리는 소리
                 if (!string.IsNullOrWhiteSpace(choice.itemId) && InventoryManager.Instance != null)
                 {
                     InventoryManager.Instance.AddItem(choice.itemId.Trim());

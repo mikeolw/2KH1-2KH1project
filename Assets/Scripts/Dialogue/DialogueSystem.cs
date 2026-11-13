@@ -42,10 +42,38 @@ public class DialogueSystem : MonoBehaviour
     public DialogueData currentDialogue;
     private int lineIndex = 0;
 
+    // 조사 줄의 세이브포인트 창을 이미 보여준(또는 불러오기로 건너뛰어야 하는) 줄 번호. 같은 줄에서 창이 두 번 뜨는 것을 막는다.
+    private int suppressSaveIndex = -1;
+
     // 지금 진행 중인 CSV 파일 이름(확장자 제외). 세이브/로드에서 "어디까지 봤는지"를
     // 기록하고 복원하는 데 쓴다 (SavePointManager.cs 참고).
     private string currentScenarioCsv = "";
     public string CurrentScenarioCsv => currentScenarioCsv;
+
+    // CSV 줄이 아니라 "조사 중 어떤 화면에 도착한 순간"에 세이브포인트를 찍고 싶을 때 쓴다
+    // (예: #07 자료실을 마치고 화살표로 사장실 앞에 도착했을 때).
+    // lineIndex는 "다음에 보여줄 줄"이라서, 지금 조사 줄 바로 다음의 Investigate 줄(= 그 화면을
+    // 여는 줄)이 저장 위치가 된다. 불러오면 그 화면이 바로 열린다.
+    //
+    // screenId : 지금 도착한 조사 화면 id. 다음 줄이 바로 그 화면을 여는 조사 줄이면 저장한 뒤
+    //            그 줄은 건너뛴다. 이미 그 화면에 와 있는데 조사가 끝나고 같은 줄이 또 실행되면
+    //            같은 화면이 다시 열려서(문을 눌러도 아무 일도 안 일어나 보임) 다음으로 못 넘어간다.
+    public void ReachSavePointAtNextLine(string savePointId, string screenId)
+    {
+        if (SavePointManager.Instance == null) return;
+        SavePointManager.Instance.ReachSavePoint(savePointId, currentScenarioCsv, lineIndex);
+
+        if (currentDialogue != null && currentDialogue.lines != null &&
+            lineIndex >= 0 && lineIndex < currentDialogue.lines.Count)
+        {
+            var next = currentDialogue.lines[lineIndex];
+            if (next.isInvestigation && !string.IsNullOrWhiteSpace(next.investigationId) &&
+                string.Equals(next.investigationId.Trim(), screenId, System.StringComparison.OrdinalIgnoreCase))
+            {
+                lineIndex++;
+            }
+        }
+    }
 
     // 지금 몇 번째 줄까지 진행했는지. lineIndex는 "다음에 보여줄 줄"을 가리키므로,
     // 이어하기를 할 때 이 값을 그대로 lineIndex에 넣으면 저장 시점의 다음 줄부터 이어진다.
@@ -772,6 +800,9 @@ public class DialogueSystem : MonoBehaviour
         // 대비해 범위를 잘라준다. 안 그러면 바로 "대사 세트 종료"로 튕긴다.
         lineIndex = Mathf.Clamp(startLineIndex, 0, data.lines != null ? data.lines.Count : 0);
 
+        // 세이브를 불러와 곧바로 "세이브포인트인 조사 줄"에서 시작하면, 저장 창이 또 뜨지 않게 한다.
+        suppressSaveIndex = startLineIndex > 0 ? lineIndex : -1;
+
         if (choicePanel != null) choicePanel.SetActive(false);
 
         // ===== 세이브를 불러왔을 때 엉뚱한 대사가 잠깐 보이는 문제 =====
@@ -953,6 +984,12 @@ public class DialogueSystem : MonoBehaviour
                     line.minigameHint,
                     onSuccessCallback: () => ShowNextSentence()
                 );
+
+                // 위에서 대화창을 켜 뒀으므로, 키패드가 실제로 떠 있으면 다시 끈다.
+                // (안 끄면 직전 대사가 키패드 뒤에 그대로 남는다. 스킵으로 들어올 때 특히 눈에 띈다.)
+                // 다음 일반 대사의 ShowDialoguePanel()이 다시 켜 준다.
+                if (KeypadMinigameController.Instance.IsActive && dialoguePanel != null)
+                    dialoguePanel.SetActive(false);
                 return;
             }
 
@@ -970,6 +1007,11 @@ public class DialogueSystem : MonoBehaviour
                 onSuccessCallback: () => ShowNextSentence(),
                 onFailCallback: () => GameFlowManager.Instance.TriggerEnding(line.minigameFailEnding)
             );
+
+            // 위에서 대화창을 켜 뒀으므로, 미션 카드가 실제로 떠 있으면 다시 끈다 (키패드와 같은 이유).
+            // 다음 일반 대사의 ShowDialoguePanel()이 다시 켜 준다.
+            if (MinigameController.Instance.IsActive && dialoguePanel != null)
+                dialoguePanel.SetActive(false);
             return;
         }
 
@@ -982,6 +1024,22 @@ public class DialogueSystem : MonoBehaviour
             {
                 Debug.LogWarning("[DialogueSystem] InvestigationController가 없어 조사를 건너뜁니다.");
                 ShowNextSentence();
+                return;
+            }
+
+            // 조사 줄에 IsSavePoint=TRUE가 적혀 있으면 조사 화면을 열기 전에 저장 창을 띄운다
+            // (이 분기는 DisplayLine()을 거치지 않아서 여기서 따로 처리해야 한다. 예: #02 해안도로).
+            // lineIndex는 이미 1 늘어난 값이라, 불러왔을 때 이 조사 화면이 다시 열리도록 1을 뺀다.
+            // 저장 창이 닫히면 ShowNextSentence()가 불리므로, lineIndex를 이 조사 줄로 되돌려 두면
+            // 창을 닫은 뒤 같은 줄이 다시 와서 조사 화면이 열린다 (이번에는 suppressSaveIndex로 저장 창을 건너뜀).
+            if (line.isSavePoint && SavePointManager.Instance != null &&
+                SaveSlotDialog.Instance != null && suppressSaveIndex != shownIndex)
+            {
+                suppressSaveIndex = shownIndex;
+                lineIndex = shownIndex;
+                // 저장 창 뒤로 직전 대사창이 비쳐 보이지 않게 끈다 (조사 화면은 대화창 없이 열린다).
+                if (dialoguePanel != null) dialoguePanel.SetActive(false);
+                SavePointManager.Instance.ReachSavePoint(line.savePointId, currentScenarioCsv, shownIndex);
                 return;
             }
 
@@ -2194,6 +2252,24 @@ public class DialogueSystem : MonoBehaviour
         return false;
     }
 
+    // 자료 뷰어(서류/사진)가 열려 있는 동안 뒤의 대화창을 투명하게 가린다.
+    // 뷰어 아래쪽 막이 반투명이라 조사 안내 대사가 자료 위로 비쳐 보이던 문제 때문이다.
+    // 대사 진행 상태(dialogueHidden, 자동/스킵 예약)는 건드리지 않고 투명도만 바꾼다.
+    // 닫을 때는 사용자가 ↓키로 숨겨 둔 상태(dialogueHidden)를 그대로 되살린다.
+    public void SetCoveredByViewer(bool covered)
+    {
+        if (dialoguePanel == null) return;
+        if (dialogueCanvasGroup == null)
+        {
+            dialogueCanvasGroup = dialoguePanel.GetComponent<CanvasGroup>();
+            if (dialogueCanvasGroup == null) dialogueCanvasGroup = dialoguePanel.AddComponent<CanvasGroup>();
+        }
+
+        bool visible = !covered && !dialogueHidden;
+        dialogueCanvasGroup.alpha = visible ? 1f : 0f;
+        dialogueCanvasGroup.blocksRaycasts = visible;
+    }
+
     private void SetDialogueHidden(bool hidden)
     {
         if (dialoguePanel == null) return;
@@ -2223,8 +2299,22 @@ public class DialogueSystem : MonoBehaviour
         }
     }
 
+    // 조사 대사("다음")를 한 칸 넘긴다. Update()의 조사 모드 처리와 같은 동작이다.
+    // 오브젝트 버튼은 위 클릭 감지에서 제외되므로, 막아 둔 문을 눌렀을 때 대사만 넘기고 싶으면
+    // InvestigationController가 이 함수를 부른다.
+    public void AdvanceInvestigationLine()
+    {
+        if (InvestigationController.Instance == null || !InvestigationController.Instance.IsShowingTalkLine) return;
+        if (isTyping) CompleteTypingImmediately();
+        else if (HasMorePages) ShowNextPage();
+        else InvestigationController.Instance.DismissTalkLine();
+    }
+
     void Update()
     {
+        // 새로 누를 때마다 "이 클릭은 대사 진행에 썼다" 표시를 지운다 (IsPointerOverButton이 다시 켠다).
+        if (Input.GetMouseButtonDown(0)) SwallowObjectClick = false;
+
         // "계속" 표시(▼) 깜빡임은 입력과 무관하게 항상 갱신한다.
         Update_ContinueIndicator();
 
@@ -2333,6 +2423,24 @@ public class DialogueSystem : MonoBehaviour
     private readonly List<RaycastResult> raycastResults = new List<RaycastResult>();
     private PointerEventData reusablePointerData;
 
+    // 대사를 넘기려고 오브젝트를 누른 클릭이면 true. 같은 클릭이 버튼을 뗄 때 오브젝트 조사로
+    // 이어지지 않도록 InvestigatableObject.OnClickInspect가 확인한다. 다음 마우스 누름에서 풀린다.
+    public bool SwallowObjectClick { get; private set; }
+
+    // 지금 오브젝트를 누르면 대사가 진행되는 상태인가.
+    // 대사가 아직 찍히는 중이거나, 넘길 쪽/줄/선택지가 남아 있으면 true (오브젝트는 눌리지 않는다).
+    // 마지막 줄까지 전부 출력됐으면 false: 이때 다른 오브젝트를 누르면 그 오브젝트를 조사한다.
+    public bool ObjectClickAdvancesDialogue
+    {
+        get
+        {
+            if (dialoguePanel == null || !dialoguePanel.activeInHierarchy) return false;
+            if (isTyping || HasMorePages) return true;
+            var inv = InvestigationController.Instance;
+            return inv != null && inv.HasPendingTalkFollowUp;
+        }
+    }
+
     private bool IsPointerOverButton()
     {
         if (EventSystem.current == null) return false;
@@ -2346,10 +2454,34 @@ public class DialogueSystem : MonoBehaviour
         raycastResults.Clear();
         EventSystem.current.RaycastAll(reusablePointerData, raycastResults);
 
+        // RaycastAll 결과는 화면 앞쪽(위에 보이는 것)부터 순서대로 들어 있다.
+        // 위에서부터 보다가 대화창에 먼저 닿으면 "대화창을 클릭한 것"이다. 대화창에 가려진
+        // 뒤쪽 오브젝트 버튼은 눌린 것으로 치지 않는다 (대사 진행). 대화창 밖의 오브젝트
+        // 버튼이 먼저 닿으면 그 버튼이 눌린 것이므로 대사를 넘기지 않는다.
+        //
+        // 대사가 떠 있는 동안에는 조사 오브젝트 버튼도 "버튼"으로 치지 않는다. 오브젝트를 눌러도
+        // 대사가 진행되고, 그 클릭으로 오브젝트가 조사되지는 않게 SwallowObjectClick을 켠다.
+        bool dialogueShowing = ObjectClickAdvancesDialogue;
+        Transform panelTf = dialoguePanel != null ? dialoguePanel.transform : null;
+        if (Input.GetMouseButtonDown(0)) SwallowObjectClick = false;   // 새로 누를 때마다 처음부터
         foreach (var result in raycastResults)
         {
-            if (result.gameObject.GetComponentInParent<Button>() != null)
+            var hit = result.gameObject;
+            // AUTO/SKIP/SKIP ALL/LOG도 대화창의 자식이지만 "버튼"이다 - 이걸 대화창 클릭으로 치면 버튼을
+            // 누르는 순간 대사가 먼저 한 줄 넘어가고(말풍선 ↔ 대화창 전환으로 버튼이 자리를 옮김),
+            // 손을 뗄 때는 버튼이 이미 다른 자리라서 onClick이 안 불렸다.
+            if (panelTf != null && hit.transform.IsChildOf(panelTf))
             {
+                var panelButton = hit.GetComponentInParent<Button>();
+                return panelButton != null && panelButton.transform.IsChildOf(panelTf);
+            }
+            if (hit.GetComponentInParent<Button>() != null)
+            {
+                if (dialogueShowing && hit.GetComponentInParent<InvestigatableObject>() != null)
+                {
+                    if (Input.GetMouseButtonDown(0)) SwallowObjectClick = true;
+                    return false;
+                }
                 return true;
             }
         }
@@ -2529,6 +2661,10 @@ public class DialogueSystem : MonoBehaviour
                 var investigateLine = new DialogueLine();
                 investigateLine.isInvestigation = true;
                 investigateLine.investigationId = GetField(data[i], "InvestigationId");
+
+                // 조사 줄에도 IsSavePoint를 적을 수 있다 (예: #02 해안도로). 처리는 ShowNextSentence() 참고.
+                investigateLine.isSavePoint = GetField(data[i], "IsSavePoint").ToLower() == "true";
+                investigateLine.savePointId = GetField(data[i], "SavePointId");
 
                 // 이 줄의 BGM/SFX 칸도 읽어둔다 (ApplySoundColumns() 상단 주석 참고 - 원래
                 // 여기가 빠져 있어서 조사 줄에서 세이브를 불러오면 BGM이 안 나오는 버그가 있었다.
