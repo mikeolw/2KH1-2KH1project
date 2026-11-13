@@ -595,11 +595,18 @@ public class StageController : MonoBehaviour
     }
 
     // 말하는 인물의 스탠딩 그림을 돌려준다. 화면에 없으면 null.
-    // 말풍선(SpeechBubble)이 인물 옆에 붙을 자리를 찾을 때 쓴다 - null이면 아래 대화창으로 보여준다.
+    // 말풍선(SpeechBubble)이 인물 옆에 붙을 자리를 찾을 때 쓴다 - null이면 화면 아래 가운데에 뜬다.
+    //
+    // Talker 칸의 none은 "입을 움직이지 마라"(립싱크 끄기)는 뜻이지 "화면에 없다"는 뜻이 아니다.
+    // 그런데 시나리오 대부분이 Talker를 none으로 적어 두어서, 예전에는 말하는 인물이 화면에
+    // 서 있어도 못 찾고 말풍선이 늘 화면 아래 가운데(인물의 몸 위)에 떴다.
+    // 그래서 위치를 찾을 때는 none을 무시하고 Speaker 이름으로 찾는다 (L/C/R은 그대로 따른다).
     public Image FindSpeakerStanding(string speaker, string talkerSpec)
     {
         if (standingSlots == null) return null;
-        int slot = ResolveTalkerSlot(speaker, talkerSpec);
+        bool talkerIsNone = !string.IsNullOrWhiteSpace(talkerSpec) &&
+                            talkerSpec.Trim().Equals("none", System.StringComparison.OrdinalIgnoreCase);
+        int slot = ResolveTalkerSlot(speaker, talkerIsNone ? null : talkerSpec);
         if (slot < 0 || slot >= standingSlots.Length || standingSlots[slot] == null) return null;
         return standingSlots[slot].IsShowing ? standingSlots[slot].Image : null;
     }
