@@ -22,7 +22,6 @@ OBJ_03_Wallet,327,-316,1,
 OBJ_04_Diarys,33,27,1,
 OBJ_04_File,524,29,1,
 OBJ_04_SDCard,300,-36,1,
-OBJ_05_Elevator,418,-4,1,
 OBJ_07_BookCase,608,-27,1,
 OBJ_07_CEODesk,62,29,1,
 OBJ_07_CEORoomDoor,610,42,1,
@@ -51,7 +50,6 @@ STD_Past04_Hansung,-21,32,1,
 STD_Past05_Hansung,-22,140,1,
 STD_Past05_Hansung_Stand,11,-48,1,
 OBJ_01_Document2,-436,-362,1,BG_01_ConductorDesk
-OBJ_05_Elevator,418,-4,1,BG_05_BuildingSite_02
 OBJ_01_Notepad,24,-312,1,BG_07_InvestigationSite_01
 OBJ_07_Manager,136,-156,1,BG_07_InvestigationSite_03
 OBJ_07_ResourceRoomdoor,-473,36,1,BG_07_InvestigationSite_04
