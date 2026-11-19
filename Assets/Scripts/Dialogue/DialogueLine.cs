@@ -185,4 +185,26 @@ public class DialogueLine
     // (기본값 Bad_D)으로 바로 넘어간다. 자세한 내용은 DeductionController.cs 참고.
     public bool isDeduction;
     public string deductionId;
+
+    [Header("대사 도중 선택지 (선택)")]
+    // ===== 대본 중간에서 갈라지는 선택지 =====
+    // 원래 선택지(DialogueData.choices)는 "대본의 모든 줄을 다 보여준 뒤"에 한 번 뜨는 구조라,
+    // CSV의 Choice 행을 파일 중간에 적어두면 조용히 무시됐다. 그래서 한 장면 안에서
+    // 갈라지는 선택지를 만들 수 없었다(예: 방에 숨어 있던 아이를 발견한 순간).
+    //
+    // 이 필드가 채워진 줄은 미니게임/조사/추리 줄과 완전히 같은 배관을 탄다.
+    //   - CSV에서 Choice 행이 "맨 끝이 아닌 자리"에 있으면 LoadDialogueFromCSV()가
+    //     그 자리에 이 줄을 하나 만들어 끼워 넣는다 (연달아 붙은 Choice 행은 한 묶음).
+    //   - ShowNextSentence()가 이 줄을 만나면 대사를 띄우는 대신 선택지 패널을 띄운다.
+    //   - 고른 선택지에 TargetEnding이 적혀 있으면 엔딩으로, NextScenario가 적혀 있으면
+    //     그 대본으로 간다. 둘 다 비어 있으면 "그냥 진행"이라 다음 줄로 이어진다.
+    //
+    // 이 줄에도 IsFadeOut을 적을 수 있다. TRUE면 화면을 암전시켰다가 밝힌 뒤에 선택지를
+    // 띄운다 (일반 대사 줄의 IsFadeOut과 같은 연출. DialogueSystem.ShowInlineChoicesWithFade 참고).
+    // 암전 중에 Scene/Standing 칸으로 무대를 바꿔둘 수도 있다.
+    //
+    // 대본 맨 끝에 몰려 있는 Choice 행은 지금까지와 똑같이 DialogueData.choices로 들어가므로,
+    // 이미 만들어둔 CSV들은 아무 영향도 받지 않는다.
+    public bool isChoice;
+    public List<Choice> inlineChoices;
 }

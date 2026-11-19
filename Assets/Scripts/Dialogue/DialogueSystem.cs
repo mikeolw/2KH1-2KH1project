@@ -216,7 +216,13 @@ public class DialogueSystem : MonoBehaviour
         // 이미 다 찍혀 있는 줄을 보고 있는 도중에 AUTO를 켜면 그 타이밍이 지나가버려서,
         // 다음 줄이 나올 때까지 아무 반응이 없는 것처럼 보인다. 그래서 지금 막 켠 순간에도
         // "이미 다 찍혔고 아무것도 안 막혀있는" 상태면 바로 한 번 더 예약해준다.
-        if (currentLine != null && !isTyping && autoAdvanceRoutine == null && !IsBlockedByOtherUI())
+        //
+        // 단, 암전 중이면 예약하지 않는다. 암전 중에는 화면이 검어서 "지금 보고 있는 줄"이
+        // 아예 보이지 않는데, 여기서 예약하면 검은 화면 뒤로 대사가 혼자 넘어가버린다
+        // (AutoAdvanceAfterLine의 isFading 주석 참고). 암전이 끝나고 다음 줄이 다 찍히는
+        // 순간 OnPageFullyShown()이 정상적으로 예약하므로 AUTO가 끊기지는 않는다.
+        if (currentLine != null && !isTyping && !isFading &&
+            autoAdvanceRoutine == null && !IsBlockedByOtherUI())
         {
             OnPageFullyShown();
         }
@@ -1073,6 +1079,29 @@ public class DialogueSystem : MonoBehaviour
             return;
         }
 
+        // 대본 중간에 끼어 있는 Choice 묶음은 대사 대신 선택지 패널을 띄운다
+        // (DialogueLine.isChoice 주석 참고). 미니게임/조사/추리와 완전히 같은 배관이고,
+        // "진행" 보기를 고르면 ShowNextSentence()로 다음 줄부터 이어간다.
+        //
+        // 직전 대사는 그대로 둔다 - 선택지 뒤의 어두운 막은 대화창 뒤에 깔리므로(ChoicePanelStyle
+        // 참고), 플레이어는 "무엇을 묻고 있는지"를 읽으면서 보기를 고를 수 있다.
+        if (line.isChoice)
+        {
+            SetLongMonologueLayout(false);   // 큰 독백 화면이 선택지 뒤에 남지 않게
+            InvestigationController.Instance?.ClearLeftoverHotspots();
+
+            if (line.isFadeOut || followsInvestigation)
+            {
+                StartCoroutine(ShowInlineChoicesWithFade(line, followsInvestigation));
+            }
+            else
+            {
+                ApplyLineStage(line, instant: false);
+                ShowInlineChoices(line);
+            }
+            return;
+        }
+
         // isFadeOut 줄은 화면을 암전시킨 뒤에 대사/사운드를 바꾸고 다시 밝게 복귀한다.
         // 조사가 막 끝난 뒤의 첫 줄은 CSV의 IsFadeOut 칸과 상관없이 항상 암전으로 넘어간다
         // (모든 조사 화면이 같은 방식으로 끝나도록 - 유지 시간은 ShowLineWithFade 참고).
@@ -1661,7 +1690,24 @@ public class DialogueSystem : MonoBehaviour
 
         yield return new WaitForSeconds(baseDelay + readingTime);
 
+        // ===== 암전(IsFadeOut) 연출 중에는 절대 넘기지 않는다 =====
+        // Update()와 스킵 루프(SkipRoutine)는 isFading일 때 진행을 막는데 자동 진행만 이
+        // 검사가 빠져 있었다. 암전은 어두워지기 + 검은 화면 유지 + 밝아지기로 몇 초가 걸리고,
+        // 그 사이에 AUTO를 켜면 HandleSettingsChanged()가 그 자리에서 한 번 예약해버린다.
+        // 그러면 검은 화면 뒤에서 대사가 혼자 몇 줄씩 넘어가고, 암전이 끝나는 순간
+        // ShowLineWithFade/ShowInlineChoicesWithFade가 "자기가 들고 있던 줄"을 그제서야
+        // 띄우기 때문에, 한참 앞 줄의 선택지가 지금 말풍선 위에 겹쳐 뜨게 된다.
+        //   (실제로 scenario_02의 97~99줄 선택지가 106줄 말풍선 위에 겹쳐 떴다)
+        // 여기서 끊지 않고 기다리는 이유: 끊어버리면 암전이 끝난 뒤 AUTO가 멈춘 것처럼 보인다.
+        // 기다리는 동안 autoAdvanceRoutine을 비우지 않으므로, 암전 중에 새 줄이 찍히기
+        // 시작하면 OnPageFullyShown()의 StopAutoAdvanceRoutine()이 이 코루틴을 대신 취소한다.
+        while (isFading) yield return null;
+
         autoAdvanceRoutine = null;
+
+        // 암전이 걷히면서 새 줄이 찍히기 시작했다면 넘기지 않는다 - 그 줄을 건너뛰게 된다.
+        // 다 찍히면 OnPageFullyShown()이 다시 예약하므로 AUTO가 끊기지는 않는다.
+        if (isTyping) yield break;
 
         // 기다리는 사이에 선택지가 뜨거나 팝업이 열렸을 수 있으므로 다시 확인한다.
         // 조사 화면은 IsBlockedByOtherUI()에 없으므로 따로 본다 - 기다리는 동안 조사가
@@ -1954,13 +2000,66 @@ public class DialogueSystem : MonoBehaviour
             return;
         }
 
+        // 대본 끝의 선택지: 아무것도 안 적힌 보기를 고르면(예전부터) 아무 일도 일어나지 않는다.
+        // 그래서 "이어서 진행" 콜백은 넘기지 않는다 - 넘기면 대본 끝에서 자기 자신을 다시 불러
+        // 선택지가 무한히 다시 뜬다.
+        BuildChoicePanel(currentDialogue.choices, onContinue: null);
+    }
+
+    // 대사 도중 선택지(DialogueLine.isChoice)를 띄운다. 아무것도 안 적힌 보기를 고르면
+    // 다음 줄부터 그대로 이어간다("진행" 보기).
+    private void ShowInlineChoices(DialogueLine line)
+    {
+        if (line.inlineChoices == null || line.inlineChoices.Count == 0)
+        {
+            Debug.LogWarning("[DialogueSystem] 선택지 줄인데 보기가 하나도 없습니다. 건너뜁니다.");
+            ShowNextSentence();
+            return;
+        }
+
+        ShowDialoguePanel();   // 직전 대사가 선택지 뒤에 그대로 보이도록
+        BuildChoicePanel(line.inlineChoices, onContinue: () => ShowNextSentence());
+    }
+
+    // IsFadeOut이 TRUE인 선택지 묶음: 화면을 검게 덮고 무대를 바꾼 뒤 다시 밝히고 선택지를 띄운다.
+    // 일반 대사 줄의 암전(ShowLineWithFade)과 같은 흐름이며, 선택지 패널은 암전이 완전히
+    // 걷힌 뒤에야 켜지므로 검은 막 위에 선택지만 둥둥 떠 있는 모양이 되지 않는다.
+    private IEnumerator ShowInlineChoicesWithFade(DialogueLine line, bool followsInvestigation)
+    {
+        isFading = true;
+        if (fadeCanvasGroup != null) fadeCanvasGroup.blocksRaycasts = true;
+        // 앞 선택지가 아직 떠 있다면 화면이 어두워지는 것과 같이 흐려지게 한다
+        // (ChoicePanelStyle.FadeOut - 툭 꺼지지 않게).
+        ChoicePanelStyle.FadeOut(choicePanel);
+
+        yield return StartCoroutine(Fade(1f));
+
+        // 조사 직후라면 남아 있던 조사 오브젝트 그림을 이때 지운다 (ShowLineWithFade와 같은 처리).
+        if (followsInvestigation) InvestigationController.Instance?.ClearLeftoverHotspots();
+        ApplyLineStage(line, instant: true);
+
+        yield return StartCoroutine(HoldBlack(
+            followsInvestigation ? postInvestigationBlackHoldDuration : blackHoldDuration));
+        yield return StartCoroutine(Fade(0f));
+
+        if (fadeCanvasGroup != null) fadeCanvasGroup.blocksRaycasts = false;
+        isFading = false;
+
+        ShowInlineChoices(line);
+    }
+
+    // 선택지 패널을 만든다. 대본 끝 선택지와 대사 도중 선택지가 같이 쓴다.
+    //   onContinue : 엔딩도 다음 대본도 적히지 않은 보기("진행")를 골랐을 때 할 일.
+    //                null이면 아무 일도 하지 않는다(대본 끝 선택지의 예전 동작).
+    private void BuildChoicePanel(List<Choice> list, Action onContinue)
+    {
         choicePanel.SetActive(true);
 
         // 기존 선택지 버튼 제거
         foreach (Transform child in choiceContainer) Destroy(child.gameObject);
 
         // 선택지 동적 생성
-        foreach (var choice in currentDialogue.choices)
+        foreach (var choice in list)
         {
             GameObject btn = Instantiate(choiceButtonPrefab, choiceContainer);
             btn.GetComponentInChildren<TMP_Text>().text = choice.choiceText;
@@ -1972,7 +2071,10 @@ public class DialogueSystem : MonoBehaviour
             string pickedText = choice.choiceText;
 
             btn.GetComponent<Button>().onClick.AddListener(() => {
-                choicePanel.SetActive(false);
+                // 고른 순간 툭 꺼지지 않고 어두운 막과 함께 서서히 사라진다. 바로 뒤에 암전
+                // (IsFadeOut)이 이어지면 그 암전과 겹쳐 보여 연출이 끊기지 않는다.
+                // 흐려지는 동안에는 버튼이 눌리지 않으므로 두 번 고를 걱정은 없다.
+                ChoicePanelStyle.FadeOut(choicePanel);
 
                 // 고른 선택지도 대화 로그에 남긴다 - 안 남기면 로그만 봤을 때 대사 흐름이
                 // 뚝뚝 끊겨 보인다. 화자는 항상 주인공(차재훈)이다 (선택지는 차재훈의 결정이므로).
@@ -2003,8 +2105,32 @@ public class DialogueSystem : MonoBehaviour
                     // CSV로 만든 선택지: 다음 CSV 파일을 이어서 불러온다
                     LoadDialogueFromCSV(nextCsv);
                 }
+                else
+                {
+                    // 엔딩도 다음 대본도 안 적힌 보기 = "그냥 진행".
+                    // 대사 도중 선택지면 다음 줄로 이어가고, 대본 끝 선택지면(onContinue가 null)
+                    // 예전처럼 아무 일도 하지 않는다.
+                    onContinue?.Invoke();
+                }
             });
         }
+
+        PlaceChoicePanelClearOfBubble(list.Count);
+    }
+
+    // ===== 선택지가 말풍선을 가리지 않게 =====
+    // 말풍선은 말하는 인물 옆에 뜨므로 화면 한가운데(선택지 기본 자리)와 겹칠 수 있다.
+    // 겹치면 두 글자가 포개져서 질문도 보기도 못 읽는다. 말풍선 위/아래로 선택지를 비켜 놓고,
+    // 말풍선이 너무 커서 비켜 놓을 자리가 없으면 말풍선을 치우고 아래 대화창으로 되돌린다
+    // (대사는 아래 대화창에 그대로 있으므로 읽는 데 지장이 없다).
+    private void PlaceChoicePanelClearOfBubble(int rowCount)
+    {
+        Rect avoid = speechBubble != null && speechBubble.IsShowing ? speechBubble.Bounds : new Rect();
+        if (ChoicePanelStyle.PlaceClearOf(choicePanel, rowCount, avoid)) return;
+
+        speechBubble.Hide();
+        SetBoxVisualsHidden(false);
+        ChoicePanelStyle.PlaceClearOf(choicePanel, rowCount, new Rect());
     }
 
     // 지금 대사 진행을 막아야 하는 UI(선택지/팝업/미니게임/자료 뷰어)가 떠 있는지 확인한다.
@@ -2292,9 +2418,11 @@ public class DialogueSystem : MonoBehaviour
             if (skipMode != SkipMode.None) SetSkipMode(SkipMode.None);
             StopAutoAdvanceRoutine();
         }
-        else if (currentLine != null && !isTyping && autoAdvanceRoutine == null && !IsBlockedByOtherUI())
+        else if (currentLine != null && !isTyping && !isFading &&
+                 autoAdvanceRoutine == null && !IsBlockedByOtherUI())
         {
             // 다시 보이게 했을 때 이미 다 찍힌 줄이면 자동 진행을 다시 예약한다 (AUTO가 켜져 있을 때만 실제로 예약됨).
+            // 암전 중이면 예약하지 않는다 - 위 HandleSettingsChanged()와 같은 이유다.
             OnPageFullyShown();
         }
     }
@@ -2496,13 +2624,18 @@ public class DialogueSystem : MonoBehaviour
     // "Investigate"인 행에서만 쓰인다. 실제 미니게임 조작 방식이 정해지면 여기에 컬럼이 더
     // 추가될 수 있다 - DialogueLine.cs 상단 주석 참고.)
     //
-    // LineType이 "Choice"인 행은 일반 대사(DialogueLine)가 아니라 선택지(Choice)로 취급되어
-    // currentDialogue.choices에 쌓인다. 그 외("Normal"/"Narration"/"Minigame")는 lines에
-    // 순서대로 쌓인다 (Minigame도 대사 흐름 중간에 끼워야 하므로 Choice와 다르게 lines 쪽으로
-    // 감). 지금 엔진 구조상 선택지는 항상 대사가 다 끝난 뒤 한 번에 보여주므로(ShowChoices()
-    // 참고), Choice 행은 CSV 파일의 맨 끝에 몰아서 적어야 한다 (중간에 끼워넣으면 무시되지
-    // 않고 그냥 choices 리스트에 똑같이 쌓이긴 하지만, 화면에는 대사가 전부 끝난 뒤에야
-    // 나타난다).
+    // LineType이 "Choice"인 행은 일반 대사(DialogueLine)가 아니라 선택지(Choice)로 취급된다.
+    // 그 외("Normal"/"Narration"/"Minigame")는 lines에 순서대로 쌓인다.
+    //
+    // Choice 행은 적은 "자리"에 따라 둘 중 하나로 동작한다.
+    //   - 파일 맨 끝에 몰려 있는 Choice 행 : 대사를 전부 본 뒤에 한 번 뜨는 선택지.
+    //     currentDialogue.choices로 들어간다 (ShowChoices() 참고). 예전부터 있던 동작이라
+    //     이미 만들어둔 CSV들은 전부 이쪽이다.
+    //   - 대사 행 사이에 끼어 있는 Choice 행 : 그 자리에서 뜨는 대사 도중 선택지.
+    //     연달아 붙은 Choice 행이 한 묶음이 되어 lines에 끼워진다
+    //     (DialogueLine.isChoice / ShowInlineChoices() 참고).
+    // 어느 쪽이든 보기 하나에 TargetEnding(엔딩) 또는 NextScenario(다음 대본)를 적으면
+    // 그쪽으로 분기하고, 둘 다 비워두면 대사 도중 선택지에서는 "그냥 다음 줄로 진행"이 된다.
     //
     // "Minigame" 행은 MinigameController.cs가 실제로 처리한다. TargetEnding 칸은 Choice
     // 행과 같은 컬럼이지만 여기서는 "실패 시 연결할 엔딩"이라는 뜻으로 재사용된다.
@@ -2548,6 +2681,20 @@ public class DialogueSystem : MonoBehaviour
         currentDialogue.lines = new List<DialogueLine>();
         currentDialogue.choices = new List<Choice>();
 
+        // ===== Choice 행이 "대본 끝의 선택지"인지 "대사 도중 선택지"인지 가린다 =====
+        // 예전에는 Choice 행을 무조건 currentDialogue.choices로 보냈다. 그래서 파일 중간에
+        // 적어두면 대사를 다 본 뒤에야 뜨거나(사실상 자리가 틀림) 그냥 무시됐다.
+        // 이제는 "마지막 대사 행보다 뒤에 있는 Choice 행"만 예전처럼 대본 끝 선택지로 쓰고,
+        // 그보다 앞에 있는 Choice 행은 그 자리에 끼워 넣어 대사 도중에 띄운다
+        // (DialogueLine.isChoice / inlineChoices 주석 참고).
+        // 이미 만들어둔 CSV들은 Choice 행이 전부 파일 맨 끝에 몰려 있으므로 동작이 그대로다.
+        int lastNonChoiceRow = -1;
+        for (var k = 0; k < data.Count; k++)
+        {
+            if (!string.Equals(GetField(data[k], "LineType"), "Choice", StringComparison.OrdinalIgnoreCase))
+                lastNonChoiceRow = k;
+        }
+
         for (var i = 0; i < data.Count; i++)
         {
             string lineTypeStr = GetField(data[i], "LineType");
@@ -2578,7 +2725,7 @@ public class DialogueSystem : MonoBehaviour
                     {
                         Debug.LogWarning($"[DialogueSystem] '{endingStr}'은 EndingType에 없는 값입니다. " +
                                          $"(CSV: {csvFileName}, 행: {i + 2}) " +
-                                         "쓸 수 있는 값: True, Normal, Bad_A ~ Bad_E");
+                                         "쓸 수 있는 값: True, Normal, Bad_A ~ Bad_G");
                     }
                 }
                 else
@@ -2586,7 +2733,35 @@ public class DialogueSystem : MonoBehaviour
                     choice.nextScenarioCsv = GetField(data[i], "NextScenario");
                 }
 
-                currentDialogue.choices.Add(choice);
+                if (i > lastNonChoiceRow)
+                {
+                    // 파일 맨 끝에 몰려 있는 Choice 행 = 예전 그대로 "대본이 끝난 뒤" 뜨는 선택지.
+                    currentDialogue.choices.Add(choice);
+                    continue;
+                }
+
+                // 대사 도중 선택지: 바로 앞 줄도 선택지 묶음이면 거기에 보기 하나를 더 붙이고,
+                // 아니면 새 묶음 줄을 만들어 이 자리에 끼워 넣는다.
+                DialogueLine choiceHost = currentDialogue.lines.Count > 0
+                    ? currentDialogue.lines[currentDialogue.lines.Count - 1]
+                    : null;
+                if (choiceHost == null || !choiceHost.isChoice)
+                {
+                    choiceHost = new DialogueLine();
+                    choiceHost.isChoice = true;
+                    choiceHost.inlineChoices = new List<Choice>();
+
+                    // 묶음의 첫 행에 적힌 연출 칸을 묶음 전체의 연출로 쓴다.
+                    // IsFadeOut이 TRUE면 암전했다가 밝힌 뒤에 선택지를 띄우고, Scene/Standing이
+                    // 적혀 있으면 그 암전 중에 무대를 바꾼다 (ShowInlineChoicesWithFade 참고).
+                    choiceHost.isFadeOut = GetField(data[i], "IsFadeOut").ToLower() == "true";
+                    ApplySceneColumn(choiceHost, data, i);
+                    choiceHost.standingNames = GetField(data[i], "Standing");
+                    ApplySoundColumns(choiceHost, data[i]);
+
+                    currentDialogue.lines.Add(choiceHost);
+                }
+                choiceHost.inlineChoices.Add(choice);
                 continue;
             }
 

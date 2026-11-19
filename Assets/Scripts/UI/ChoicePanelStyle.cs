@@ -39,9 +39,23 @@ public class ChoicePanelStyle : MonoBehaviour
     private const float Spacing = 12f;
     private const float TextPadding = 32f;
 
+    // 말풍선을 피해 비켜 놓을 때 띄우는 간격과, 화면 가장자리에서 남겨둘 여백.
+    private const float AvoidGap = 24f;
+    private const float ScreenEdge = 24f;
+
+    // 뒤 화면을 어둡게 하는 막의 진하기. 선택지가 사라질 때 이 값에서 0까지 같이 흐려진다.
+    private const float DimAlpha = 0.55f;
+
+    // 나타날 때 / 사라질 때 걸리는 시간(초).
+    private const float FadeInSeconds = 0.2f;
+    private const float FadeOutSeconds = 0.25f;
+
     private GameObject dim;
+    private RectTransform panelRect;   // 선택지 패널 자신 (이 부품은 그 안의 container에 붙어 있다)
+    private Image dimImage;
     private CanvasGroup group;
     private Coroutine fadeRoutine;
+    private bool fadingOut;   // 사라지는 중에는 클릭·숫자키를 받지 않는다
 
     // DialogueSystem이 시작할 때 한 번 부른다. 이미 붙어 있으면 그대로 둔다.
     public static void Attach(GameObject panel, Transform container, GameObject dialoguePanel)
@@ -55,7 +69,9 @@ public class ChoicePanelStyle : MonoBehaviour
     private void Setup(GameObject panel, GameObject dialoguePanel)
     {
         // ----- 패널 자리: 화면 정가운데 -----
+        // (말풍선과 겹치는 자리면 PlaceClearOf()가 위나 아래로 비켜 놓는다)
         var rt = (RectTransform)panel.transform;
+        panelRect = rt;
         rt.anchorMin = rt.anchorMax = new Vector2(0.5f, 0.5f);
         rt.pivot = new Vector2(0.5f, 0.5f);            // 가운데 기준 - 선택지가 많아지면 위아래로 같이 늘어난다
         rt.anchoredPosition = Vector2.zero;
@@ -102,9 +118,9 @@ public class ChoicePanelStyle : MonoBehaviour
             drt.anchorMin = Vector2.zero;
             drt.anchorMax = Vector2.one;
             drt.offsetMin = drt.offsetMax = Vector2.zero;
-            var dimImg = dim.GetComponent<Image>();
-            dimImg.color = new Color(0f, 0f, 0f, 0.55f);
-            dimImg.raycastTarget = true;   // 선택지가 떠 있는 동안 뒤의 조사 오브젝트가 눌리지 않게
+            dimImage = dim.GetComponent<Image>();
+            dimImage.color = new Color(0f, 0f, 0f, DimAlpha);
+            dimImage.raycastTarget = true;   // 선택지가 떠 있는 동안 뒤의 조사 오브젝트가 눌리지 않게
             dim.SetActive(panel.activeInHierarchy);
             // 창 등록은 선택지 패널이 하고(아래), 이 막은 그 일부다 - 개발 중 경고에서 뺀다.
             ModalStack.MarkNotWindow(dim, "선택지 뒤의 어두운 막. 창 등록은 선택지 패널(choicePanel)이 한다.");
@@ -114,11 +130,24 @@ public class ChoicePanelStyle : MonoBehaviour
     }
 
     // 패널이 켜질 때: 어두운 막을 켜고, 선택지를 살짝 떠오르듯 보여준다.
+    // 사라지는 도중에 다시 켜졌다면(=다음 선택지가 바로 떴다면) 사라지던 상태를 전부 되돌린다.
     private void OnEnable()
     {
-        if (dim != null) dim.SetActive(true);
+        fadingOut = false;
+        // 비켜 놓았던 자리를 원래대로(한가운데) 되돌린다. 조사 중 대화 선택지나 추리 보기는
+        // BuildChoicePanel을 거치지 않고 바로 패널을 켜므로, 여기서 되돌리지 않으면 앞선
+        // 선택지가 말풍선을 피해 옮겨둔 자리에 그대로 뜬다.
+        if (panelRect != null) panelRect.anchoredPosition = Vector2.zero;
+        if (dim != null)
+        {
+            dim.SetActive(true);
+            SetDimAlpha(DimAlpha);
+            if (dimImage != null) dimImage.raycastTarget = true;
+        }
         if (group != null)
         {
+            group.interactable = true;
+            group.blocksRaycasts = true;
             if (fadeRoutine != null) StopCoroutine(fadeRoutine);
             fadeRoutine = StartCoroutine(FadeIn());
         }
@@ -126,8 +155,18 @@ public class ChoicePanelStyle : MonoBehaviour
 
     private void OnDisable()
     {
-        if (dim != null) dim.SetActive(false);
-        if (group != null) group.alpha = 1f;
+        fadingOut = false;
+        if (dim != null)
+        {
+            dim.SetActive(false);
+            SetDimAlpha(DimAlpha);
+        }
+        if (group != null)
+        {
+            group.alpha = 1f;
+            group.interactable = true;
+            group.blocksRaycasts = true;
+        }
     }
 
     private void OnDestroy()
@@ -137,19 +176,127 @@ public class ChoicePanelStyle : MonoBehaviour
 
     private IEnumerator FadeIn()
     {
-        const float duration = 0.2f;
-        for (float t = 0f; t < duration; t += Time.unscaledDeltaTime)
+        for (float t = 0f; t < FadeInSeconds; t += Time.unscaledDeltaTime)
         {
-            group.alpha = t / duration;
+            group.alpha = t / FadeInSeconds;
             yield return null;
         }
         group.alpha = 1f;
         fadeRoutine = null;
     }
 
+    // ===== 선택지를 서서히 지우기 =====
+    // 예전에는 보기를 고르는 순간 choicePanel.SetActive(false)로 툭 껐다. 바로 뒤에 암전
+    // (IsFadeOut)이 이어지는 자리에서는 선택지만 먼저 사라지고 화면이 따로 어두워져서
+    // 두 연출이 어긋나 보였다. 그래서 선택지도 함께 흐려지도록 이 길을 따로 뺐다.
+    // 버튼과 어두운 막이 같이 흐려지고, 다 흐려지면 패널을 끈다(OnDisable에서 원래대로 되돌림).
+    // 흐려지는 동안에는 클릭도 숫자키도 받지 않으므로 보기를 두 번 고를 수 없다.
+    public static void FadeOut(GameObject panel)
+    {
+        if (panel == null || !panel.activeSelf) return;
+
+        var style = panel.GetComponentInChildren<ChoicePanelStyle>(true);
+        if (style == null || style.group == null || !style.isActiveAndEnabled)
+        {
+            panel.SetActive(false);   // 모양 부품이 없으면 예전처럼 바로 끈다
+            return;
+        }
+        style.BeginFadeOut(panel);
+    }
+
+    // =================================================================================
+    // 말풍선과 겹치지 않게 비켜 놓기
+    // =================================================================================
+    // 선택지의 기본 자리는 화면 한가운데인데, 말풍선은 "말하는 인물 옆"에 뜨기 때문에 하필
+    // 그 자리에 겹칠 수 있다. 겹치면 선택지 글자와 대사 글자가 포개져서 둘 다 못 읽는다.
+    // (대사 도중 선택지를 넣으면서 실제로 이 모양이 나왔다)
+    //
+    // 그래서 말풍선이 떠 있으면 그 위/아래 중 자리가 넉넉한 쪽으로 선택지를 통째로 옮긴다.
+    // 아래쪽을 먼저 보는 이유: 말풍선이 떠 있는 동안 아래 대화창은 감춰져 있어서 비어 있고,
+    // "위에서 말하고 아래에서 고른다"는 읽는 순서가 자연스럽기 때문이다.
+    //
+    //   rowCount : 이번에 띄울 보기 개수 (높이 계산용 - 레이아웃은 다음 프레임에야 잡히므로
+    //              여기서 직접 센다)
+    //   avoid    : 피해야 할 네모(말풍선). 크기가 0이면 피할 것이 없다는 뜻.
+    //   반환값   : 놓을 자리를 찾았으면 true. 위아래 어디에도 안 들어가면 false - 이때는
+    //              부르는 쪽이 말풍선을 치우고 아래 대화창으로 되돌린다.
+    public static bool PlaceClearOf(GameObject panel, int rowCount, Rect avoid)
+    {
+        if (panel == null) return true;
+        var rt = (RectTransform)panel.transform;
+        rt.anchoredPosition = Vector2.zero;            // 기본은 한가운데
+
+        var canvas = UILayers.RootCanvas();
+        if (canvas == null) return true;
+        float halfH = ((RectTransform)canvas.transform).rect.height * 0.5f;
+
+        if (avoid.width <= 0f || avoid.height <= 0f) return true;   // 말풍선이 없다
+
+        float panelH = rowCount * RowHeight + Mathf.Max(0, rowCount - 1) * Spacing;
+        float halfPanelH = panelH * 0.5f;
+        float halfPanelW = Width * 0.5f;
+
+        // 가로로도 세로로도 겹치지 않으면 한가운데 그대로 둔다.
+        if (avoid.xMin >= halfPanelW || avoid.xMax <= -halfPanelW) return true;
+        if (avoid.yMin >= halfPanelH || avoid.yMax <= -halfPanelH) return true;
+
+        float roomBelow = (avoid.yMin - AvoidGap) - (-halfH + ScreenEdge);
+        float roomAbove = (halfH - ScreenEdge) - (avoid.yMax + AvoidGap);
+
+        if (roomBelow >= panelH)
+        {
+            rt.anchoredPosition = new Vector2(0f, avoid.yMin - AvoidGap - halfPanelH);
+            return true;
+        }
+        if (roomAbove >= panelH)
+        {
+            rt.anchoredPosition = new Vector2(0f, avoid.yMax + AvoidGap + halfPanelH);
+            return true;
+        }
+        return false;   // 말풍선이 너무 커서 위아래 어디에도 안 들어간다
+    }
+
+    private void BeginFadeOut(GameObject panel)
+    {
+        if (fadingOut) return;
+        fadingOut = true;
+
+        group.interactable = false;
+        group.blocksRaycasts = false;
+        if (dimImage != null) dimImage.raycastTarget = false;
+
+        if (fadeRoutine != null) StopCoroutine(fadeRoutine);
+        fadeRoutine = StartCoroutine(FadeOutRoutine(panel));
+    }
+
+    private IEnumerator FadeOutRoutine(GameObject panel)
+    {
+        float startAlpha = group.alpha;
+        for (float t = 0f; t < FadeOutSeconds; t += Time.unscaledDeltaTime)
+        {
+            float k = 1f - t / FadeOutSeconds;
+            group.alpha = startAlpha * k;
+            SetDimAlpha(DimAlpha * k);
+            yield return null;
+        }
+        group.alpha = 0f;
+        SetDimAlpha(0f);
+        fadeRoutine = null;
+        panel.SetActive(false);
+    }
+
+    private void SetDimAlpha(float a)
+    {
+        if (dimImage == null) return;
+        var c = dimImage.color;
+        dimImage.color = new Color(c.r, c.g, c.b, a);
+    }
+
     // 숫자키 1~9로 고르기 (위에서부터 1, 2, 3 …)
     private void Update()
     {
+        if (fadingOut) return;
+
         for (int i = 0; i < 9; i++)
         {
             if (!Input.GetKeyDown(KeyCode.Alpha1 + i) && !Input.GetKeyDown(KeyCode.Keypad1 + i)) continue;

@@ -43,6 +43,8 @@ public class EndingCardUI : MonoBehaviour
         { EndingType.Bad_C,  new Entry("BAD END",    "검은 바다") },
         { EndingType.Bad_D,  new Entry("BAD END",    "평범한 하루") },
         { EndingType.Bad_E,  new Entry("BAD END",    "타오르는 사무실") },
+        { EndingType.Bad_F,  new Entry("BAD END",    "닫힌 문") },
+        { EndingType.Bad_G,  new Entry("BAD END",    "빈 그릇") },
     };
 
     private const int CanvasSortOrder = 5000;

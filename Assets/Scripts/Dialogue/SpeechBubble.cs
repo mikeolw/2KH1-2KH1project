@@ -145,6 +145,23 @@ public class SpeechBubble : MonoBehaviour
     // 지금 말풍선 가운데 위치 (화면 가운데 0,0 / 위로 +)
     public Vector2 Center => body != null ? body.anchoredPosition : Vector2.zero;
 
+    // 말풍선이 화면에서 차지하는 네모 (화면 가운데 0,0 / 위로 +).
+    // 왼쪽 위에 반쯤 걸쳐 있는 이름표 높이까지 포함한다.
+    // 선택지 패널이 이 자리를 피해 가려고 쓴다 (ChoicePanelStyle.PlaceClearOf).
+    // 말풍선이 떠 있지 않으면 크기 0짜리 빈 네모를 돌려준다.
+    public Rect Bounds
+    {
+        get
+        {
+            if (!IsShowing || body == null) return new Rect();
+            Vector2 c = body.anchoredPosition;
+            Vector2 s = body.sizeDelta;
+            float top = c.y + s.y * 0.5f
+                      + (nameTag != null && nameTag.gameObject.activeSelf ? NameTagHeight * 0.5f : 0f);
+            return Rect.MinMaxRect(c.x - s.x * 0.5f, c.y - s.y * 0.5f, c.x + s.x * 0.5f, top);
+        }
+    }
+
     private Vector2 ClampToScreen(Vector2 center, Vector2 size)
     {
         float half = canvasRect.rect.width * 0.5f, halfH = canvasRect.rect.height * 0.5f;

@@ -99,6 +99,12 @@ public class InvestigationController : MonoBehaviour
     private const string ResourceRoomDoorScreenId = "BG_07_InvestigationSite_04";
     private const string ResourceRoomDoorHotspotKey = "Hotspot_ResourceRoomdoor";
 
+    // 자료실 안(책장이 늘어선 화면). 책이 24권이라 이름을 일일이 적는 대신
+    // 접두사/접미사 규칙으로 가르는 곳이 있어서 상수로 빼 두었다. (IsWrongHotspot 참고)
+    private const string ArchiveRoomScreenId = "BG_07_InvestigationSite_05";
+    private const string ArchiveBookPrefix = "Hotspot_Documents_";
+    private const string ArchiveClueSuffix = "_Clue";
+
     // 사장실 앞(_06)에 처음 도착하면 "#07 사장실 진입" 저장 창을 띄운다.
     // 화살표로 자료실 앞과 왔다갔다해도 한 번만 뜨도록 표시 아이템을 남긴다.
     private const string CeoRoomFrontScreenId = "BG_07_InvestigationSite_06";
@@ -142,9 +148,9 @@ public class InvestigationController : MonoBehaviour
     private static readonly HashSet<string> ItemHotspotsSkipAutoViewer = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
     {
         TextKey("BG_01_MyDesk", "Hotspot_Documents"),
-        TextKey("BG_07_InvestigationSite_05", "Hotspot_Documents_F01R_Clue"),
-        TextKey("BG_07_InvestigationSite_05", "Hotspot_Documents_F02R_Clue1"),
-        TextKey("BG_07_InvestigationSite_05", "Hotspot_Documents_F02R_Clue2"),
+        TextKey(ArchiveRoomScreenId, "Hotspot_Documents_F01L_01_Clue"),   // 계약서
+        TextKey(ArchiveRoomScreenId, "Hotspot_Documents_F01R_07_Clue"),   // 업무기록 2001.07
+        TextKey(ArchiveRoomScreenId, "Hotspot_Documents_F01R_08_Clue"),   // 업무기록 2001.08
     };
 
     // ===== 이미 할 일을 끝낸 오브젝트를 다시 누르면 보여줄 "평소 대사"의 출처 =====
@@ -157,26 +163,49 @@ public class InvestigationController : MonoBehaviour
     };
 
     // ===== "엉뚱한 곳"을 조사하면 타임어택 시간이 깎이는 오브젝트들 =====
-    // 자료실(_05)의 진짜 단서(Hotspot_..._Clue)가 아닌 옆의 가짜 서류 더미, 사장실(_07)의
-    // 커튼/책장/사장 책상처럼 "뒤져볼 법하지만 정답은 아닌" 자리를 조사하면 시간을 낭비했다는
-    // 뜻으로 페널티(TimeAttackController.ApplyPenalty)를 준다. 새 CSV 컬럼을 추가하지 않고
+    // 자료실(_05)의 단서가 아닌 책들, 사장실(_07)의 커튼/책장/소파처럼 "뒤져볼 법하지만
+    // 정답은 아닌" 자리를 조사하면 시간을 낭비했다는 뜻으로 페널티
+    // (TimeAttackController.ApplyPenalty)를 준다. 새 CSV 컬럼을 추가하지 않고
     // (팀 규칙, CSV_가이드.md 참고) 자료실 문의 예외 분기(ResourceRoomDoorScreenId 등)와 같은
-    // 방식으로 화면/오브젝트 이름을 코드에 직접 적어 식별한다. 타임어택이 돌아가는 중이
+    // 방식으로 화면/오브젝트 이름을 코드에서 식별한다. 타임어택이 돌아가는 중이
     // 아니면(TimeAttackController.IsRunning == false) ApplyPenalty()가 알아서 조용히
     // 무시하므로 여기서 따로 검사할 필요는 없다.
+    //
+    // 아래 목록은 "이름을 하나씩 적는" 쪽이고, 자료실 책처럼 수가 많은 곳은
+    // IsWrongHotspot()에서 규칙으로 가른다. 실제 판정은 항상 IsWrongHotspot()을 거친다.
     private const float WrongHotspotPenaltySeconds = 5f;
     private static readonly HashSet<string> WrongHotspots = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
     {
-        TextKey("BG_07_InvestigationSite_05", "Hotspot_Documents_F01L"),
-        TextKey("BG_07_InvestigationSite_05", "Hotspot_Documents_F01R"),
-        TextKey("BG_07_InvestigationSite_05", "Hotspot_Documents_F02L"),
-        TextKey("BG_07_InvestigationSite_05", "Hotspot_Documents_F02R"),
         TextKey("BG_07_InvestigationSite_07", "Hotspot_Curtain"),
         TextKey("BG_07_InvestigationSite_07", "Hotspot_BookCase"),
         // 사장 책상은 뺐다. 금고 비밀번호 단서(사장의 비망록)가 여기서 나오므로 "엉뚱한 곳"이
         // 아니라 반드시 들러야 하는 자리다. 시간을 깎으면 꼭 해야 할 일에 벌을 주는 셈이 된다.
         TextKey("BG_07_InvestigationSite_07", "Hotspot_Sofa"),
     };
+
+    // 자료실 책 24권은 위 목록에 이름을 적지 않고 규칙으로 가른다.
+    // 책이 24권이나 되는데 그중 단서는 셋뿐이라, 21개를 손으로 적어두면 책 이름을 하나
+    // 고칠 때마다 목록도 같이 고쳐야 하고 빠뜨리면 조용히 페널티가 사라진다.
+    // 단서 책만 핫스팟 이름이 "_Clue"로 끝나므로(InvestigationStage.csv), 자료실 화면에서
+    // "_Clue로 끝나지 않는 책"이면 전부 엉뚱한 곳이다.
+    private static bool IsWrongHotspot(string screenId, string hotspotKey)
+    {
+        if (string.IsNullOrEmpty(screenId) || string.IsNullOrEmpty(hotspotKey)) return false;
+
+        if (string.Equals(screenId, ArchiveRoomScreenId, StringComparison.OrdinalIgnoreCase))
+            return IsArchiveJunkBook(screenId, hotspotKey);
+
+        return WrongHotspots.Contains(TextKey(screenId, hotspotKey));
+    }
+
+    // 자료실 책 24권 중 단서가 아닌 21권인가. (단서 책만 핫스팟 이름이 "_Clue"로 끝난다)
+    private static bool IsArchiveJunkBook(string screenId, string hotspotKey)
+    {
+        return string.Equals(screenId, ArchiveRoomScreenId, StringComparison.OrdinalIgnoreCase)
+            && !string.IsNullOrEmpty(hotspotKey)
+            && hotspotKey.StartsWith(ArchiveBookPrefix, StringComparison.OrdinalIgnoreCase)
+            && !hotspotKey.EndsWith(ArchiveClueSuffix, StringComparison.OrdinalIgnoreCase);
+    }
 
     // ===== 조사 데이터는 두 파일로 나뉜다 =====
     //   1) Assets/StreamingAssets/Stage/InvestigationStage.csv  (git으로 공유 - 스토리 없음, 배치 도구가 고친다)
@@ -1886,9 +1915,9 @@ public class InvestigationController : MonoBehaviour
 
         // ===== "엉뚱한 곳" 페널티 =====
         // 다른 처리(아이템 지급, 선택지 등)와는 완전히 별개로, 눌린 오브젝트가 WrongHotspots에
-        // 있으면 매번(다시 눌러도 그때마다) 시간을 깎는다. 이 오브젝트들엔 RequiredItemId나
+        // 걸리면 매번(다시 눌러도 그때마다) 시간을 깎는다. 이 오브젝트들엔 RequiredItemId나
         // afterTargetScreenId가 없으므로 아래 분기들과 부딪히지 않는다.
-        if (activeScreenId != null && WrongHotspots.Contains(TextKey(activeScreenId, obj.gameObject.name)))
+        if (IsWrongHotspot(activeScreenId, obj.gameObject.name))
         {
             TimeAttackController.Instance?.ApplyPenalty(WrongHotspotPenaltySeconds);
         }
@@ -2056,7 +2085,13 @@ public class InvestigationController : MonoBehaviour
             string explicitWho = obj.explicitSpeaker ?? "";
             bool isConversation = obj.type == HotspotType.Talk ||
                                   (!string.IsNullOrEmpty(explicitWho) && explicitWho != "차재훈");
-            bool skipAutoNote = isConversation;
+
+            // ===== 자료실의 쓸모없는 책은 수첩에 적지 않는다 =====
+            // 책이 24권인데 그중 21권이 "쓸데없는 자료다." 한 줄뿐이다. 그대로 두면 누를 때마다
+            // 수첩에 같은 문장이 쌓여서, 21줄로 뒤덮인 수첩에서 정작 중요한 메모를 찾을 수 없게
+            // 된다. 단서 책 3권은 평소대로 적힌다.
+            bool skipAutoNote = isConversation ||
+                                IsArchiveJunkBook(activeScreenId, obj.gameObject.name);
 
             if (!hasWrittenNote && !hasChoices && !skipAutoNote)
             {
@@ -2091,7 +2126,7 @@ public class InvestigationController : MonoBehaviour
         // ===== 오브젝트 하나가 아이템 여러 개를 한 번에 주는 경우 =====
         // ItemId 칸에 "이름1|이름2"처럼 세로줄로 여러 개를 적어두면 전부 가방에 넣는다
         // (AutoExit 등 화면 단위 조건에서 이미 쓰던 "|" 구분 방식을 그대로 재사용한다 -
-        // ParseItemList 참고). 예) 자료실 문서 뭉치(OBJ_07_Documents_F01R_Clue) - 그림은
+        // ParseItemList 참고). 예) 자료실 단서 책(OBJ_07_Documents_F01L_01 계약서) - 그림은
         // 한 장이지만 그 안에 서로 다른 문서 네 개가 들어있다는 설정이라, 펼쳐볼 때 네
         // 아이템을 동시에 준다. 아이템이 하나뿐인 오브젝트는 지금까지와 똑같이 동작한다.
         List<string> grantedItemIds = ParseItemList(obj.itemId);
