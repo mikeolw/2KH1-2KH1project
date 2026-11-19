@@ -18,10 +18,23 @@ using static UIKit;   // CreateText, PlaceTopLeft, AddRect, Stretch ... (UIKit.c
 //   - 같은 그룹이 연달아 두 번 나오지 않게 해서 "바뀌었다"는 느낌을 준다.
 //
 // ===== 그림 =====
-// Resources/Illusts/Standings/STD_07_Corridor_01 ~ _10.
-// 캔버스 크기(1440x1080) 그대로 그려져 있어서 IllustLayout.csv에 좌표를 적을 필요가 없다
-// (IllustLayout.cs의 "방법 1" 참고). 지금 들어있는 것은 목업이므로, 정식 아트가 나오면
-// 같은 이름으로 덮어쓰기만 하면 된다.
+// Resources/Illusts/Objects/OBJ_07_Normal1~4 (일반 직원), OBJ_07_Suspect1~4 (진범 측).
+// 여백을 잘라낸 그림이라 IllustLayout.csv에 화면별 좌표를 적어두었다
+// (Screen = BG_07_InvestigationSite_04, IllustLayout.cs의 "방법 2" 참고).
+//
+// 한 그룹에 여러 명이 설 수 있다. spriteName에 "이름1|이름2"처럼 세로줄로 이어 적으면
+// 그 사람들이 한꺼번에 복도에 선다 (CSV의 ItemId 칸과 같은 표기).
+//
+// ===== 자료실 문 앞은 반드시 비워 둔다 =====
+// 문(X -642~-304)과 그 옆 '자료실' 안내판(X -279~-141)을 사람이 가리면 어디를 눌러야
+// 하는지 안 보여서 게임이 성립하지 않는다. 그래서 사람은 그 오른쪽(FreeLeft 이후)에만 선다.
+//   - 혼자일 때  : IllustLayout.csv에 적힌 자기 자리. 전부 문 오른쪽으로 잡아 두었다.
+//   - 여럿일 때  : 문 오른쪽 빈 복도를 사람 수만큼 나눠 선다 (SlotX). 배치표의 세로(Y)는
+//                  그대로 쓰므로 발이 바닥에 붙은 채로 가로로만 자리를 바꾼다.
+//
+// 예전 목업은 Standings/STD_07_Corridor_01~10 이었고 캔버스 크기(1440x1080)
+// 그대로였다. 인스펙터에 그 이름이 남아 있어도 동작하도록 LoadCorridorSprite()가
+// 이름 앞머리를 보고 폴더를 고른다.
 //
 // ===== 어디서 켜고 끄나 =====
 // InvestigationController가 자료실 앞 화면을 열 때 Begin(), 그 화면을 벗어나거나 조사를
@@ -37,11 +50,23 @@ public class CorridorWatchController : MonoBehaviour
     // 이 미니게임이 도는 조사 화면. 배치표(IllustLayout.csv)에서 화면별 좌표를 찾을 때 쓴다.
     public const string ScreenId = "BG_07_InvestigationSite_04";
 
+    // ===== 사람이 설 수 있는 가로 범위 (화면 가운데 0, 오른쪽 +) =====
+    // 왼쪽 끝을 -115로 잡은 근거: 자료실 문이 X -642~-304, 배경에 그려진 '자료실' 안내판이
+    // X -279~-141을 쓴다. 그 오른쪽으로 26px 띄운 자리가 -115다.
+    // 오른쪽은 화면 끝(720)에서 조금 안쪽.
+    private const float FreeLeft = -115f;
+    private const float FreeRight = 710f;
+
+    // 여러 명을 적을 때 쓰는 구분자 ("OBJ_07_Normal1|OBJ_07_Suspect2").
+    private static readonly char[] NameSeparator = { '|' };
+
     // 복도에 서 있는 사람 한 무리.
     [System.Serializable]
     public class CorridorGroup
     {
-        [Tooltip("Resources/Illusts/Standings/ 의 그림 파일 이름 (확장자 없이)")]
+        [Tooltip("Resources/Illusts/Objects/ 의 그림 파일 이름 (확장자 없이). " +
+                 "여러 명이면 \"이름1|이름2\"처럼 세로줄로 이어 적는다. 비우면 복도에 아무도 없다. " +
+                 "예전 목업 이름(STD_...)을 적으면 Standings/ 에서 찾는다.")]
         public string spriteName;
         [Tooltip("복도에 보이는 사람들의 이름. 비워두면 '복도에 아무도 없다'로 표시한다.")]
         public string caption;
@@ -61,8 +86,9 @@ public class CorridorWatchController : MonoBehaviour
     public float graceSeconds = 0.25f;
 
     [Header("안내 문구를 화면에 띄울지")]
-    [Tooltip("목업 단계에서 누가 서 있는지 글로 확인하기 위한 것. 정식 아트가 들어오면 끄면 된다.")]
-    public bool showCaption = true;
+    [Tooltip("누가 서 있는지 글로 확인하기 위한 개발용 표시. 정식 아트가 들어와서 기본은 꺼둔다. " +
+             "켜면 진범 측인지까지 그대로 보이므로 실제 플레이에서는 켜지 말 것.")]
+    public bool showCaption = false;
 
     [Header("복도 인물 그룹 (그림 한 장 = 그룹 하나)")]
     public List<CorridorGroup> groups = new List<CorridorGroup>();
@@ -91,7 +117,9 @@ public class CorridorWatchController : MonoBehaviour
     private float nextChangeTime;
 
     private GameObject root;
-    private Image personImage;
+    // 복도에 선 사람 그림들. 한 그룹에 여러 명이 설 수 있어서 필요한 만큼 늘려 쓴다
+    // (EnsurePersonImage). 안 쓰는 칸은 꺼 두고 다음 그룹에서 다시 쓴다.
+    private readonly List<Image> personImages = new List<Image>();
     private TMP_Text captionText;
     private GameObject captionChip;
 
@@ -104,27 +132,39 @@ public class CorridorWatchController : MonoBehaviour
     }
 
     // 인스펙터에서 아무것도 채우지 않았을 때 쓰는 기본 구성.
-    // 그림 10장(STD_07_Corridor_01~10)과 짝이 맞다.
+    // 정식 아트 8장(OBJ_07_Normal1~4 / OBJ_07_Suspect1~4)과 짝이 맞다.
+    //
+    // caption은 화면에 띄우는 글이 아니라(showCaption 기본 꺼짐) 개발 중에 누가 서 있었는지
+    // 확인하려고 남기는 이름이다. 들켰을 때 콘솔 로그에도 이 이름이 찍힌다
+    // (InvestigationController). 인물의 극중 이름은 아직 정해지지 않아서 번호만 붙였다.
     private void FillDefaultGroups()
     {
         groups = new List<CorridorGroup>
         {
-            // 아무도 없는 순간. 가중치를 낮게 줘서 어쩌다 한 번만 나온다.
-            new CorridorGroup { spriteName = "STD_07_Corridor_01", caption = "", dangerous = false, weight = 0.35f },
+            // 아무도 없는 순간. 그림 없이 복도만 보인다.
+            // 가중치를 낮게 줘서 어쩌다 한 번만 나온다 (예전 목업 구성과 같은 값).
+            new CorridorGroup { spriteName = "", caption = "", dangerous = false, weight = 0.35f },
 
-            new CorridorGroup { spriteName = "STD_07_Corridor_02", caption = "오수정 사원", dangerous = false, weight = 1f },
-            new CorridorGroup { spriteName = "STD_07_Corridor_03", caption = "한도윤 사원", dangerous = false, weight = 1f },
-            new CorridorGroup { spriteName = "STD_07_Corridor_04", caption = "서지민 사원, 배유리 사원", dangerous = false, weight = 1f },
-            new CorridorGroup { spriteName = "STD_07_Corridor_05", caption = "오수정 사원, 한도윤 사원", dangerous = false, weight = 1f },
-            new CorridorGroup { spriteName = "STD_07_Corridor_06", caption = "배유리 사원", dangerous = false, weight = 1f },
+            // ===== 안전 - 일반 직원뿐이라 이때 들어가면 아무 일도 없다 =====
+            new CorridorGroup { spriteName = "OBJ_07_Normal1", caption = "직원 1", dangerous = false, weight = 1f },
+            new CorridorGroup { spriteName = "OBJ_07_Normal2", caption = "직원 2", dangerous = false, weight = 1f },
+            new CorridorGroup { spriteName = "OBJ_07_Normal3", caption = "직원 3", dangerous = false, weight = 1f },
+            new CorridorGroup { spriteName = "OBJ_07_Normal4", caption = "직원 4", dangerous = false, weight = 1f },
+            new CorridorGroup { spriteName = "OBJ_07_Normal1|OBJ_07_Normal3", caption = "직원 1, 3", dangerous = false, weight = 1f },
+            new CorridorGroup { spriteName = "OBJ_07_Normal2|OBJ_07_Normal4", caption = "직원 2, 4", dangerous = false, weight = 1f },
+            new CorridorGroup { spriteName = "OBJ_07_Normal4|OBJ_07_Normal1|OBJ_07_Normal3", caption = "직원 4, 1, 3", dangerous = false, weight = 1f },
 
-            // ===== 진범 측 인물 - 이때 문을 누르면 들킨다 =====
-            // 과장 / 대리 / 서기 / 차장 네 사람이다. 목업 그림에도 머리 위에 같은 직책이
-            // 적혀 있어서, 그림만 보고도 들어가면 안 되는 순간인지 바로 알 수 있다.
-            new CorridorGroup { spriteName = "STD_07_Corridor_07", caption = "과장", dangerous = true, weight = 1f },
-            new CorridorGroup { spriteName = "STD_07_Corridor_08", caption = "대리", dangerous = true, weight = 1f },
-            new CorridorGroup { spriteName = "STD_07_Corridor_09", caption = "서기, 오수정 사원", dangerous = true, weight = 1f },
-            new CorridorGroup { spriteName = "STD_07_Corridor_10", caption = "차장, 서지민 사원", dangerous = true, weight = 1f },
+            // ===== 위험 - 진범 측이 한 명이라도 섞여 있으면 문을 누르는 순간 들킨다 =====
+            // 판정 자체는 예전과 똑같다. InvestigationController가 문을 누른 순간
+            // Freeze() 후 IsDangerous만 보고 TriggerEnding(EndingType.Bad_C)을 부른다.
+            // 여럿이 섞인 그룹은 "누가 서 있는지 훑어봐야 한다"는 긴장을 만든다.
+            new CorridorGroup { spriteName = "OBJ_07_Suspect1", caption = "진범 측 1", dangerous = true, weight = 1f },
+            new CorridorGroup { spriteName = "OBJ_07_Suspect2", caption = "진범 측 2", dangerous = true, weight = 1f },
+            new CorridorGroup { spriteName = "OBJ_07_Suspect3", caption = "진범 측 3", dangerous = true, weight = 1f },
+            new CorridorGroup { spriteName = "OBJ_07_Suspect4", caption = "진범 측 4", dangerous = true, weight = 1f },
+            new CorridorGroup { spriteName = "OBJ_07_Normal2|OBJ_07_Suspect1", caption = "직원 2, 진범 측 1", dangerous = true, weight = 1f },
+            new CorridorGroup { spriteName = "OBJ_07_Suspect4|OBJ_07_Normal3", caption = "진범 측 4, 직원 3", dangerous = true, weight = 1f },
+            new CorridorGroup { spriteName = "OBJ_07_Normal1|OBJ_07_Suspect2|OBJ_07_Normal4", caption = "직원 1, 진범 측 2, 직원 4", dangerous = true, weight = 1f },
         };
     }
 
@@ -212,21 +252,93 @@ public class CorridorWatchController : MonoBehaviour
         Apply(current);
     }
 
+    // 복도 인물 그림을 불러온다.
+    // 정식 아트는 조사 오브젝트와 같은 Objects/ 폴더에 OBJ_* 이름으로 들어 있다.
+    // 예전 목업은 Standings/ 의 STD_* 였고 인스펙터에 그 이름이 남아 있을 수 있어서,
+    // 이름 앞머리를 보고 찾을 폴더를 고른다.
+    // (System.StringComparison을 그대로 적는 이유: 이 파일에 using System;을 넣으면
+    //  System.Random과 UnityEngine.Random이 부딪혀 PickNext()의 Random.value가 깨진다)
+    private static Sprite LoadCorridorSprite(string fileName)
+    {
+        if (string.IsNullOrWhiteSpace(fileName)) return null;
+
+        string folder = fileName.Trim().StartsWith("STD_", System.StringComparison.OrdinalIgnoreCase)
+            ? IllustLoader.StandingFolder
+            : IllustLoader.ObjectFolder;
+        return IllustLoader.Load(folder, fileName);
+    }
+
+    // "이름1|이름2"를 갈라서 돌려준다. 비어 있으면 빈 배열(= 복도에 아무도 없다).
+    private static string[] SplitNames(string names)
+    {
+        if (string.IsNullOrWhiteSpace(names)) return System.Array.Empty<string>();
+        string[] parts = names.Split(NameSeparator, System.StringSplitOptions.RemoveEmptyEntries);
+        for (int i = 0; i < parts.Length; i++) parts[i] = parts[i].Trim();
+        return parts;
+    }
+
+    // 여럿이 설 때 index번째 사람의 가로 위치.
+    // 문과 안내판을 피한 빈 복도(FreeLeft~FreeRight)를 사람 수만큼 똑같이 나눠 가운데에 세운다.
+    // 그림이 넓어서 그 칸을 넘치면 빈 복도 밖으로는 안 나가도록 잡아당긴다 - 이 잡아당김이
+    // 문 앞으로 비집고 들어가는 것을 막는 마지막 안전장치다.
+    private static float SlotX(int index, int count, float width)
+    {
+        float span = FreeRight - FreeLeft;
+        float x = FreeLeft + span * (index + 0.5f) / Mathf.Max(1, count);
+        float half = width * 0.5f;
+        return Mathf.Round(Mathf.Clamp(x, FreeLeft + half, FreeRight - half));
+    }
+
+    // 사람 수만큼 그림칸을 마련한다 (안내 글줄보다 뒤에 깔리도록 순서를 맞춘다).
+    private Image EnsurePersonImage(int index)
+    {
+        while (personImages.Count <= index)
+        {
+            var go = new GameObject($"CorridorPerson{personImages.Count + 1}",
+                                    typeof(RectTransform), typeof(Image));
+            go.transform.SetParent(root.transform, false);
+            Stretch(go.GetComponent<RectTransform>());
+            var img = go.GetComponent<Image>();
+            // 크기/위치는 그림마다 IllustLayout이 잡아준다 (Apply 참고). 여기서 preserveAspect를
+            // 켜두면 캔버스 크기 그림이 레터박스되어 배경과 어긋난다.
+            img.preserveAspect = false;
+            // 복도 인물은 "보이기만 하는" 그림이다. 클릭이 통과해야 뒤의 자료실 문을 누를 수 있다.
+            img.raycastTarget = false;
+            go.transform.SetSiblingIndex(personImages.Count);
+            personImages.Add(img);
+        }
+        return personImages[index];
+    }
+
     private void Apply(CorridorGroup g)
     {
-        if (personImage != null)
+        string[] names = SplitNames(g.spriteName);
+        for (int i = 0; i < names.Length; i++)
         {
-            Sprite s = string.IsNullOrWhiteSpace(g.spriteName) ? null : IllustLoader.LoadStanding(g.spriteName);
-            personImage.sprite = s;
-            personImage.enabled = s != null;
-            if (s != null)
+            Sprite s = LoadCorridorSprite(names[i]);
+            var img = EnsurePersonImage(i);
+            img.sprite = s;
+            img.enabled = s != null;
+            if (s == null) continue;
+
+            // 배치는 조사 오브젝트/스탠딩과 똑같은 규칙을 쓴다(IllustLayout.cs 참고).
+            // 캔버스 크기(1440x1080)로 내보낸 그림은 배경처럼 꽉 채워 깔리고,
+            // 여백을 잘라낸 그림이면 배치표의 좌표대로 놓인다.
+            IllustLayout.Apply(img.rectTransform, s, names[i], default, ScreenId);
+
+            // 여럿이면 가로 자리만 다시 잡는다. 세로(Y)는 배치표 값을 그대로 둬야
+            // 발이 바닥선에 붙은 채로 남는다 (사람마다 키가 달라서 Y가 제각각이다).
+            if (names.Length > 1)
             {
-                // 배치는 조사 오브젝트/스탠딩과 똑같은 규칙을 쓴다(IllustLayout.cs 참고).
-                // 캔버스 크기(1440x1080)로 내보낸 그림은 배경처럼 꽉 채워 깔리고,
-                // 여백을 잘라낸 그림이면 배치표의 좌표대로 놓인다.
-                IllustLayout.Apply(personImage.rectTransform, s, g.spriteName, default, ScreenId);
+                var rt = img.rectTransform;
+                rt.anchoredPosition = new Vector2(SlotX(i, names.Length, s.rect.width),
+                                                  rt.anchoredPosition.y);
             }
         }
+
+        // 이번 그룹에서 안 쓰는 칸은 꺼 둔다 (앞 그룹의 사람이 남아 있으면 안 된다).
+        for (int i = names.Length; i < personImages.Count; i++) personImages[i].enabled = false;
+
         if (captionText != null)
         {
             if (captionChip != null) captionChip.SetActive(showCaption);
@@ -254,15 +366,9 @@ public class CorridorWatchController : MonoBehaviour
         root.transform.SetParent(targetCanvas.transform, false);
         Stretch(root.GetComponent<RectTransform>());
 
-        var personGo = new GameObject("CorridorPerson", typeof(RectTransform), typeof(Image));
-        personGo.transform.SetParent(root.transform, false);
-        Stretch(personGo.GetComponent<RectTransform>());
-        personImage = personGo.GetComponent<Image>();
-        // 크기/위치는 그림마다 IllustLayout이 잡아준다 (Apply 참고). 여기서 preserveAspect를
-        // 켜두면 캔버스 크기 그림이 레터박스되어 배경과 어긋난다.
-        personImage.preserveAspect = false;
-        // 복도 인물은 "보이기만 하는" 그림이다. 클릭이 통과해야 뒤의 자료실 문을 누를 수 있다.
-        personImage.raycastTarget = false;
+        // 사람 그림칸은 그룹마다 필요한 수만큼 EnsurePersonImage()가 만든다.
+        // 첫 한 칸만 미리 만들어 두어 안내 글줄보다 뒤에 깔리는 순서를 잡아둔다.
+        EnsurePersonImage(0);
 
         // 안내 글줄: 퀵바 아래 왼쪽의 어두운 띠 (미니게임 공통 모양).
         //   ▌ 복도   오수정 사원, 한도윤 사원

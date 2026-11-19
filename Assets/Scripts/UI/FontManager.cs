@@ -13,11 +13,13 @@ using TMPro;
 //   1 = 맑은 고딕 : 윈도우 기본 고딕체. 화면에서 읽기 가장 편하다.
 //   2 = 바탕     : 명조체(세리프). 소설 같은 느낌.
 //   3 = 굴림     : 예전 윈도우 기본 글꼴. 각지고 촘촘하다.
-// 1~3번은 윈도우에 설치되어 있는 시스템 글꼴을 게임 실행 중에 읽어와서 쓴다
+// 1~3번은 컴퓨터에 설치되어 있는 시스템 글꼴을 게임 실행 중에 읽어와서 쓴다
 // (Font.CreateDynamicFontFromOSFont). 그래서 프로젝트에 글꼴 파일을 따로 넣지 않아도 된다.
+// 글꼴 이름은 OS마다 다르므로 번호마다 후보를 여러 개 두고 되는 것을 쓴다
+// (아래 SystemFontCandidates 참고).
 //
 // ===== 시스템 글꼴을 쓸 때 주의할 점 =====
-//   - 윈도우에서만 확실히 동작한다. 다른 OS나 글꼴이 지워진 PC에서는 못 찾을 수 있는데,
+//   - 글꼴이 없는 컴퓨터에서는 못 찾을 수 있다(특히 한글 글꼴이 안 깔린 리눅스).
 //     그 경우 경고를 남기고 기본 글꼴을 그대로 쓴다(게임이 멈추지는 않는다).
 //   - 시스템 글꼴에서 만든 TMP 폰트는 "필요한 글자를 그때그때 그려서 채우는" 방식이라
 //     한글 11,172자를 미리 구워둘 필요가 없다. 대신 처음 나오는 글자는 아주 잠깐 느릴 수 있다.
@@ -37,8 +39,44 @@ public class FontManager : MonoBehaviour
     // 설정 화면 드롭다운에 표시할 이름들. GameSettings.fontIndex가 이 배열의 번호다.
     public static readonly string[] FontOptionNames = { "기본", "맑은 고딕", "바탕", "굴림" };
 
-    // 위 이름에 대응하는 실제 윈도우 글꼴 이름. 0번(기본)은 시스템 글꼴이 아니므로 비워둔다.
-    private static readonly string[] SystemFontNames = { "", "Malgun Gothic", "Batang", "Gulim" };
+    // 위 이름에 대응하는 실제 시스템 글꼴 이름 후보들. 0번(기본)은 시스템 글꼴이 아니라 비워둔다.
+    //
+    // ===== 왜 후보를 여러 개 두는가 =====
+    // 예전에는 윈도우 글꼴 이름 하나씩만 적어 두었다("Malgun Gothic"/"Batang"/"Gulim").
+    // 이 이름들은 윈도우에만 있어서, macOS와 리눅스에서는 글꼴 선택 1~3번이 모두 아무 반응
+    // 없이 기본 글꼴로만 보였다(게임이 멈추지는 않지만 설정 기능이 죽은 것과 같다).
+    // OS마다 한글 글꼴 이름이 전부 다르기 때문에, 앞에서부터 하나씩 시도해서 먼저 되는 것을 쓴다.
+    // 윈도우 이름을 맨 앞에 두었으니 윈도우에서는 예전과 똑같이 동작한다.
+    //
+    // 리눅스는 한글 글꼴이 아예 안 깔려 있는 경우도 흔하다. 그때는 후보를 전부 실패하고
+    // 프로젝트에 들어 있는 기본 글꼴을 그대로 쓴다(한글이 깨지지는 않는다).
+    private static readonly string[][] SystemFontCandidates =
+    {
+        // 0 = 기본 (시스템 글꼴을 쓰지 않는다)
+        new string[0],
+
+        // 1 = 고딕 (산세리프)
+        new[] { "Malgun Gothic",          // 윈도우
+                "Apple SD Gothic Neo",    // macOS 10.11 이상
+                "AppleGothic",            // 예전 macOS
+                "Noto Sans CJK KR",       // 리눅스 (요즘 배포판 기본)
+                "Noto Sans KR",
+                "NanumGothic" },
+
+        // 2 = 명조 (세리프)
+        new[] { "Batang",                 // 윈도우
+                "AppleMyungjo",           // macOS
+                "Noto Serif CJK KR",      // 리눅스
+                "Noto Serif KR",
+                "NanumMyeongjo",
+                "UnBatang" },
+
+        // 3 = 굴림 (각지고 촘촘한 고딕)
+        new[] { "Gulim",                  // 윈도우
+                "AppleGothic",            // macOS - 굴림과 느낌이 가장 가깝다
+                "NanumGothicCoding",      // 리눅스
+                "Noto Sans CJK KR" },
+    };
 
     // 게임 시작 시점의 원래 글꼴. 0번(기본)을 고르면 이걸로 되돌린다.
     private TMP_FontAsset defaultFont;
@@ -207,21 +245,28 @@ public class FontManager : MonoBehaviour
         // 이미 실패한 적 있는 글꼴이면 조용히 기본 글꼴을 쓴다.
         if (failedFonts.Contains(fontIndex)) return defaultFont;
 
-        if (fontIndex >= SystemFontNames.Length)
+        if (fontIndex >= SystemFontCandidates.Length)
         {
             Debug.LogWarning($"[FontManager] 글꼴 번호 {fontIndex}는 목록에 없습니다. 기본 글꼴을 씁니다.");
             failedFonts.Add(fontIndex);
             return defaultFont;
         }
 
-        string osFontName = SystemFontNames[fontIndex];
-        TMP_FontAsset tmpFont = TryCreateSystemFont(osFontName);
+        // OS별 후보를 앞에서부터 시도해서 먼저 되는 글꼴을 쓴다.
+        string[] candidates = SystemFontCandidates[fontIndex];
+        TMP_FontAsset tmpFont = null;
+        foreach (string name in candidates)
+        {
+            tmpFont = TryCreateSystemFont(name);
+            if (tmpFont != null) break;
+        }
 
         if (tmpFont == null)
         {
             // 경고는 글꼴 하나당 딱 한 번만 남긴다.
-            Debug.LogWarning($"[FontManager] 시스템 글꼴 '{osFontName}'을 쓸 수 없어 기본 글꼴로 표시합니다. " +
-                             "(이 PC에 해당 글꼴이 없거나 TextMeshPro가 변환하지 못한 경우입니다)");
+            Debug.LogWarning($"[FontManager] '{FontOptionNames[fontIndex]}'에 쓸 시스템 글꼴을 이 컴퓨터에서 " +
+                             "찾지 못해 기본 글꼴로 표시합니다. " +
+                             $"(찾아본 이름: {string.Join(", ", candidates)})");
             failedFonts.Add(fontIndex);
             return defaultFont;
         }

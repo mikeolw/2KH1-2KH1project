@@ -78,13 +78,12 @@ public class PhonePanelUI : MonoBehaviour
     private static readonly Color KeyHoverColor = new Color32(0x2A, 0x26, 0x1E, 0xFF);
     private static readonly Color KeyPressColor = new Color32(0x3B, 0x34, 0x27, 0xFF);
 
-    // ----- 메인 메뉴의 앱 (3열 x 4줄, 왼쪽 위부터) -----
+    // ----- 메인 메뉴의 앱 (3열, 왼쪽 위부터) -----
+    // 사진첩·메모·일정·음성메모·시계·설정은 쓰지 않기로 해서 뺐다(아이콘 그림도 함께 정리).
     private static readonly (string id, string label)[] Apps =
     {
         ("CallLog", "통화기록"), ("Message", "문자"), ("Contacts", "연락처"),
-        ("Gallery", "사진첩"), ("Memo", "메모"), ("Calendar", "일정"),
-        ("Email", "이메일"), ("Internet", "인터넷"), ("VoiceMemo", "음성메모"),
-        ("Clock", "시계"), ("Radio", "라디오"), ("Settings", "설정"),
+        ("Email", "이메일"), ("Internet", "인터넷"), ("Radio", "라디오"),
     };
 
     // 키패드 숫자 키: (글자, 아래 작은 글자)
@@ -98,7 +97,8 @@ public class PhonePanelUI : MonoBehaviour
 
     private const int MaxDialDigits = 16;
 
-    private enum Page { Menu, App, Dial }
+    // Menu(메인) -> App(목록) -> Detail(한 건 펼쳐 보기). Dial은 키패드로 번호를 누를 때.
+    private enum Page { Menu, App, Dial, Detail }
 
     private GameObject overlay;
     private RectTransform phoneRoot;
@@ -107,7 +107,13 @@ public class PhonePanelUI : MonoBehaviour
     private TMP_Text titleText;
     private TMP_Text leftSoftKeyText;
     private TMP_Text rightSoftKeyText;
-    private GameObject menuPage, appPage, dialPage;
+    private GameObject menuPage, appPage, dialPage, detailPage;
+    private RectTransform listContent;     // 목록이 쌓이는 곳 (세로로 길어지고 스크롤된다)
+    private TMP_Text listEmptyText;        // 보여줄 게 없을 때
+    private TMP_Text detailHeadText, detailBodyText;
+    private ScrollRect listScroll, detailScroll;
+    private string currentAppId = "";      // 지금 보고 있는 앱 (CallLog / Message / ...)
+    private int radioIndex;                // 라디오를 몇 번째 줄까지 들었나
     private TMP_Text dialText;
     private Page page = Page.Menu;
     private string dialedNumber = "";
@@ -155,7 +161,8 @@ public class PhonePanelUI : MonoBehaviour
     public bool HandleEscape()
     {
         if (!isActiveAndEnabled || page == Page.Menu) return false;
-        ShowMenu();
+        if (page == Page.Detail) ReopenList();   // 펼쳐 보기 -> 목록 -> 메인 메뉴 순으로 한 단계씩
+        else ShowMenu();
         return true;
     }
 
@@ -168,11 +175,41 @@ public class PhonePanelUI : MonoBehaviour
         SetPage("메인 메뉴", "선택", "닫기");
     }
 
-    // 앱 화면 (공통 틀). 실제 내용은 나중에 앱별로 이 화면에 붙인다.
-    private void ShowApp(string label)
+    // 앱 화면. 앱마다 목록을 새로 채운다 (내용은 PhoneData.cs가 CSV에서 읽어온다).
+    private void ShowApp(string id, string label)
     {
         page = Page.App;
-        SetPage(label, "선택", "뒤로");
+        currentAppId = id;
+        ClearList();
+
+        switch (id)
+        {
+            case "CallLog":  FillCallLog();  break;
+            case "Message":  FillMessages(); break;
+            case "Contacts": FillContacts(); break;
+            case "Email":    FillEmail();    break;
+            case "Internet": FillInternet(); break;
+            case "Radio":    FillRadio();    break;
+        }
+
+        bool empty = listContent.childCount == 0;
+        listEmptyText.gameObject.SetActive(empty);
+        listScroll.gameObject.SetActive(!empty);
+        if (!empty) listScroll.verticalNormalizedPosition = 1f;
+
+        // 라디오만 소프트키가 "듣기"다. 나머지는 고를 게 목록 안에 있다.
+        SetPage(label, id == "Radio" ? "듣기" : "선택", "뒤로");
+    }
+
+    // 문자/메일/인터넷에서 한 건을 펼쳐 본다.
+    private void ShowDetail(string title, string head, string body)
+    {
+        page = Page.Detail;
+        detailHeadText.text = head;
+        detailBodyText.text = body;
+        LayoutDetail();
+        SetPage(title, "", "뒤로");
+        detailScroll.verticalNormalizedPosition = 1f;
     }
 
     private void ShowDial()
@@ -188,15 +225,18 @@ public class PhonePanelUI : MonoBehaviour
         menuPage.SetActive(page == Page.Menu);
         appPage.SetActive(page == Page.App);
         dialPage.SetActive(page == Page.Dial);
+        detailPage.SetActive(page == Page.Detail);
         titleText.text = title;
         leftSoftKeyText.text = leftKey;
         rightSoftKeyText.text = rightKey;
-        // "선택"은 아직 하는 일이 없어서 흐리게, "지우기"는 실제로 동작하므로 밝게.
-        leftSoftKeyText.color = page == Page.Dial ? GoldLight : GoldDim;
+        // 실제로 동작하는 소프트키만 밝게 (전화 걸기의 "지우기", 라디오의 "듣기").
+        bool leftWorks = page == Page.Dial || (page == Page.App && currentAppId == "Radio");
+        leftSoftKeyText.color = leftWorks ? GoldLight : GoldDim;
     }
 
     private void OnLeftSoftKey()
     {
+        if (page == Page.App && currentAppId == "Radio") { PlayClick(); ListenRadio(); return; }
         if (page != Page.Dial) return;
         PlayClick();
         if (dialedNumber.Length > 0) dialedNumber = dialedNumber.Substring(0, dialedNumber.Length - 1);
@@ -207,13 +247,23 @@ public class PhonePanelUI : MonoBehaviour
     {
         PlayClick();
         if (page == Page.Menu) gameObject.SetActive(false);   // 닫기 (UIManager는 이 패널이 켜져 있는지로 판단)
+        else if (page == Page.Detail) ReopenList();           // 펼쳐 보기 -> 목록으로
         else ShowMenu();
     }
 
-    private void OnAppPressed(string label)
+    // 펼쳐 보던 것을 닫고 보던 목록으로 되돌아간다.
+    private void ReopenList()
+    {
+        string label = currentAppId;
+        for (int i = 0; i < Apps.Length; i++)
+            if (Apps[i].id == currentAppId) { label = Apps[i].label; break; }
+        ShowApp(currentAppId, label);
+    }
+
+    private void OnAppPressed(string id, string label)
     {
         PlayClick();
-        ShowApp(label);
+        ShowApp(id, label);
     }
 
     // 숫자/*/# 키: 누른 번호를 화면에 찍는다.
@@ -396,9 +446,22 @@ public class PhonePanelUI : MonoBehaviour
         menuPage = NewContainer("MenuPage", s, contentTop, contentH, innerW);
         BuildAppGrid(menuPage.transform, innerW, contentH);
 
+        // ----- 앱 목록 (통화기록/문자/연락처/이메일/인터넷) -----
         appPage = NewContainer("AppPage", s, contentTop, contentH, innerW);
-        var empty = NewText("Empty", appPage.transform, "기록이 없습니다", 18, FontStyles.Normal, GoldDim, TextAlignmentOptions.Center);
-        Stretch(empty.rectTransform);
+        listScroll = BuildScroll("List", appPage.transform, innerW, contentH, out listContent);
+        listEmptyText = NewText("Empty", appPage.transform, "기록이 없습니다", 18, FontStyles.Normal, GoldDim, TextAlignmentOptions.Center);
+        Stretch(listEmptyText.rectTransform);
+
+        // ----- 한 건 펼쳐 보기 (문자 본문 / 메일 본문 / 인터넷 쪽) -----
+        detailPage = NewContainer("DetailPage", s, contentTop, contentH, innerW);
+        detailScroll = BuildScroll("Detail", detailPage.transform, innerW, contentH, out RectTransform detailContent);
+        detailHeadText = NewText("Head", detailContent, "", 16, FontStyles.Bold, GoldLight, TextAlignmentOptions.TopLeft);
+        detailHeadText.textWrappingMode = TextWrappingModes.Normal;
+        detailHeadText.overflowMode = TextOverflowModes.Overflow;
+        detailBodyText = NewText("Body", detailContent, "", 16, FontStyles.Normal, Gold, TextAlignmentOptions.TopLeft);
+        detailBodyText.textWrappingMode = TextWrappingModes.Normal;
+        detailBodyText.overflowMode = TextOverflowModes.Overflow;
+        detailBodyText.lineSpacing = 8f;
 
         dialPage = NewContainer("DialPage", s, contentTop, contentH, innerW);
         dialText = NewText("Number", dialPage.transform, "", 40, FontStyles.Bold, GoldLight, TextAlignmentOptions.Center);
@@ -415,15 +478,19 @@ public class PhonePanelUI : MonoBehaviour
 
     private void BuildAppGrid(Transform parent, float width, float height)
     {
-        const int columns = 3, rows = 4;
+        const int columns = 3;
+        int rows = Mathf.CeilToInt(Apps.Length / (float)columns);
         float cellW = (width - 24f) / columns;
-        float cellH = height / rows;
+        // 칸 수가 줄어든 뒤로 height/rows를 쓰면 칸이 너무 길쭉해진다.
+        // 칸 높이는 아이콘+글자에 맞춰 고정하고, 남는 자리는 위아래로 나눠 가운데에 놓는다.
+        float cellH = Mathf.Min(height / rows, 104f);
+        float top = (height - cellH * rows) * 0.5f;
 
         for (int i = 0; i < Apps.Length; i++)
         {
             var (id, label) = Apps[i];
             float x = 12f + (i % columns) * cellW;
-            float y = (i / columns) * cellH;
+            float y = top + (i / columns) * cellH;
 
             var cell = NewImage("App_" + id, parent, Color.white);
             PlaceTL(cell.rectTransform, x + 3f, y + 2f, cellW - 6f, cellH - 4f);
@@ -434,8 +501,8 @@ public class PhonePanelUI : MonoBehaviour
             button.colors = Tint(new Color(Gold.r, Gold.g, Gold.b, 0f),
                                  new Color(Gold.r, Gold.g, Gold.b, 0.16f),
                                  new Color(Gold.r, Gold.g, Gold.b, 0.28f));
-            string appLabel = label;
-            button.onClick.AddListener(() => OnAppPressed(appLabel));
+            string appId = id, appLabel = label;
+            button.onClick.AddListener(() => OnAppPressed(appId, appLabel));
 
             var icon = NewImage("Icon", cell.transform, Gold);
             icon.sprite = Resources.Load<Sprite>(IconFolder + "App_" + id);
@@ -898,6 +965,219 @@ public class PhonePanelUI : MonoBehaviour
             hovered = null;
             pressed = null;
         }
+    }
+
+    // ---------------------------------------------------------------------------------
+    // 앱 내용 (PhoneData.cs가 CSV에서 읽어온 것을 화면에 붙인다)
+    // ---------------------------------------------------------------------------------
+    private const float RowH = 46f;          // 두 줄짜리 목록 한 칸
+    private const float RowPadX = 10f;
+
+    // 세로로만 움직이는 스크롤 틀을 만든다. 내용은 out으로 돌려주는 곳에 쌓으면 된다.
+    private static ScrollRect BuildScroll(string name, Transform parent, float w, float h, out RectTransform content)
+    {
+        var viewGo = new GameObject(name, typeof(RectTransform), typeof(RectMask2D), typeof(ScrollRect));
+        viewGo.transform.SetParent(parent, false);
+        var view = (RectTransform)viewGo.transform;
+        PlaceTL(view, 0f, 0f, w, h);
+
+        // 빈 곳을 끌어도 스크롤되도록 투명 판을 깐다 (Image가 없으면 끌기가 안 먹는다)
+        var catcher = NewImage("Catcher", view, new Color(0f, 0f, 0f, 0f));
+        catcher.raycastTarget = true;
+        Stretch(catcher.rectTransform);
+
+        var contentGo = new GameObject("Content", typeof(RectTransform));
+        contentGo.transform.SetParent(view, false);
+        content = (RectTransform)contentGo.transform;
+        PlaceTL(content, 0f, 0f, w, h);
+
+        var scroll = viewGo.GetComponent<ScrollRect>();
+        scroll.content = content;
+        scroll.viewport = view;
+        scroll.horizontal = false;
+        scroll.vertical = true;
+        scroll.movementType = ScrollRectMovementType();
+        scroll.scrollSensitivity = 24f;
+        return scroll;
+    }
+
+    private static ScrollRect.MovementType ScrollRectMovementType() => ScrollRect.MovementType.Clamped;
+
+    private void ClearList()
+    {
+        if (listContent == null) return;
+        for (int i = listContent.childCount - 1; i >= 0; i--) Destroy(listContent.GetChild(i).gameObject);
+        listContent.sizeDelta = new Vector2(listContent.sizeDelta.x, 0f);
+    }
+
+    // 목록 한 칸. onClick이 있으면 눌러서 펼쳐 볼 수 있다.
+    private void AddRow(string line1, string line2, string right, System.Action onClick, float height = RowH)
+    {
+        float y = listContent.sizeDelta.y;
+        float w = listContent.sizeDelta.x;
+
+        var cell = NewImage("Row", listContent, Color.white);
+        PlaceTL(cell.rectTransform, 0f, y, w, height);
+        SetRounded(cell, 6, Color.white);
+
+        if (onClick != null)
+        {
+            cell.raycastTarget = true;
+            var btn = cell.gameObject.AddComponent<Button>();
+            btn.targetGraphic = cell;
+            btn.colors = Tint(new Color(Gold.r, Gold.g, Gold.b, 0f),
+                              new Color(Gold.r, Gold.g, Gold.b, 0.16f),
+                              new Color(Gold.r, Gold.g, Gold.b, 0.28f));
+            btn.onClick.AddListener(() => { PlayClick(); onClick(); });
+        }
+        else
+        {
+            cell.color = new Color(Gold.r, Gold.g, Gold.b, 0f);
+        }
+
+        float rightW = string.IsNullOrEmpty(right) ? 0f : 86f;
+        var t1 = NewText("L1", cell.transform, line1, 16, FontStyles.Normal, GoldLight, TextAlignmentOptions.MidlineLeft);
+        PlaceTL(t1.rectTransform, RowPadX, 4f, w - RowPadX * 2f - rightW, 20f);
+
+        if (!string.IsNullOrEmpty(line2))
+        {
+            var t2 = NewText("L2", cell.transform, line2, 13, FontStyles.Normal, GoldDim, TextAlignmentOptions.MidlineLeft);
+            PlaceTL(t2.rectTransform, RowPadX, 24f, w - RowPadX * 2f, 18f);
+        }
+        if (!string.IsNullOrEmpty(right))
+        {
+            var tr = NewText("R", cell.transform, right, 12, FontStyles.Normal, GoldDim, TextAlignmentOptions.MidlineRight);
+            PlaceTL(tr.rectTransform, w - RowPadX - rightW, 5f, rightW, 18f);
+        }
+
+        var sep = NewImage("Sep", listContent, new Color(Gold.r, Gold.g, Gold.b, 0.18f));
+        PlaceTL(sep.rectTransform, RowPadX, y + height - 1f, w - RowPadX * 2f, 1f);
+
+        listContent.sizeDelta = new Vector2(w, y + height);
+    }
+
+    // 펼쳐 본 내용의 높이를 글 길이에 맞춰 늘린다 (길면 스크롤된다).
+    private void LayoutDetail()
+    {
+        var content = (RectTransform)detailHeadText.transform.parent;
+        float w = content.sizeDelta.x;
+        float inner = w - RowPadX * 2f;
+
+        detailHeadText.ForceMeshUpdate();
+        float headH = string.IsNullOrEmpty(detailHeadText.text) ? 0f
+            : detailHeadText.GetPreferredValues(detailHeadText.text, inner, 0f).y + 10f;
+        PlaceTL(detailHeadText.rectTransform, RowPadX, 8f, inner, headH);
+
+        detailBodyText.ForceMeshUpdate();
+        float bodyH = detailBodyText.GetPreferredValues(detailBodyText.text, inner, 0f).y + 8f;
+        PlaceTL(detailBodyText.rectTransform, RowPadX, 8f + headH, inner, bodyH);
+
+        content.sizeDelta = new Vector2(w, 8f + headH + bodyH + 12f);
+    }
+
+    // ----- 통화기록 : 장이 넘어가도 쌓인다 -----
+    private void FillCallLog()
+    {
+        foreach (var c in PhoneData.Calls())
+        {
+            string who = string.IsNullOrEmpty(c.name) ? c.number : c.name;
+            AddRow($"[{c.type}] {who}", c.number, c.time, null);
+        }
+    }
+
+    // ----- 문자 : 쌓인다. 누르면 본문 -----
+    private void FillMessages()
+    {
+        foreach (var m in PhoneData.Messages())
+        {
+            string who = string.IsNullOrEmpty(m.name) ? m.number : m.name;
+            string head = m.direction == "보냄" ? $"{who}에게" : $"{who}";
+            var copy = m;
+            AddRow(head, OneLine(m.text), m.time,
+                   () => ShowDetail("문자", $"{head}\n{copy.time}", copy.text));
+        }
+    }
+
+    // ----- 연락처 : 장과 상관없이 늘 같다 -----
+    private void FillContacts()
+    {
+        foreach (var c in PhoneData.Contacts())
+        {
+            string sub = string.IsNullOrEmpty(c.memo) ? c.number : $"{c.number}   ·   {c.memo}";
+            AddRow(c.name, sub, "", null);
+        }
+    }
+
+    // ----- 이메일 : 쌓인다. 누르면 본문 -----
+    private void FillEmail()
+    {
+        foreach (var m in PhoneData.Mails())
+        {
+            var copy = m;
+            AddRow(m.subject, m.from, m.time,
+                   () => ShowDetail("이메일", $"{copy.subject}\n보낸사람 {copy.from}   {copy.time}", copy.body));
+        }
+    }
+
+    // ----- 인터넷 : 장마다 내용이 통째로 바뀐다 -----
+    private void FillInternet()
+    {
+        foreach (var s in PhoneData.Sites())
+        {
+            var copy = s;
+            AddRow($"[{s.title}] {s.headline}", "", "",
+                   () => ShowDetail(copy.title, copy.headline, copy.body), 34f);
+        }
+    }
+
+    // ----- 라디오 : 목록이 아니라 주파수 화면만 띄운다 -----
+    private string radioChapter;
+    private void FillRadio()
+    {
+        var lines = PhoneData.Radio();
+        string chapter = PhoneData.CurrentChapter();
+        if (chapter != radioChapter) { radioChapter = chapter; radioIndex = 0; }   // 장이 바뀌면 처음부터
+
+        float w = listContent.sizeDelta.x;
+        var box = NewImage("RadioBox", listContent, new Color(Gold.r, Gold.g, Gold.b, 0f));
+        PlaceTL(box.rectTransform, 0f, 0f, w, 150f);
+
+        var freq = NewText("Freq", box.transform, PhoneData.RadioFrequency(), 34, FontStyles.Bold,
+                           GoldLight, TextAlignmentOptions.Center);
+        PlaceTL(freq.rectTransform, 0f, 34f, w, 44f);
+
+        string program = lines.Count > 0 ? lines[0].program : "";
+        var pg = NewText("Program", box.transform, program, 15, FontStyles.Normal, Gold, TextAlignmentOptions.Center);
+        PlaceTL(pg.rectTransform, 0f, 82f, w, 20f);
+
+        var hint = NewText("Hint", box.transform, "[듣기]를 누르세요", 13, FontStyles.Normal, GoldDim, TextAlignmentOptions.Center);
+        PlaceTL(hint.rectTransform, 0f, 112f, w, 18f);
+
+        listContent.sizeDelta = new Vector2(w, 150f);
+    }
+
+    // 듣기: 핸드폰을 닫고 그 장의 라디오 대사를 한 줄씩 대화창에 내보낸다.
+    // (핸드폰이 떠 있으면 대화창을 가리기 때문에 닫는다. 다시 열어 누르면 다음 줄로 이어진다)
+    private void ListenRadio()
+    {
+        var lines = PhoneData.Radio();
+        if (lines.Count == 0) return;
+        if (radioIndex >= lines.Count) radioIndex = 0;
+        var line = lines[radioIndex++];
+
+        gameObject.SetActive(false);
+
+        var ds = DialogueSystem.Instance;
+        if (ds == null) return;
+        string speaker = string.IsNullOrEmpty(line.speaker) ? "라디오" : line.speaker;
+        ds.ShowInvestigationLine(speaker, line.text);
+    }
+
+    // 목록 한 줄에 미리보기로 넣을 때 줄바꿈을 지운다.
+    private static string OneLine(string s)
+    {
+        if (string.IsNullOrEmpty(s)) return "";
+        return s.Replace("\r", " ").Replace("\n", " ");
     }
 
     // ---------------------------------------------------------------------------------
