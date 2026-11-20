@@ -29,6 +29,11 @@ public class SaveData
     public string scenarioCsv = "";
     public int lineIndex = 0;
 
+    // lineIndex 줄의 확인 숫자 (DialogueSystem.LineFingerprint). 시나리오가 고쳐져 줄 번호가
+    // 밀려도, 불러올 때 같은 줄을 근처에서 다시 찾아 거기서 이어간다. 대사 원문은 저장하지 않는다.
+    // 예전 세이브 파일에는 없어서 빈 값으로 읽히고, 그때는 번호 그대로 쓴다.
+    public string lineCheck = "";
+
     // 마지막으로 저장된 시각 (SaveManager.Save()가 자동으로 "yyyy/MM/dd HH:mm" 형식으로 채움).
     public string timestamp;
 

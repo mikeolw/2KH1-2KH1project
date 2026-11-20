@@ -37,7 +37,9 @@ public class ReadProgressManager : MonoBehaviour
 
     // 필드 구조를 크게 바꾸면 버전을 올려서(_v2 등) 기존 데이터와 충돌하지 않게 한다
     // (GameSettings.cs와 동일한 관례).
-    private const string PrefsKey = "ReadProgress_v1";
+    // v2: 줄 번호 대신 줄 확인 숫자로 기록한다 (아래 MakeKey 참고). v1 기록은 번호가 밀린
+    // 시나리오에서는 맞지 않아서 옮겨 오지 않는다 - 한 번씩만 다시 읽으면 된다.
+    private const string PrefsKey = "ReadProgress_v2";
 
     // 방문한 "csv|lineIndex" 키의 집합. 실제 대소문자/공백 없는 CSV 파일명만 들어오므로
     // '|' 구분자가 겹칠 일은 없다.
@@ -65,21 +67,28 @@ public class ReadProgressManager : MonoBehaviour
     private void OnApplicationQuit() => Flush();
     private void OnApplicationPause(bool pause) { if (pause) Flush(); }
 
-    private static string MakeKey(string csv, int lineIndex) => csv + "|" + lineIndex;
+    // ===== 왜 줄 번호가 아니라 확인 숫자인가 =====
+    // 예전에는 "CSV|줄 번호"로 기록했다. 시나리오를 고쳐 줄이 빠지거나 끼면 번호가 밀려서,
+    // 스킵(already)이 안 읽은 새 대사를 건너뛰거나 읽은 대사에서 멈췄다.
+    // 이제는 "CSV|#줄 확인 숫자"(DialogueSystem.LineFingerprint)로 기록한다. 대사가 그대로면
+    // 번호가 밀려도 읽음이 유지되고, 대사가 고쳐진 줄은 새로 읽은 것으로 친다.
+    // (같은 CSV 안에 똑같은 대사가 두 번 나오면 한쪽을 읽으면 둘 다 읽은 것이 된다 - 스킵에는 문제없다)
+    private static string MakeKey(string csv, string lineCheck) => csv + "|#" + lineCheck;
 
-    // 이 CSV의 이 줄을 예전에(혹은 방금 전에) 본 적이 있는지.
-    public bool IsRead(string csv, int lineIndex)
+    // 이 CSV의 이 줄을 예전에(혹은 방금 전에) 본 적이 있는지. lineCheck = DialogueSystem.LineCheckAt(줄 번호)
+    public bool IsRead(string csv, string lineCheck)
     {
-        return !string.IsNullOrEmpty(csv) && readKeys.Contains(MakeKey(csv, lineIndex));
+        return !string.IsNullOrEmpty(csv) && !string.IsNullOrEmpty(lineCheck) &&
+               readKeys.Contains(MakeKey(csv, lineCheck));
     }
 
     // 이 줄을 지금 봤다고 기록한다. 처음 보는 줄일 때만 실제로 값이 바뀌고(dirty=true),
     // 이미 기록된 줄이면 아무 일도 하지 않는다 - 스킵(already)이 읽은 구간을 빠르게
     // 지나갈 때 매 프레임 문자열을 다시 직렬화하지 않게 하기 위해서다.
-    public void MarkRead(string csv, int lineIndex)
+    public void MarkRead(string csv, string lineCheck)
     {
-        if (string.IsNullOrEmpty(csv)) return;
-        if (readKeys.Add(MakeKey(csv, lineIndex)))
+        if (string.IsNullOrEmpty(csv) || string.IsNullOrEmpty(lineCheck)) return;
+        if (readKeys.Add(MakeKey(csv, lineCheck)))
         {
             dirty = true;
             PlayerPrefs.SetString(PrefsKey, JsonUtility.ToJson(new ReadProgressData { keys = new List<string>(readKeys) }));
