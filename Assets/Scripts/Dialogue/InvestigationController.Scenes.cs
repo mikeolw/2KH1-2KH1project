@@ -27,7 +27,7 @@ public partial class InvestigationController
     private const string ArchiveBookPrefix = "Hotspot_Documents_";
     private const string ArchiveClueSuffix = "_Clue";
 
-    // 사장실 앞(_06)에 처음 도착하면 "#07 사장실 진입" 저장 창을 띄운다.
+    // 사장실 앞(_06)에 처음 도착하면 "#09 사장실 진입" 저장 창을 띄운다.
     // 화살표로 자료실 앞과 왔다갔다해도 한 번만 뜨도록 표시 아이템을 남긴다.
     private const string CeoRoomFrontScreenId = "BG_07_InvestigationSite_06";
     private const string CeoRoomSaveShownFlag = "ceo_room_save_shown";
@@ -116,6 +116,29 @@ public partial class InvestigationController
             && !string.IsNullOrEmpty(hotspotKey)
             && hotspotKey.StartsWith(ArchiveBookPrefix, StringComparison.OrdinalIgnoreCase)
             && !hotspotKey.EndsWith(ArchiveClueSuffix, StringComparison.OrdinalIgnoreCase);
+    }
+
+    // ===== 자료실 단서를 다시 누르면 "이미 확인한 단서다." =====
+    // 단서 책(핫스팟 이름이 "_Clue"로 끝나는 책)은 처음 누르면 CSV의 Text 칸 대사와 함께
+    // 아이템을 주고, 그 아이템을 전부 얻은 뒤 다시 누르면 같은 대사를 또 보여주던 것을 바꾼다.
+    // 새 CSV 컬럼 없이(팀 규칙) 코드에서 가른다: 이 단서가 주는 아이템을 전부 이미 갖고 있으면 "다시 누른 것"이다.
+    private const string AlreadyCheckedClueText = "이미 확인한 단서다.";
+    private static bool IsArchiveClue(string screenId, string hotspotKey)
+    {
+        return string.Equals(screenId, ArchiveRoomScreenId, StringComparison.OrdinalIgnoreCase)
+            && !string.IsNullOrEmpty(hotspotKey)
+            && hotspotKey.StartsWith(ArchiveBookPrefix, StringComparison.OrdinalIgnoreCase)
+            && hotspotKey.EndsWith(ArchiveClueSuffix, StringComparison.OrdinalIgnoreCase);
+    }
+
+    // 이 오브젝트가 주는 아이템을 전부 이미 갖고 있는가 (아이템이 없는 오브젝트는 false).
+    private static bool HasAllItemsOf(string itemIdRaw)
+    {
+        List<string> ids = ParseItemList(itemIdRaw);
+        if (ids == null || ids.Count == 0 || InventoryManager.Instance == null) return false;
+        foreach (string id in ids)
+            if (!InventoryManager.Instance.HasItem(id)) return false;
+        return true;
     }
 
     // ===== 경찰서(#03)의 아이: 다른 오브젝트를 2개 조사해야 나타났다가, 대사 뒤 뛰어서 사라진다 =====
