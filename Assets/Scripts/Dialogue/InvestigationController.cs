@@ -178,8 +178,8 @@ public class InvestigationController : MonoBehaviour
     {
         TextKey("BG_07_InvestigationSite_07", "Hotspot_Curtain"),
         TextKey("BG_07_InvestigationSite_07", "Hotspot_BookCase"),
-        // 사장 책상은 뺐다. 금고 비밀번호 단서(사장의 비망록)가 여기서 나오므로 "엉뚱한 곳"이
-        // 아니라 반드시 들러야 하는 자리다. 시간을 깎으면 꼭 해야 할 일에 벌을 주는 셈이 된다.
+        // 사장 책상(Hotspot_CEODesk)은 뺐다. 아이템을 주는 핵심 조사 자리라 "엉뚱한 곳"이
+        // 아니다. 시간을 깎으면 꼭 해야 할 일에 벌을 주는 셈이 된다.
         TextKey("BG_07_InvestigationSite_07", "Hotspot_Sofa"),
     };
 
@@ -906,7 +906,7 @@ public class InvestigationController : MonoBehaviour
         NoteManager.Instance?.OnInvestigationStarted(screenId);
 
         // ===== 자료실 앞 복도 감시 =====
-        // 이 화면에 있는 동안만 복도에 직원들이 오간다. 범인과 친분이 있는 인물이 보일 때
+        // 이 화면에 있는 동안만 복도에 직원들이 오간다. 들키면 안 되는 인물이 보일 때
         // 문을 건드리면 들킨다 (Inspect()의 판정 참고). 다른 화면으로 옮기면 꺼진다.
         //
         // 증거를 전부 모으고 자료실에서 나온 뒤에는 복도를 아예 띄우지 않는다. 그때부터
@@ -1923,7 +1923,7 @@ public class InvestigationController : MonoBehaviour
         }
 
         // ===== 자료실 앞 복도에서 들켰는가 =====
-        // 범인과 친분이 있는 인물이 복도에 서 있는 동안 자료실 문을 건드리면 그 자리에서
+        // 들키면 안 되는 인물이 복도에 서 있는 동안 자료실 문을 건드리면 그 자리에서
         // 끝난다. 열쇠가 있든 없든, 이미 한 번 들어간 적이 있든 상관없이 "문에 손을 댔다"는
         // 사실만 본다. 그래서 아래의 선행 아이템/통과 표시 분기보다 먼저 검사한다.
         // (문을 연 뒤의 타이밍 클릭 미니게임은 이것과 별개로 그대로 동작한다)
