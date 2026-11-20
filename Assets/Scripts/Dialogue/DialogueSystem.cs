@@ -764,7 +764,7 @@ public class DialogueSystem : MonoBehaviour
             // 가방/조사기록/플레이 시간 등도 함께 되돌린다.
             if (SavePointManager.Instance != null) SavePointManager.Instance.RestoreFrom(activeSave);
 
-            LoadDialogueFromCSV(activeSave.scenarioCsv, activeSave.lineIndex);
+            LoadDialogueFromCSV(activeSave.scenarioCsv, activeSave.lineIndex, activeSave.lineCheck);
         }
         else
         {
@@ -929,7 +929,7 @@ public class DialogueSystem : MonoBehaviour
 
         // 미니게임/조사/추리로 빠지는 줄도 "플레이어가 여기까지 도달했다"는 사실은 같으므로,
         // 분기하기 전에 먼저 읽음 처리한다 (스킵(already)이 참고하는 기록).
-        ReadProgressManager.Instance?.MarkRead(currentScenarioCsv, shownIndex);
+        ReadProgressManager.Instance?.MarkRead(currentScenarioCsv, LineCheckAt(shownIndex));
 
         // ===== 세이브 불러오기 시 BGM이 안 나오던 버그 수정 =====
         // 미니게임/조사/추리 줄은 DisplayLine()을 거치지 않고 곧장 다른 화면으로 넘어가버려서,
@@ -1815,7 +1815,7 @@ public class DialogueSystem : MonoBehaviour
                 int nextIndex = lineIndex; // ShowNextSentence()가 다음에 보여줄 줄의 인덱스
                 bool nextExists = currentDialogue != null && nextIndex < currentDialogue.lines.Count;
                 bool nextAlreadyRead = nextExists && ReadProgressManager.Instance != null &&
-                    ReadProgressManager.Instance.IsRead(currentScenarioCsv, nextIndex);
+                    ReadProgressManager.Instance.IsRead(currentScenarioCsv, LineCheckAt(nextIndex));
 
                 // 다음 줄이 CSV 끝(선택지로 이어짐)이면 일단 진행시킨다 - 선택지 패널이 뜨는
                 // 순간은 다음 반복의 IsBlockedByOtherUI()가 잡아준다.
@@ -2652,6 +2652,14 @@ public class DialogueSystem : MonoBehaviour
     // startLineIndex부터 재생을 시작하는 버전. 세이브 불러오기에서 쓴다.
     public void LoadDialogueFromCSV(string csvFileName, int startLineIndex)
     {
+        LoadDialogueFromCSV(csvFileName, startLineIndex, null);
+    }
+
+    // 세이브 불러오기 전용. expectedCheck는 저장할 때 그 줄의 확인 숫자(LineCheckAt).
+    // 시나리오가 고쳐져 줄 번호가 밀렸으면, 같은 줄을 근처에서 다시 찾아 거기서 시작한다
+    // (RelocateSavedLine 참고). expectedCheck가 비어 있으면(예전 세이브) 번호 그대로 쓴다.
+    public void LoadDialogueFromCSV(string csvFileName, int startLineIndex, string expectedCheck)
+    {
         // 지금 어떤 CSV를 진행 중인지 기억해둔다. 세이브할 때 "어느 파일 몇 번째 줄에서
         // 저장했는지"를 남겨야 나중에 정확히 그 지점부터 이어할 수 있기 때문이다
         // (SavePointManager.cs 참고).
@@ -2913,8 +2921,61 @@ public class DialogueSystem : MonoBehaviour
             currentDialogue.lines.Add(line);
         }
 
+        // 시나리오가 고쳐져 저장된 줄 번호가 밀렸으면 같은 줄을 다시 찾는다 (세이브 불러오기만 해당)
+        if (!string.IsNullOrEmpty(expectedCheck))
+            startLineIndex = RelocateSavedLine(csvFileName, startLineIndex, expectedCheck);
+
         // 대사 시작 (이어하기면 저장된 줄부터)
         StartDialogue(currentDialogue, startLineIndex);
+    }
+
+    // ===== 줄 확인 숫자 =====
+    // 세이브와 "읽은 대사" 기록은 원래 "몇 번째 줄"만 저장했다. 그런데 시나리오를 고쳐
+    // 줄이 빠지거나 끼면(대본 중간 선택지 포함) 번호가 밀려서, 불러오면 엉뚱한 대사에서
+    // 시작하고 스킵도 안 읽은 줄을 건너뛰었다. 그래서 줄 내용으로 만든 확인 숫자를 같이 쓴다.
+    // 대사 줄은 말풍선 배치표(BubbleLayout.CheckOf)와 같은 값이고, 대사가 없는 특수 줄은
+    // 그 줄을 대표하는 칸(조사 화면 이름 등)으로 만든다. 대사 원문은 저장하지 않는다.
+    public static string LineFingerprint(DialogueLine line)
+    {
+        if (line == null) return "";
+        if (line.isChoice)
+            return BubbleLayout.CheckOf("CH:" + (line.inlineChoices != null && line.inlineChoices.Count > 0
+                                                  ? line.inlineChoices[0].choiceText : ""));
+        if (line.isInvestigation) return BubbleLayout.CheckOf("INV:" + line.investigationId);
+        if (line.isMinigame) return BubbleLayout.CheckOf("MG:" + line.minigameLabel + "|" + line.minigameAnswer);
+        if (line.isDeduction) return BubbleLayout.CheckOf("DED:" + line.deductionId);
+        return BubbleLayout.CheckOf(line.sentence);
+    }
+
+    // 지금 불러온 대본의 index번째 줄 확인 숫자. 범위 밖이면 "".
+    public string LineCheckAt(int index)
+    {
+        if (currentDialogue == null || currentDialogue.lines == null ||
+            index < 0 || index >= currentDialogue.lines.Count) return "";
+        return LineFingerprint(currentDialogue.lines[index]);
+    }
+
+    // 저장된 번호의 줄이 저장할 때와 다르면, 같은 확인 숫자를 가진 가장 가까운 줄을 찾는다.
+    // 못 찾으면(그 대사 자체가 바뀜) 번호 그대로 쓰고 경고만 남긴다.
+    private const int RelocateSearchRange = 40;
+    private int RelocateSavedLine(string csv, int savedIndex, string expectedCheck)
+    {
+        if (LineCheckAt(savedIndex) == expectedCheck) return savedIndex;
+
+        int count = currentDialogue != null && currentDialogue.lines != null ? currentDialogue.lines.Count : 0;
+        for (int d = 1; d <= RelocateSearchRange; d++)
+        {
+            foreach (int i in new[] { savedIndex - d, savedIndex + d })
+            {
+                if (i < 0 || i >= count || LineCheckAt(i) != expectedCheck) continue;
+                Debug.Log($"[DialogueSystem] 시나리오가 바뀌어 세이브 위치를 옮깁니다: {csv} {savedIndex} -> {i}번째 줄");
+                SavePointManager.Instance?.CorrectLastLine(csv, savedIndex, i);
+                return i;
+            }
+        }
+        Debug.LogWarning($"[DialogueSystem] {csv} {savedIndex}번째 줄이 저장할 때와 다르고 근처에서도 찾지 못했습니다. " +
+                         "저장된 번호 그대로 이어갑니다 (시나리오가 크게 바뀐 세이브).");
+        return savedIndex;
     }
 
     // CSVReader가 만든 행(Dictionary)에서 값을 안전하게 꺼낸다. 컬럼 자체가 없거나(예전 CSV처럼

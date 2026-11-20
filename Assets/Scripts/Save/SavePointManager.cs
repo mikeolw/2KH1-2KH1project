@@ -32,6 +32,9 @@ public class SavePointManager : MonoBehaviour
     // savePointId : 세이브 슬롯 목록에 보여줄 사람이 읽을 수 있는 이름 (예: "#01 사무실")
     public string LastScenarioCsv { get; private set; }
     public int LastLineIndex { get; private set; }
+    // LastLineIndex 줄의 확인 숫자. 시나리오가 고쳐져 번호가 밀려도 불러올 때 같은 줄을 다시 찾는다
+    // (DialogueSystem.LineFingerprint / RelocateSavedLine).
+    public string LastLineCheck { get; private set; }
     public string LastSavePointId { get; private set; }
 
     // 세이브포인트를 한 번이라도 지났는지. 저장 버튼을 켜고 끌 때 이 값을 본다.
@@ -76,6 +79,8 @@ public class SavePointManager : MonoBehaviour
     {
         LastScenarioCsv = scenarioCsv;
         LastLineIndex = lineIndex;
+        var ds = DialogueSystem.Instance;
+        LastLineCheck = ds != null && ds.CurrentScenarioCsv == scenarioCsv ? ds.LineCheckAt(lineIndex) : "";
         LastSavePointId = string.IsNullOrWhiteSpace(savePointId) ? scenarioCsv : savePointId.Trim();
         CanSave = true;
 
@@ -120,6 +125,7 @@ public class SavePointManager : MonoBehaviour
             sceneId = UnityEngine.SceneManagement.SceneManager.GetActiveScene().name,
             scenarioCsv = LastScenarioCsv,
             lineIndex = LastLineIndex,
+            lineCheck = LastLineCheck ?? "",
             playTimeSeconds = playTimeSeconds,
             acquiredItemIds = InventoryManager.Instance != null
                 ? InventoryManager.Instance.GetAcquiredItemList()
@@ -162,6 +168,7 @@ public class SavePointManager : MonoBehaviour
         // (불러온 직후에 바로 다시 저장해도 같은 지점이 저장되도록)
         LastScenarioCsv = data.scenarioCsv;
         LastLineIndex = data.lineIndex;
+        LastLineCheck = data.lineCheck ?? "";
         LastSavePointId = data.chapterId;
         CanSave = !string.IsNullOrEmpty(data.scenarioCsv);
 
@@ -197,11 +204,20 @@ public class SavePointManager : MonoBehaviour
         Debug.Log($"[SavePointManager] 세이브를 복원했습니다: {data.chapterId} ({data.scenarioCsv} {data.lineIndex}번째 줄)");
     }
 
+    // 불러온 세이브의 줄 번호가 시나리오 수정으로 밀려서 DialogueSystem이 위치를 옮겼을 때 부른다.
+    // 불러온 직후 바로 다시 저장해도 옮겨진 번호로 저장되게 한다.
+    public void CorrectLastLine(string scenarioCsv, int oldIndex, int newIndex)
+    {
+        if (LastScenarioCsv != scenarioCsv || LastLineIndex != oldIndex) return;
+        LastLineIndex = newIndex;
+    }
+
     // 새 게임을 시작할 때 호출한다(타이틀의 "시작하기").
     public void ResetForNewGame()
     {
         LastScenarioCsv = null;
         LastLineIndex = 0;
+        LastLineCheck = "";
         LastSavePointId = null;
         CanSave = false;
         playTimeSeconds = 0f;
