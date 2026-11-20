@@ -12,23 +12,14 @@ using UnityEngine;
 // EndingType(엔딩 종류)마다 대응하는 엔딩 CSV 파일 이름을 표로 들고 있다가,
 // 엔딩이 발동하면 DialogueSystem에게 그 CSV를 재생하라고 넘긴다.
 //
-// ===== 엔딩 루트 (시나리오 문서 기준) =====
-//   #07 마지막 선택지
-//     1. 되갚아준다
-//        1-1. 차장에게 복수한다  -> Bad_B (조폭을 써서 차장 처리, 새 사장이 됨)
-//        1-2. 사장에게 복수한다  -> Bad_A (사장을 칼로 찌름, 살인범이 됨)
-//     2. 아무것도 하지 않는다    -> Bad_D (일상으로 복귀, 훗날 붕괴 사고)
-//     3. 내가 해야만 하는 일이... -> True (내부 고발, 아버지를 경찰에 넘김)
-//   그 밖의 분기
-//     추리(단서 조합) 실패        -> Bad_D
-//     조사 중 진범/파벌에게 들킴  -> Bad_C (도망치다 바다에 빠짐)
-//     분노 폭발 루트              -> Bad_E (사무실 방화)
-//   #04 방에 숨어 있던 아이 (대사 도중 선택지, DialogueLine.isChoice)
-//     1. 무단침입이니 신고한다 / 3. 귀신이다 -> Bad_F (아이를 문밖으로 돌려보냄)
-//     2. 사정이 있을 것이다                  -> 그대로 진행
-//     그 다음 선택지
-//     2. 나가라고 한다 / 3. 아무 말도 하지 않는다 -> Bad_G (아이를 외면함)
-//     1. 밥을 차려준다                            -> 그대로 진행
+// ===== 엔딩이 발동하는 곳 =====
+// 공개 저장소라 선택지 문장과 엔딩 내용은 적지 않는다. 어느 보기가 어느 엔딩인지는
+// scenario CSV의 TargetEnding 칸과 시나리오 문서(드라이브)를 본다.
+//   #07 마지막 선택지          -> True / Bad_A / Bad_B / Bad_D
+//   추리(단서 조합) 실패        -> Bad_D
+//   조사 중 들킴(복도 감시)     -> Bad_C
+//   분노 루트                   -> Bad_E
+//   #04 대사 도중 선택지        -> Bad_F / Bad_G   (DialogueLine.isChoice)
 //
 // 위 연결은 아래 endingCsvMap 하나만 고치면 바꿀 수 있다. 선택지 CSV에서는
 // IsEndingChoice=TRUE, TargetEnding=Bad_A 처럼 "엔딩 종류"만 적으면 되고,
@@ -78,7 +69,7 @@ public class GameFlowManager : MonoBehaviour
     // 엔딩을 발동시킨다.
     //   - 선택지에서 IsEndingChoice=TRUE인 항목을 골랐을 때 (DialogueSystem.ShowChoices)
     //   - 미니게임/추리에 실패했을 때 (DialogueSystem, DeductionController)
-    //   - 조사 중 진범에게 들켰을 때
+    //   - 조사 중 들켰을 때 (복도 감시 - CorridorWatchController)
     // 어디서 불러도 동작은 같다: 해당 엔딩 CSV를 재생한다.
     public void TriggerEnding(EndingType ending)
     {

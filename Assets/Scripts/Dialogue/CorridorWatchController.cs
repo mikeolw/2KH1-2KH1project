@@ -9,16 +9,16 @@ using static UIKit;   // CreateText, PlaceTopLeft, AddRect, Stretch ... (UIKit.c
 // =====================================================================================
 // ===== 어떤 게임인가 =====
 // 자료실 앞 복도에는 야근 중인 직원들이 서 있다. 그 사람들이 일정 시간마다 바뀌는데,
-// 그중에는 "범인과 친분이 있는 인물"이 섞여 있다. 그 사람이 복도에 있는 동안 자료실
+// 그중에는 "들키면 안 되는 인물"이 섞여 있다. 그 사람이 복도에 있는 동안 자료실
 // 문을 건드리면 곧바로 들켜서 배드엔딩 C로 간다.
 //   - 총 10개 "그룹"이 번갈아 나온다. 그룹 하나가 그림 한 장이다.
 //   - changeIntervalSeconds 초마다 다음 그룹으로 바뀐다.
-//   - 범인측이 없는 그룹이 대부분이고, 아무도 없는 그룹은 낮은 확률로만 나온다
+//   - 위험 인물이 없는 그룹이 대부분이고, 아무도 없는 그룹은 낮은 확률로만 나온다
 //     (emptyGroupWeight - 다른 그룹보다 뽑힐 가중치를 낮게 준다).
 //   - 같은 그룹이 연달아 두 번 나오지 않게 해서 "바뀌었다"는 느낌을 준다.
 //
 // ===== 그림 =====
-// Resources/Illusts/Objects/OBJ_07_Normal1~4 (일반 직원), OBJ_07_Suspect1~4 (진범 측).
+// Resources/Illusts/Objects/OBJ_07_Normal1~4 (일반 직원), OBJ_07_Suspect1~4 (위험 인물).
 // 여백을 잘라낸 그림이라 IllustLayout.csv에 화면별 좌표를 적어두었다
 // (Screen = BG_07_InvestigationSite_04, IllustLayout.cs의 "방법 2" 참고).
 //
@@ -70,7 +70,7 @@ public class CorridorWatchController : MonoBehaviour
         public string spriteName;
         [Tooltip("복도에 보이는 사람들의 이름. 비워두면 '복도에 아무도 없다'로 표시한다.")]
         public string caption;
-        [Tooltip("범인과 친분이 있는 인물이 섞여 있는가. 이 그룹일 때 문을 누르면 들킨다.")]
+        [Tooltip("들키면 안 되는 인물이 섞여 있는가. 이 그룹일 때 문을 누르면 들킨다.")]
         public bool dangerous;
         [Tooltip("뽑힐 가중치. 클수록 자주 나온다.")]
         public float weight = 1f;
@@ -87,13 +87,13 @@ public class CorridorWatchController : MonoBehaviour
 
     [Header("안내 문구를 화면에 띄울지")]
     [Tooltip("누가 서 있는지 글로 확인하기 위한 개발용 표시. 정식 아트가 들어와서 기본은 꺼둔다. " +
-             "켜면 진범 측인지까지 그대로 보이므로 실제 플레이에서는 켜지 말 것.")]
+             "켜면 위험 인물인지까지 그대로 보이므로 실제 플레이에서는 켜지 말 것.")]
     public bool showCaption = false;
 
     [Header("복도 인물 그룹 (그림 한 장 = 그룹 하나)")]
     public List<CorridorGroup> groups = new List<CorridorGroup>();
 
-    // 지금 복도에 범인측 인물이 있는가. 문을 누르는 쪽(InvestigationController)이 이것만 본다.
+    // 지금 복도에 위험 인물이 있는가. 문을 누르는 쪽(InvestigationController)이 이것만 본다.
     // 막 바뀐 직후(graceSeconds)에는 아직 안 바뀐 셈 치고 안전하다고 답한다.
     public bool IsDangerous
     {
@@ -154,17 +154,17 @@ public class CorridorWatchController : MonoBehaviour
             new CorridorGroup { spriteName = "OBJ_07_Normal2|OBJ_07_Normal4", caption = "직원 2, 4", dangerous = false, weight = 1f },
             new CorridorGroup { spriteName = "OBJ_07_Normal4|OBJ_07_Normal1|OBJ_07_Normal3", caption = "직원 4, 1, 3", dangerous = false, weight = 1f },
 
-            // ===== 위험 - 진범 측이 한 명이라도 섞여 있으면 문을 누르는 순간 들킨다 =====
+            // ===== 위험 - 위험 인물이 한 명이라도 섞여 있으면 문을 누르는 순간 들킨다 =====
             // 판정 자체는 예전과 똑같다. InvestigationController가 문을 누른 순간
             // Freeze() 후 IsDangerous만 보고 TriggerEnding(EndingType.Bad_C)을 부른다.
             // 여럿이 섞인 그룹은 "누가 서 있는지 훑어봐야 한다"는 긴장을 만든다.
-            new CorridorGroup { spriteName = "OBJ_07_Suspect1", caption = "진범 측 1", dangerous = true, weight = 1f },
-            new CorridorGroup { spriteName = "OBJ_07_Suspect2", caption = "진범 측 2", dangerous = true, weight = 1f },
-            new CorridorGroup { spriteName = "OBJ_07_Suspect3", caption = "진범 측 3", dangerous = true, weight = 1f },
-            new CorridorGroup { spriteName = "OBJ_07_Suspect4", caption = "진범 측 4", dangerous = true, weight = 1f },
-            new CorridorGroup { spriteName = "OBJ_07_Normal2|OBJ_07_Suspect1", caption = "직원 2, 진범 측 1", dangerous = true, weight = 1f },
-            new CorridorGroup { spriteName = "OBJ_07_Suspect4|OBJ_07_Normal3", caption = "진범 측 4, 직원 3", dangerous = true, weight = 1f },
-            new CorridorGroup { spriteName = "OBJ_07_Normal1|OBJ_07_Suspect2|OBJ_07_Normal4", caption = "직원 1, 진범 측 2, 직원 4", dangerous = true, weight = 1f },
+            new CorridorGroup { spriteName = "OBJ_07_Suspect1", caption = "위험 인물 1", dangerous = true, weight = 1f },
+            new CorridorGroup { spriteName = "OBJ_07_Suspect2", caption = "위험 인물 2", dangerous = true, weight = 1f },
+            new CorridorGroup { spriteName = "OBJ_07_Suspect3", caption = "위험 인물 3", dangerous = true, weight = 1f },
+            new CorridorGroup { spriteName = "OBJ_07_Suspect4", caption = "위험 인물 4", dangerous = true, weight = 1f },
+            new CorridorGroup { spriteName = "OBJ_07_Normal2|OBJ_07_Suspect1", caption = "직원 2, 위험 인물 1", dangerous = true, weight = 1f },
+            new CorridorGroup { spriteName = "OBJ_07_Suspect4|OBJ_07_Normal3", caption = "위험 인물 4, 직원 3", dangerous = true, weight = 1f },
+            new CorridorGroup { spriteName = "OBJ_07_Normal1|OBJ_07_Suspect2|OBJ_07_Normal4", caption = "직원 1, 위험 인물 2, 직원 4", dangerous = true, weight = 1f },
         };
     }
 

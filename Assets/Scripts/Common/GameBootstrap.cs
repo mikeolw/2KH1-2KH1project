@@ -117,7 +117,7 @@ public static class GameBootstrap
             if (TimingClickMinigameController.Instance == null) Create<TimingClickMinigameController>("TimingClickMinigameController");
             if (KeypadMinigameController.Instance == null) Create<KeypadMinigameController>("KeypadMinigameController");
 
-            // 자료실 앞 복도 감시(범인측 인물이 보일 때 문을 누르면 배드엔딩 C). 위와 같은
+            // 자료실 앞 복도 감시(위험 인물이 보일 때 문을 누르면 배드엔딩 C). 위와 같은
             // 이유로 인스펙터 연결 없이 자동 생성해도 안전하다 (CorridorWatchController.cs 참고).
             if (CorridorWatchController.Instance == null) Create<CorridorWatchController>("CorridorWatchController");
 

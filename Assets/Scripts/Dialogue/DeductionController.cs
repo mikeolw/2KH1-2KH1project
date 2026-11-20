@@ -32,8 +32,9 @@ using TMPro;
 //   WrongEnding : 이 보기를 골라서 틀렸을 때 갈 엔딩 (비워두면 Bad_D).
 //
 // 예)
-//   deduction_01,1,한성은 어떻게 죽었나?,스스로 바위로 뛰어내렸다,FALSE,...,Bad_D
-//   deduction_01,1,,물로 뛰어들었고 그 전에 이미 다쳐 있었다,TRUE,맞다. 학생은 '물'이라고 했다.,
+//   (설명용 예시다. 실제 문제·정답과 관계없다 - 공개 저장소라 실제 내용은 적지 않는다)
+//   deduction_01,1,질문 문장,오답 보기,FALSE,...,Bad_D
+//   deduction_01,1,,정답 보기,TRUE,정답을 납득하는 한 줄.,
 public class DeductionController : MonoBehaviour
 {
     public static DeductionController Instance;
