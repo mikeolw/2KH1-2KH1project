@@ -592,7 +592,7 @@ public partial class InvestigationController : MonoBehaviour
         if (showCeoSave)
         {
             InventoryManager.Instance.AddItem(CeoRoomSaveShownFlag);
-            DialogueSystem.Instance?.ReachSavePointAtNextLine("#07 사장실 진입", targetId);
+            DialogueSystem.Instance?.ReachSavePointAtNextLine("#09 사장실 진입", targetId);
         }
 
         EnterScreen(activeScreenId, targetScreen);
@@ -1174,6 +1174,14 @@ public partial class InvestigationController : MonoBehaviour
             {
                 NavigateToLinkedScreen(target);
             }
+            return;
+        }
+
+        // ===== 이미 가져온 자료실 단서를 다시 누르면 안내 한 줄만 보여준다 =====
+        // 수첩 기록/아이템 지급/자동 이동 검사는 처음 조사할 때 이미 끝났으므로 전부 건너뛴다.
+        if (activeScreenId != null && IsArchiveClue(activeScreenId, obj.gameObject.name) && HasAllItemsOf(obj.itemId))
+        {
+            ShowLineInDialogue("", AlreadyCheckedClueText, fromObject: true);
             return;
         }
 
