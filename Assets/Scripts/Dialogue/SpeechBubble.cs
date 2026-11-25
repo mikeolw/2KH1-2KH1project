@@ -35,19 +35,25 @@ using UnityEngine.UI;
 public class SpeechBubble : MonoBehaviour
 {
     // ===== 배치 (화면 1440x1080 기준, 화면 가운데가 0,0 / 위로 +) =====
-    private const float MaxTextWidth = 560f;
-    private const float MinBodyWidth = 260f;
-    private const float PadX = 40f, PadTop = 34f, PadBottom = 28f;   // 위는 이름표가 걸치는 만큼 더 띄운다
+    // public인 값은 자료 보기의 독백 말풍선(DocumentHighlightPlayer)도 같이 쓴다.
+    public const float MaxTextWidth = 560f;
+    public const float MinBodyWidth = 260f;
+    public const float PadX = 40f, PadTop = 34f, PadBottom = 28f;   // 위는 이름표가 걸치는 만큼 더 띄운다
+    public const float NameTagX = 24f;            // 이름표 왼쪽 끝 = 말풍선 왼쪽에서 이만큼 안쪽
     private const float GapFromHead = 110f;       // 머리 중심에서 말풍선 가장자리까지 가로 거리
     private const float MouthBelowTop = 0.10f;    // 입 높이 = 머리 맨 위에서 화면 높이의 10% 아래
     private const float ScreenMargin = 40f;
     private const float DialogueBoxTop = -240f;   // 말풍선이 이보다 아래로 내려가면 아래 대화창 자리(AUTO/SKIP)를 가린다
-    private const float CornerRadius = 14f;
-    private const float NameTagHeight = 34f;
+    public const float CornerRadius = 14f;
+    public const float NameTagHeight = 34f;
 
     // 원래 대화창처럼 뒤가 살짝 비치는 바탕 + 얇은 외곽선
     public static readonly Color FillColor = UITheme.WithAlpha(UITheme.Panel, 0.82f);
     public static readonly Color OutlineColor = UITheme.WithAlpha(UITheme.Accent, 0.38f);
+    // 위 두 겹(외곽선 + 바탕)이 어두운 화면 위에서 겹쳐 보이는 색을 그대로 불투명하게 만든 것.
+    // 뒤가 흰 종이인 자료 보기에서 쓴다 - 비치게 두면 회색으로 뜨고 종이 글자가 대사와 겹친다.
+    public static readonly Color OpaqueFillColor = UITheme.WithAlpha(
+        (FillColor.linear * FillColor.a + OutlineColor.linear * ((1f - FillColor.a) * OutlineColor.a)).gamma, 1f);
     private static readonly Color NameFillColor = UITheme.WithAlpha(UITheme.Panel, 0.95f);
     private static readonly Color NameOutlineColor = UITheme.WithAlpha(UITheme.Accent, 0.6f);
 
@@ -58,6 +64,9 @@ public class SpeechBubble : MonoBehaviour
     private RectTransform canvasRect;
     private RectTransform root, body, nameTag;
     private TMP_Text text, nameText, indicator;
+
+    // 지금 씬의 말풍선 (CopyTextStyle이 글꼴을 물려줄 때 쓴다)
+    private static SpeechBubble current;
 
     public bool IsShowing => root != null && root.gameObject.activeSelf;
 
@@ -75,6 +84,7 @@ public class SpeechBubble : MonoBehaviour
         bubble.canvasRect = (RectTransform)canvas.transform;
         bubble.Build();
         go.SetActive(false);
+        current = bubble;
         return bubble;
     }
 
@@ -224,7 +234,7 @@ public class SpeechBubble : MonoBehaviour
         Vector2 size = body.sizeDelta;
         center = ClampToScreen(center, size);
         body.anchoredPosition = center;
-        nameTag.anchoredPosition = new Vector2(center.x - size.x * 0.5f + 24f, center.y + size.y * 0.5f);
+        nameTag.anchoredPosition = new Vector2(center.x - size.x * 0.5f + NameTagX, center.y + size.y * 0.5f);
     }
 
     // 전체 문장을 넣어 말풍선 크기를 잰다 (글자는 원래 대화창 것을 따라간다).
@@ -251,7 +261,7 @@ public class SpeechBubble : MonoBehaviour
         // 이름표: 말풍선 왼쪽 위 모서리에 반쯤 걸친다
         nameText.text = speaker ?? "";
         nameTag.gameObject.SetActive(!string.IsNullOrEmpty(speaker));
-        nameTag.anchoredPosition = new Vector2(center.x - size.x * 0.5f + 24f, center.y + size.y * 0.5f);
+        nameTag.anchoredPosition = new Vector2(center.x - size.x * 0.5f + NameTagX, center.y + size.y * 0.5f);
     }
 
     // 원래 대화창의 타이핑 진행과 ▼ 깜빡임을 그대로 따라 한다.
@@ -358,11 +368,7 @@ public class SpeechBubble : MonoBehaviour
         root = (RectTransform)transform;
 
         // ----- 몸통: 외곽선(1px) 위에 바탕을 1px 안쪽으로 겹친다 -----
-        body = NewImage("Body", root, RoundedSprite(CornerRadius), OutlineColor);
-        Sliced(body);
-        var fill = NewImage("Fill", body, RoundedSprite(CornerRadius - 1f), FillColor);
-        Sliced(fill);
-        UIKit.Stretch(fill, 1f);
+        body = CreateRoundedBox("Body", root, CornerRadius, OutlineColor, FillColor);
 
         // ----- 대사 글자 (원래 대화창과 같은 글꼴·크기·색·줄 간격) -----
         text = UIKit.CreateText(body, "Text", "", source.fontSize, FontStyles.Normal, source.color);
@@ -372,38 +378,77 @@ public class SpeechBubble : MonoBehaviour
         text.lineSpacing = source.lineSpacing;
 
         // ----- ▼ (다음 대사로 넘길 수 있을 때) -----
-        indicator = UIKit.CreateLabel(body, "Indicator", "▼", 16, FontStyles.Normal, UITheme.Accent);
-        indicator.alignment = TextAlignmentOptions.Center;
-        var irt = (RectTransform)indicator.transform;
-        irt.anchorMin = irt.anchorMax = irt.pivot = new Vector2(1f, 0f);
-        irt.anchoredPosition = new Vector2(-14f, 10f);
-        irt.sizeDelta = new Vector2(22f, 22f);
+        indicator = CreateIndicator(body);
 
         // ----- 이름표: 둥근 알약 모양 (외곽선 + 바탕 + 이름), 글자 길이에 맞춰 늘어난다 -----
-        nameTag = NewImage("NameTag", root, RoundedSprite(NameTagHeight * 0.5f), NameOutlineColor);
-        Sliced(nameTag);
-        nameTag.pivot = new Vector2(0f, 0.5f);
-        nameTag.sizeDelta = new Vector2(100f, NameTagHeight);
-        var row = nameTag.gameObject.AddComponent<HorizontalLayoutGroup>();
-        row.padding = new RectOffset(18, 18, 0, 0);
-        row.childAlignment = TextAnchor.MiddleCenter;
-        row.childControlWidth = row.childControlHeight = true;
-        row.childForceExpandWidth = row.childForceExpandHeight = false;
-        nameTag.gameObject.AddComponent<ContentSizeFitter>().horizontalFit = ContentSizeFitter.FitMode.PreferredSize;
-
-        var nameFill = NewImage("Fill", nameTag, RoundedSprite(NameTagHeight * 0.5f - 1f), NameFillColor);
-        Sliced(nameFill);
-        nameFill.gameObject.AddComponent<LayoutElement>().ignoreLayout = true;   // 이름 글자 배치에 끼지 않게
-        UIKit.Stretch(nameFill, 1f);
-
-        nameText = UIKit.CreateLabel(nameTag, "Name", "", 19, FontStyles.Bold, UITheme.Label);
-        nameText.alignment = TextAlignmentOptions.Center;
-        nameText.characterSpacing = 4f;
+        nameTag = CreateNameTag(root, out nameText);
 
         UIFontHelper.ApplyToChildren(gameObject);
         // 대사 글자는 대화창과 똑같은 글꼴로 (같은 줄바꿈이 나오게)
         if (source.font != null) { text.font = source.font; nameText.font = source.font; }
         if (sourceIndicator != null && sourceIndicator.font != null) indicator.font = sourceIndicator.font;
+    }
+
+    // ---------------------------------------------------------------------------------
+    // 말풍선 부품 - 본편 말풍선과 자료 보기의 독백 말풍선이 같이 쓴다 (모양이 갈라지지 않게)
+    // ---------------------------------------------------------------------------------
+
+    // 둥근 상자: 외곽선(1px) 위에 바탕을 1px 안쪽으로 겹친다.
+    // UIKit.AddBorder를 쓰지 않는 이유: 그건 곧은 선 4개라서 둥근 모서리 밖으로 네모 선이 튀어나온다.
+    public static RectTransform CreateRoundedBox(string name, Transform parent, float radius, Color outline, Color fillColor)
+    {
+        var box = NewImage(name, parent, RoundedSprite(radius), outline);
+        Sliced(box);
+        var fill = NewImage("Fill", box, RoundedSprite(radius - 1f), fillColor);
+        Sliced(fill);
+        fill.gameObject.AddComponent<LayoutElement>().ignoreLayout = true;   // 레이아웃 그룹(이름표)에 끼지 않게
+        UIKit.Stretch(fill, 1f);
+        return box;
+    }
+
+    // 이름표 알약. 왼쪽 가운데가 기준점이라, 말풍선 왼쪽 위 모서리 높이에 놓으면 반쯤 걸친다.
+    // opaque: 뒤가 흰 종이일 때 바탕이 비치지 않게 (자료 보기)
+    public static RectTransform CreateNameTag(Transform parent, out TMP_Text label, bool opaque = false)
+    {
+        var tag = CreateRoundedBox("NameTag", parent, NameTagHeight * 0.5f, NameOutlineColor,
+                                   opaque ? UITheme.WithAlpha(NameFillColor, 1f) : NameFillColor);
+        tag.pivot = new Vector2(0f, 0.5f);
+        tag.sizeDelta = new Vector2(100f, NameTagHeight);
+        var row = tag.gameObject.AddComponent<HorizontalLayoutGroup>();
+        row.padding = new RectOffset(18, 18, 0, 0);
+        row.childAlignment = TextAnchor.MiddleCenter;
+        row.childControlWidth = row.childControlHeight = true;
+        row.childForceExpandWidth = row.childForceExpandHeight = false;
+        tag.gameObject.AddComponent<ContentSizeFitter>().horizontalFit = ContentSizeFitter.FitMode.PreferredSize;
+
+        label = UIKit.CreateLabel(tag, "Name", "", 19, FontStyles.Bold, UITheme.Label);
+        label.alignment = TextAlignmentOptions.Center;
+        label.characterSpacing = 4f;
+        return tag;
+    }
+
+    // ▼ (오른쪽 아래 구석)
+    public static TMP_Text CreateIndicator(Transform body)
+    {
+        var arrow = UIKit.CreateLabel(body, "Indicator", "▼", 16, FontStyles.Normal, UITheme.Accent);
+        arrow.alignment = TextAlignmentOptions.Center;
+        var rt = (RectTransform)arrow.transform;
+        rt.anchorMin = rt.anchorMax = rt.pivot = new Vector2(1f, 0f);
+        rt.anchoredPosition = new Vector2(-14f, 10f);
+        rt.sizeDelta = new Vector2(22f, 22f);
+        return arrow;
+    }
+
+    // 본편 말풍선의 글꼴·크기·색·줄 간격을 그대로 물려준다. 본편 말풍선이 없는 씬이면 원래 값을 둔다.
+    public static void CopyTextStyle(TMP_Text toText, TMP_Text toName, TMP_Text toIndicator)
+    {
+        if (current == null || current.text == null) return;
+        toText.font = current.text.font;
+        toText.fontSize = current.text.fontSize;
+        toText.color = current.text.color;
+        toText.lineSpacing = current.text.lineSpacing;
+        toName.font = current.nameText.font;
+        toIndicator.font = current.indicator.font;
     }
 
     private static RectTransform NewImage(string name, Transform parent, Sprite sprite, Color color)
