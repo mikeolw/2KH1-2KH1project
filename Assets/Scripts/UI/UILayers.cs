@@ -55,7 +55,7 @@ public static class UILayers
         if (cachedRoot != null && cachedRoot.isActiveAndEnabled) return cachedRoot;
 
         Canvas best = null;
-        foreach (var c in Object.FindObjectsByType<Canvas>(FindObjectsSortMode.None))
+        foreach (var c in Object.FindObjectsByType<Canvas>())
         {
             if (!c.isRootCanvas) continue;
             if (best == null || c.sortingOrder < best.sortingOrder) best = c;

@@ -2789,7 +2789,11 @@ public class DialogueSystem : MonoBehaviour
                 {
                     minigameLine.minigameFailEnding = parsedFailEnding;
                 }
-                else
+                // 번호 입력(금고 키패드)은 틀려도 다시 치면 되므로 실패 엔딩이 없다. 그래서 칸이 비어 있어도 정상이다.
+                // 단, 제한시간이 같이 적혀 있으면 시간 초과 때 갈 엔딩이 필요하므로 그대로 경고한다.
+                else if (failEndingStr != ""
+                         || string.IsNullOrWhiteSpace(GetField(data[i], "MinigameAnswer"))
+                         || !string.IsNullOrWhiteSpace(GetField(data[i], "MinigameTimeLimit")))
                 {
                     Debug.LogWarning($"[DialogueSystem] Minigame 행의 TargetEnding '{failEndingStr}'이 EndingType에 없습니다. (CSV: {csvFileName}, 행: {i + 2})");
                 }
