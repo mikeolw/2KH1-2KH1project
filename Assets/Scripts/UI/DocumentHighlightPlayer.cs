@@ -62,8 +62,7 @@ public class DocumentHighlightPlayer : MonoBehaviour
     private const float TypeInterval = 0.03f;  // 글자 한 자 간격
     private const float LineBreakPause = 0.14f;
     // 말풍선
-    private const float BubbleMaxW = 470f, BubblePadX = 26f, BubblePadTop = 26f, BubblePadBottom = 20f;
-    private const float BubbleFont = 24f, NameFont = 19f;
+    private const float BubbleFont = 28f;      // 본편 말풍선이 없을 때만 쓰는 크기 (있으면 그쪽 글자를 따라간다)
     private const float BubbleGap = 20f;       // 형광펜 칸과 말풍선 사이 간격
 
     private DocumentViewerController viewer;
@@ -289,9 +288,8 @@ public class DocumentHighlightPlayer : MonoBehaviour
     // ---------------------------------------------------------------------------------
     // 말풍선
     // ---------------------------------------------------------------------------------
-    // 모양은 SpeechBubble.cs와 똑같이 맞춘다(둥근 모서리, 바탕 82%, 청회색 외곽선, 이름표).
-    // 다만 저 클래스는 아래 대화창의 글자를 따라 그리게 되어 있어서, 여기서는 쓰지 않고
-    // 같은 색·같은 모양으로 따로 만든다.
+    // 모양은 본편 말풍선과 똑같다: 상자·이름표·▼를 SpeechBubble의 부품 만들기로 그대로 만든다.
+    // SpeechBubble 자체를 쓰지 않는 이유는, 그쪽은 아래 대화창의 글자를 따라 그리게 되어 있어서다.
     private void BuildBubble(RectTransform screenBox)
     {
         var go = new GameObject("ThoughtBubble", typeof(RectTransform));
@@ -299,45 +297,24 @@ public class DocumentHighlightPlayer : MonoBehaviour
         bubble = (RectTransform)go.transform;
         bubble.anchorMin = bubble.anchorMax = new Vector2(0.5f, 0.5f);
         bubble.pivot = new Vector2(0f, 1f);          // 왼쪽 위를 기준으로 놓는다
+        bubble.sizeDelta = Vector2.zero;             // 아래 상자의 왼쪽 위 = 이 점
 
-        var bodyGo = new GameObject("Body", typeof(RectTransform), typeof(Image));
-        bodyGo.transform.SetParent(bubble, false);
-        bubbleBody = (RectTransform)bodyGo.transform;
-        bubbleBody.anchorMin = bubbleBody.anchorMax = new Vector2(0f, 1f);
-        bubbleBody.pivot = new Vector2(0f, 1f);
-        var bodyImg = bodyGo.GetComponent<Image>();
-        bodyImg.sprite = SpeechBubble.RoundedSprite(18f);
-        bodyImg.type = Image.Type.Sliced;
-        bodyImg.color = SpeechBubble.FillColor;
-        bodyImg.raycastTarget = false;
-        AddBorder(bubbleBody, SpeechBubble.OutlineColor, 1f);
+        bubbleBody = SpeechBubble.CreateRoundedBox("Body", bubble, SpeechBubble.CornerRadius,
+                                                   SpeechBubble.OutlineColor, SpeechBubble.OpaqueFillColor);
+        bubbleBody.anchorMin = bubbleBody.anchorMax = bubbleBody.pivot = new Vector2(0f, 1f);
 
         bubbleText = CreateText(bubbleBody, "Text", "", BubbleFont, FontStyles.Normal, UITheme.Body);
         bubbleText.alignment = TextAlignmentOptions.TopLeft;
-        bubbleText.raycastTarget = false;
-
-        // 이름표 (말풍선 왼쪽 위에 걸친다)
-        var nameGo = new GameObject("NameTag", typeof(RectTransform), typeof(Image));
-        nameGo.transform.SetParent(bubbleBody, false);
-        var nameRt = (RectTransform)nameGo.transform;
-        nameRt.anchorMin = nameRt.anchorMax = new Vector2(0f, 1f);
-        nameRt.pivot = new Vector2(0f, 0.5f);
-        nameRt.anchoredPosition = new Vector2(22f, 0f);
-        var nameImg = nameGo.GetComponent<Image>();
-        nameImg.sprite = SpeechBubble.RoundedSprite(17f);
-        nameImg.type = Image.Type.Sliced;
-        nameImg.color = UITheme.WithAlpha(UITheme.Panel, 0.95f);
-        nameImg.raycastTarget = false;
-        AddBorder(nameRt, UITheme.WithAlpha(UITheme.Accent, 0.6f), 1f);
-        bubbleName = CreateText(nameRt, "Name", DocumentHighlights.DefaultSpeaker, NameFont, FontStyles.Normal, UITheme.Label);
-        bubbleName.alignment = TextAlignmentOptions.Center;
-        bubbleName.raycastTarget = false;
-        Stretch(bubbleName.rectTransform);
+        bubbleText.textWrappingMode = TextWrappingModes.Normal;
+        bubbleText.overflowMode = TextOverflowModes.Overflow;
 
         // 다 나왔다는 표시 ▼
-        bubbleArrow = CreateText(bubbleBody, "Indicator", "▼", 16f, FontStyles.Normal, UITheme.Accent);
-        bubbleArrow.alignment = TextAlignmentOptions.BottomRight;
-        bubbleArrow.raycastTarget = false;
+        bubbleArrow = SpeechBubble.CreateIndicator(bubbleBody);
+
+        // 이름표 (말풍선 왼쪽 위에 걸친다)
+        var nameRt = SpeechBubble.CreateNameTag(bubbleBody, out bubbleName, opaque: true);
+        nameRt.anchorMin = nameRt.anchorMax = new Vector2(0f, 1f);
+        nameRt.anchoredPosition = new Vector2(SpeechBubble.NameTagX, 0f);
 
         bubble.gameObject.SetActive(false);
     }
@@ -352,19 +329,17 @@ public class DocumentHighlightPlayer : MonoBehaviour
         bubbleName.text = string.IsNullOrEmpty(speaker) ? DocumentHighlights.DefaultSpeaker : speaker;
         bubble.gameObject.SetActive(true);
 
-        // ----- 크기 -----
-        float textW = BubbleMaxW - BubblePadX * 2f;
+        // ----- 크기 (본편 말풍선과 같은 글자·여백·폭) -----
+        SpeechBubble.CopyTextStyle(bubbleText, bubbleName, bubbleArrow);
         bubbleText.text = fullText;                       // 다 나왔을 때 크기로 미리 잡는다
         bubbleText.ForceMeshUpdate();
-        Vector2 pref = bubbleText.GetPreferredValues(fullText, textW, 0f);
-        float w = Mathf.Min(BubbleMaxW, pref.x + BubblePadX * 2f);
-        float h = pref.y + BubblePadTop + BubblePadBottom;
+        Vector2 pref = bubbleText.GetPreferredValues(fullText, SpeechBubble.MaxTextWidth, 0f);
+        float textW = Mathf.Min(SpeechBubble.MaxTextWidth, Mathf.Ceil(pref.x) + 2f);
+        float w = Mathf.Max(SpeechBubble.MinBodyWidth, textW + SpeechBubble.PadX * 2f);
+        float textH = Mathf.Ceil(pref.y);
+        float h = textH + SpeechBubble.PadTop + SpeechBubble.PadBottom;
         bubbleBody.sizeDelta = new Vector2(w, h);
-        PlaceTopLeft(bubbleText.rectTransform, BubblePadX, BubblePadTop, w - BubblePadX * 2f, pref.y);
-        PlaceTopLeft(bubbleArrow.rectTransform, w - 44f, h - 26f, 30f, 18f);
-
-        var nameRt = (RectTransform)bubbleName.transform.parent;
-        nameRt.sizeDelta = new Vector2(bubbleName.GetPreferredValues(bubbleName.text).x + 28f, 32f);
+        PlaceTopLeft(bubbleText.rectTransform, SpeechBubble.PadX, SpeechBubble.PadTop, w - SpeechBubble.PadX * 2f, textH);
 
         // ----- 위치 -----
         // 형광펜 칸이 화면 어디에 있는지 구해서(확대·스크롤까지 반영된 실제 위치) 그 위에 놓는다.
