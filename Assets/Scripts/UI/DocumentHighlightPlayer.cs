@@ -299,8 +299,8 @@ public class DocumentHighlightPlayer : MonoBehaviour
         bubble.pivot = new Vector2(0f, 1f);          // 왼쪽 위를 기준으로 놓는다
         bubble.sizeDelta = Vector2.zero;             // 아래 상자의 왼쪽 위 = 이 점
 
-        bubbleBody = SpeechBubble.CreateRoundedBox("Body", bubble, SpeechBubble.CornerRadius,
-                                                   SpeechBubble.OutlineColor, SpeechBubble.OpaqueFillColor);
+        bubbleBody = SpeechBubble.CreateBubbleBox("Body", bubble,
+                                                  SpeechBubble.OutlineColor, SpeechBubble.OpaqueFillColor);
         bubbleBody.anchorMin = bubbleBody.anchorMax = bubbleBody.pivot = new Vector2(0f, 1f);
 
         bubbleText = CreateText(bubbleBody, "Text", "", BubbleFont, FontStyles.Normal, UITheme.Body);

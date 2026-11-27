@@ -36,7 +36,10 @@ public class SettingsPanelUI : MonoBehaviour
     public static SettingsPanelUI Instance;
 
     // 설정 분류(위쪽 탭).
-    private enum Category { Sound, Display, Text }
+    // Info는 조절하는 값이 아니라 "읽는 것"(크레딧 등)을 모아두는 탭이다.
+    // 아래쪽 버튼 줄은 이미 [메인 화면으로][종료하기][돌아가기]로 꽉 차서 버튼을 더
+    // 넣으면 겹친다. 탭은 글자 폭만큼만 차지하므로 여기에 두는 편이 안전하다.
+    private enum Category { Sound, Display, Text, Info }
 
     // ===== 화면 크기 기준값 =====
     // 캔버스가 1440x1080이라는 전제로 잡은 값이다. 패널 그림(SettingsPanel.png)이
@@ -142,6 +145,10 @@ public class SettingsPanelUI : MonoBehaviour
     // 콜백을 거치지 않고 무조건 화면에서 감춘다.
     public void HidePanel()
     {
+        // 크레딧은 설정 창 위에 겹쳐 뜨는 별도 창이라, 설정만 끄면 크레딧이 혼자 떠 있게 된다.
+        // 그래서 함께 내린다.
+        if (CreditsPanelUI.Instance != null) CreditsPanelUI.Instance.Close();
+
         if (panel != null) panel.SetActive(false);
     }
 
@@ -242,6 +249,7 @@ public class SettingsPanelUI : MonoBehaviour
         BuildSoundPage();
         BuildDisplayPage();
         BuildTextPage();
+        BuildInfoPage();
 
         // ----- 아래쪽 버튼 -----
         BuildFooter(box.transform);
@@ -255,29 +263,51 @@ public class SettingsPanelUI : MonoBehaviour
     }
 
     // ===== 위쪽 탭 =====
-    // 글자 폭만큼의 탭 세 개를 왼쪽부터 40px 간격으로 놓는다.
+    // 글자 폭만큼의 탭 세 개를 왼쪽부터 TabGap 간격으로 놓는다.
     // 고른 탭은 밝은 굵은 글자 + 글자 폭만큼의 밑줄.
+    //
+    // ===== 자리를 build 때 고정하지 않는 이유 =====
+    // 예전에는 여기서 글자 폭을 한 번 재서 탭 상자 크기를 박아 두었다. 그런데 글자를
+    // 만든 뒤에 FontManager가 설정값(글꼴·글씨 크기)에 맞춰 글자 크기를 다시 바꾼다.
+    // 그러면 상자는 옛 크기 그대로인데 글자만 커져서 "텍스트"가 "텍스"+"트"로 접혔다.
+    // 그래서 자리 잡기를 LayoutTabs로 빼고, 글자 크기가 바뀌면 다시 부른다.
+    private static readonly Category[] TabOrder = { Category.Sound, Category.Display, Category.Text, Category.Info };
+    private const float TabGap = 40f;        // 탭 사이 간격
+    private const float TabHeight = 48f;     // 탭 높이 (밑줄 포함)
+    private const float TabFontSize = 22f;   // 탭 글자 크기 (설정에서 더 키울 수 있다)
+
+    private static string TabName(Category category) => category switch
+    {
+        Category.Sound => "사운드",
+        Category.Display => "화면",
+        Category.Text => "텍스트",
+        _ => "정보",
+    };
+
     private void BuildTabBar(Transform box)
     {
-        float x = Pad;
-        x = CreateTabButton(box, Category.Sound, "사운드", x) + 40f;
-        x = CreateTabButton(box, Category.Display, "화면", x) + 40f;
-        CreateTabButton(box, Category.Text, "텍스트", x);
+        foreach (Category category in TabOrder) CreateTabButton(box, category, TabName(category));
+        LayoutTabs();
     }
 
-    // 탭 버튼 하나를 x에 놓고, 그 오른쪽 끝 x를 돌려준다.
-    private float CreateTabButton(Transform parent, Category category, string label, float x)
+    // 탭 버튼 하나를 만든다. 자리와 크기는 LayoutTabs가 정한다.
+    private void CreateTabButton(Transform parent, Category category, string label)
     {
         var go = new GameObject($"Tab_{category}", typeof(RectTransform), typeof(Image), typeof(Button));
         go.transform.SetParent(parent, false);
 
-        var text = CreateLabel(go.transform, "Text", label, 22, TextAlignmentOptions.TopLeft);
+        var text = CreateLabel(go.transform, "Text", label, TabFontSize, TextAlignmentOptions.TopLeft);
         text.fontStyle = FontStyles.Bold;   // 폭을 굵은 글자 기준으로 잡아 고를 때 밀리지 않게
+
+        // 반드시 한 줄로. 이게 없으면 상자보다 글자가 커졌을 때 글자가 접힌다.
+        text.textWrappingMode = TextWrappingModes.NoWrap;
+        text.overflowMode = TextOverflowModes.Overflow;
+
         UIFontHelper.Apply(text);
-        float width = Mathf.Ceil(text.GetPreferredValues(label).x) + 2f;
         Stretch(text.rectTransform);
 
-        PlaceTopLeft(go.GetComponent<RectTransform>(), x, TabTop, width, 48f);
+        // 임시 크기. 바로 뒤 LayoutTabs가 글자 폭에 맞춰 다시 잡는다.
+        PlaceTopLeft(go.GetComponent<RectTransform>(), Pad, TabTop, 10f, TabHeight);
 
         var bg = go.GetComponent<Image>();
         // 클릭만 받는 완전 투명. (Image는 알파 0이어도 클릭을 받는다)
@@ -305,7 +335,47 @@ public class SettingsPanelUI : MonoBehaviour
 
         tabLabels[category] = text;
         tabUnderlines[category] = uImg;
-        return x + width;
+    }
+
+    // ===== 탭 자리 잡기 =====
+    // 각 탭을 지금 글자 폭에 맞춰 왼쪽부터 차례로 놓는다.
+    // 글꼴이나 글씨 크기가 바뀌면 글자 폭이 달라지므로 그때마다 다시 부른다(LateUpdate).
+    private float lastTabFontSize = -1f;
+
+    private void LayoutTabs()
+    {
+        float x = Pad;
+        foreach (Category category in TabOrder)
+        {
+            if (!tabLabels.TryGetValue(category, out var label) || label == null) continue;
+            var rt = (RectTransform)label.transform.parent;
+
+            // 폭은 항상 "굵은 글자" 기준으로 잰다.
+            // 고른 탭만 굵어지는데 굵은 글자가 더 넓어서, 지금 상태 그대로 재면
+            // 탭을 누를 때마다 오른쪽 탭들이 좌우로 밀린다.
+            FontStyles style = label.fontStyle;
+            label.fontStyle = FontStyles.Bold;
+            // 넉넉한 폭을 주어 재는 도중에 줄이 접히지 않게 한다.
+            float width = Mathf.Ceil(label.GetPreferredValues(label.text, 10000f, 0f).x) + 2f;
+            label.fontStyle = style;
+
+            PlaceTopLeft(rt, x, TabTop, width, TabHeight);
+            x += width + TabGap;
+
+            lastTabFontSize = label.fontSize;
+        }
+    }
+
+    // 글씨 크기가 바뀌었는지 보고, 바뀌었으면 탭을 다시 늘어놓는다.
+    //
+    // 설정이 바뀔 때 FontManager가 화면의 모든 글자 크기를 바꾸는데, 그 시점이
+    // 이 화면이 만들어지는 시점보다 뒤다. 그래서 "만들 때 한 번"으로는 부족하다.
+    // 세 탭의 글자 크기는 항상 같으므로 하나만 보면 된다.
+    private void LateUpdate()
+    {
+        if (!tabLabels.TryGetValue(TabOrder[0], out var first) || first == null) return;
+        if (Mathf.Approximately(first.fontSize, lastTabFontSize)) return;
+        LayoutTabs();
     }
 
     // 고른 탭의 내용만 보여주고, 탭 모양도 그에 맞게 바꾼다.
@@ -432,6 +502,18 @@ public class SettingsPanelUI : MonoBehaviour
             () => Settings.autoAdvanceDelay,
             v => SettingsManager.Instance.SetAutoAdvanceDelay(v),
             percent: false, suffix: "초");
+    }
+
+    // 읽는 것들(크레딧 등). 나중에 "버전", "이용 약관" 같은 줄을 여기에 더 붙이면 된다.
+    private void BuildInfoPage()
+    {
+        var page = CreatePage(Category.Info);
+        float y = 0f;
+
+        y = CreateButtonRow(page, y, "크레딧", "보기", () => CreditsPanelUI.Show());
+
+        CreateNoteRow(page, y,
+            "크레딧에는 만든 사람들과 쓰인 글꼴의 라이선스가 함께 적혀 있습니다.");
     }
 
     private static readonly string[] TextSpeedNames = { "느리게", "보통", "빠르게", "즉시" };
@@ -652,6 +734,30 @@ public class SettingsPanelUI : MonoBehaviour
         var text = btn.GetComponentInChildren<TMP_Text>();
         text.fontSize = 14;
         text.color = ButtonTextColor;
+    }
+
+    // 누르면 다른 화면이 열리는 한 줄: 크레딧            [ 보기 ]
+    // 값을 고치는 게 아니라 창을 띄우기만 하므로 refreshActions에 넣지 않는다
+    // (열 때마다 다시 맞출 값이 없다).
+    private float CreateButtonRow(GameObject page, float y, string label, string buttonLabel,
+                                  UnityEngine.Events.UnityAction onClick)
+    {
+        var ctrl = CreateRow(page, y, label, ToggleSegWidth);
+
+        // 꺼짐/켜짐 칸(Toggle_Off)과 같은 그림을 써서 다른 줄의 조작 칸과 톤을 맞춘다.
+        var btn = CreateButton(ctrl, "Open", buttonLabel, "Toggle_Off", new Color(0f, 0f, 0f, 0f), onClick);
+        var rt = btn.GetComponent<RectTransform>();
+        rt.anchorMin = new Vector2(1f, 0f);
+        rt.anchorMax = new Vector2(1f, 1f);
+        rt.pivot = new Vector2(1f, 0.5f);
+        rt.sizeDelta = new Vector2(ToggleSegWidth, 0f);
+        rt.anchoredPosition = Vector2.zero;
+
+        var text = btn.GetComponentInChildren<TMP_Text>();
+        text.fontSize = 18;
+        text.color = ActiveColor;
+
+        return y + RowHeight;
     }
 
     // 안내 문구 (조작 요소 없음). 두 줄까지 들어간다.

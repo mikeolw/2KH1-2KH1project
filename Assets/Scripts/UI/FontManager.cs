@@ -9,10 +9,19 @@ using TMPro;
 // TextMeshPro 텍스트에 즉시 반영된다.
 //
 // ===== 글꼴 목록 =====
-//   0 = 기본     : 프로젝트에 원래 설정되어 있던 글꼴 (게임 시작 시 기억해둔다)
+//   0 = 도트     : Neo둥근모. 이 게임의 메인 글꼴이다 (UIFontHelper.DotFont).
+//                  에셋이 아직 없으면 예전 글꼴로 대신 표시된다.
 //   1 = 맑은 고딕 : 윈도우 기본 고딕체. 화면에서 읽기 가장 편하다.
 //   2 = 바탕     : 명조체(세리프). 소설 같은 느낌.
 //   3 = 굴림     : 예전 윈도우 기본 글꼴. 각지고 촘촘하다.
+// 1~3번을 남겨 둔 이유: 도트 글꼴은 작은 글씨에서 읽기 힘들어하는 사람이 있다.
+// 메인은 도트지만 읽기 어려운 사람이 바꿀 수 있어야 한다.
+//
+// ===== 도트 글꼴일 때 글씨 크기 (중요) =====
+// 도트 글꼴은 고유 크기(16px)의 정수배로만 그려야 선명하다. 28px처럼 어중간한 크기로
+// 그리면 16px 도트를 1.75배로 늘리느라 점이 뭉개진다.
+// 그래서 도트 글꼴이 켜져 있는 동안에는 모든 글씨 크기를 16의 배수로 맞춘다
+// (아래 SnapToPixelGrid). 1~3번 글꼴을 고르면 이 보정은 꺼진다.
 // 1~3번은 컴퓨터에 설치되어 있는 시스템 글꼴을 게임 실행 중에 읽어와서 쓴다
 // (Font.CreateDynamicFontFromOSFont). 그래서 프로젝트에 글꼴 파일을 따로 넣지 않아도 된다.
 // 글꼴 이름은 OS마다 다르므로 번호마다 후보를 여러 개 두고 되는 것을 쓴다
@@ -37,7 +46,19 @@ public class FontManager : MonoBehaviour
     public static FontManager Instance;
 
     // 설정 화면 드롭다운에 표시할 이름들. GameSettings.fontIndex가 이 배열의 번호다.
-    public static readonly string[] FontOptionNames = { "기본", "맑은 고딕", "바탕", "굴림" };
+    public static readonly string[] FontOptionNames = { "도트", "맑은 고딕", "바탕", "굴림" };
+
+    // ===== 도트 격자 =====
+    // 도트 글꼴의 고유 크기. 글씨 크기를 이 값의 배수로 맞추면 점이 뭉개지지 않는다.
+    // DotFontAssetBuilder.SamplingPointSize 와 같은 값이어야 한다.
+    // (다른 도트 글꼴로 바꾸면 두 곳을 같이 고쳐야 한다)
+    public const int PixelGrid = 16;
+
+    // 도트 보정을 끄고 싶을 때 false. 글씨 크기가 원래 값(28, 20, 11...) 그대로 쓰이고
+    // 대신 글자가 약간 흐려진다.
+    // (const가 아니라 static readonly인 이유: const면 컴파일러가 아래 분기를 지워 버리고
+    //  "닿을 수 없는 코드" 경고를 낸다. 값만 바꿔 끌 수 있게 두려면 이쪽이 맞다)
+    public static readonly bool SnapSizesForDotFont = true;
 
     // 위 이름에 대응하는 실제 시스템 글꼴 이름 후보들. 0번(기본)은 시스템 글꼴이 아니라 비워둔다.
     //
@@ -101,13 +122,14 @@ public class FontManager : MonoBehaviour
             return;
         }
 
-        // ===== "기본" 글꼴로 되돌릴 때 쓸 글꼴 =====
+        // ===== 0번("도트")에 쓸 글꼴 =====
         // TMP_Settings.defaultFontAsset을 그대로 쓰면 안 된다. 이 프로젝트의 TextMeshPro
         // 기본 글꼴에는 한글 글자 모양이 다 들어있지 않아서, 그걸 화면 전체에 적용하면
         // 멀쩡하던 한글 대사까지 시커먼 네모로 깨져버린다.
         //
-        // 그래서 "지금 화면에서 한글이 잘 나오고 있는 글꼴"을 찾아 그것을 기본값으로 삼는다.
-        // (UIFontHelper.cs 참고 - 대사창 글꼴을 우선으로 찾는다)
+        // UIFontHelper.GameFont는 도트 글꼴(Neo둥근모)을 1순위로 돌려준다.
+        // 도트 에셋이 아직 없으면 "지금 화면에서 한글이 잘 나오고 있는 글꼴"로 넘어간다.
+        // (UIFontHelper.cs 참고)
         defaultFont = UIFontHelper.GameFont;
         if (defaultFont == null) defaultFont = TMP_Settings.defaultFontAsset;
     }
@@ -202,6 +224,9 @@ public class FontManager : MonoBehaviour
         lastAppliedFontIndex = settings.fontIndex;
         lastAppliedScale = scale;
 
+        // 지금 글꼴이 도트 글꼴인지. 도트일 때만 크기를 격자에 맞춘다.
+        bool dot = IsDotFont(font);
+
         // 꺼져 있는(비활성) 오브젝트의 텍스트까지 포함해서 찾는다.
         // FindObjectsInactive.Include를 빼면 지금 닫혀 있는 팝업 안의 글씨는 안 바뀐다.
         TMP_Text[] texts = FindObjectsByType<TMP_Text>(FindObjectsInactive.Include);
@@ -219,10 +244,55 @@ public class FontManager : MonoBehaviour
             }
 
             if (font != null) text.font = font;
-            text.fontSize = baseFontSizes[text] * scale;
+
+            float size = baseFontSizes[text] * scale;
+            text.fontSize = dot ? SnapToPixelGrid(size) : size;
+
+            // 도트 글꼴은 글자 사이를 소수점 단위로 벌리면 점이 어긋난다.
+            // 자동 크기 조절도 임의의 크기를 만들어내므로 끈다.
+            if (dot)
+            {
+                text.enableAutoSizing = false;
+            }
         }
 
         CleanupDestroyedTexts();
+    }
+
+    // ---------------------------------------------------------------------------------
+    // 도트 글꼴 보정
+    // ---------------------------------------------------------------------------------
+
+    // 글씨 크기를 도트 격자(16의 배수)에 맞춘다. 최소 한 칸(16)은 보장한다.
+    //
+    // ===== 왜 내림이 아니라 "가장 가까운 배수"인가 =====
+    // 내림으로 하면 20 -> 16, 28 -> 16 이 되어 대사 글자가 갑자기 작아진다.
+    // 가장 가까운 배수로 하면 20 -> 16, 28 -> 32 가 되어 원래 크기 차이가 유지된다.
+    // (대사 28 -> 32, 이름 26 -> 32, 버튼 20 -> 16, 작은 안내 11~15 -> 16)
+    public static float SnapToPixelGrid(float size)
+    {
+        if (!SnapSizesForDotFont) return size;
+
+        int steps = Mathf.RoundToInt(size / PixelGrid);
+        if (steps < 1) steps = 1;          // 16px보다 작으면 한글이 뭉개져서 못 읽는다
+        return steps * PixelGrid;
+    }
+
+    // 이 글꼴이 도트 글꼴인지. 참조로 비교하므로 글꼴 이름에 의존하지 않는다.
+    public static bool IsDotFont(TMP_FontAsset font)
+    {
+        return font != null && font == UIFontHelper.DotFont;
+    }
+
+    // 지금 도트 글꼴이 켜져 있는지 (다른 UI가 픽셀 스타일로 그릴지 판단할 때 쓴다).
+    public static bool DotFontActive
+    {
+        get
+        {
+            if (Instance == null || SettingsManager.Instance == null)
+                return UIFontHelper.DotFont != null;
+            return IsDotFont(Instance.GetFont(SettingsManager.Instance.Current.fontIndex));
+        }
     }
 
     // 만들기에 실패한 글꼴 번호. 실패도 기억해둬야 매번 다시 시도하지 않는다.
