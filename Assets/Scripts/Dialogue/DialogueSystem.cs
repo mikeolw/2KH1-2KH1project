@@ -272,6 +272,7 @@ public class DialogueSystem : MonoBehaviour
     private Sprite dialogueArtSprite;                // 평소 대화창 그림
     private Sprite investigationArtSprite;           // 조사 대화창 그림 (없으면 평소 그림을 그대로 쓴다)
     private GameObject dialogueArt;                  // 대화창 그림 (긴 독백 때는 숨긴다)
+    private GameObject dialogueTopEdge;              // 그림이 없을 때만 그리는 위쪽 픽셀 테두리
     private Button logButton;                        // LOG(대사 기록) 버튼 - 코드로 만들 때만 생긴다
     private bool quickButtonsMadeByCode;             // AUTO/SKIP을 코드로 만들었는지 (그림이 있으면 글자만 보이게 한다)
     private const float SpeakerBoxHeight = 56f;     // 이름 칸 높이
@@ -320,6 +321,7 @@ public class DialogueSystem : MonoBehaviour
         {
             bg.color = dialogueArt != null ? new Color(0f, 0f, 0f, 0f) : new Color(0f, 0f, 0f, 0.86f);
         }
+        CreateDialogueTopEdge();
 
         // ----- 화자 이름 칸 -----
         // 대화창 왼쪽 위에 얹는다. 이름이 없는 지문일 때는 통째로 숨긴다.
@@ -411,6 +413,36 @@ public class DialogueSystem : MonoBehaviour
     // 대화창 그림을 대화창의 첫 번째 자식으로 깐다. 그림은 화면 전체 크기라서, 대화창 모서리를
     // 기준으로 "대화창 바깥으로 넓게" 늘려 화면 전체에 맞춘다 (그림 속 좌표와 대화창 여백이 같은 값).
     // 글자/버튼보다 뒤에 그려지고 클릭을 막지 않는다. 그림 파일이 없으면 아무것도 안 만든다.
+    // ===== 대화창 위쪽 테두리 (픽셀 스타일) =====
+    // 대화창 배경이 그림(DialogueBox.png)일 때는 흰 선이 그림 안에 그려져 있으므로
+    // 아무것도 하지 않는다. 그림을 아직 못 받은 사람에게는 검은 판만 보여서 대화창과
+    // 게임 화면의 경계가 없었다. 그때만 도트 한 칸 두께의 선을 깔아 준다.
+    //
+    // 좌우/아래는 화면 가장자리라 선을 그려도 보이지 않으므로 위쪽 한 줄만 그린다.
+    private void CreateDialogueTopEdge()
+    {
+        if (dialogueArt != null) return;        // 그림에 이미 선이 있다
+        if (dialogueTopEdge != null) return;
+        if (dialoguePanel == null) return;
+
+        var go = new GameObject("DialogueTopEdge", typeof(RectTransform), typeof(Image));
+        go.transform.SetParent(dialoguePanel.transform, false);
+        go.transform.SetAsFirstSibling();       // 글자 뒤에
+
+        var rt = (RectTransform)go.transform;
+        rt.anchorMin = new Vector2(0f, 1f);
+        rt.anchorMax = new Vector2(1f, 1f);
+        rt.pivot = new Vector2(0.5f, 1f);
+        rt.offsetMin = new Vector2(0f, -SpeechBubble.PixelBorder);
+        rt.offsetMax = Vector2.zero;
+
+        var img = go.GetComponent<Image>();
+        img.color = SpeechBubble.OutlineColor;
+        img.raycastTarget = false;
+
+        dialogueTopEdge = go;
+    }
+
     private void CreateDialogueArt()
     {
         if (dialogueArt != null) return;
@@ -2190,6 +2222,10 @@ public class DialogueSystem : MonoBehaviour
     }
 
     // 주인공(차재훈)의 대사는 말풍선 없이 원래 대화창으로 보여준다 - 플레이어 자신의 목소리라서.
+    //
+    // 단, 주인공의 스탠딩이 화면에 서 있는 장면은 예외다(아래 CanUseSpeechBubble).
+    // 회상(Past01)처럼 한성과 재훈이 마주 앉아 있는 장면에서는 재훈도 "보이는 등장인물"이라,
+    // 한쪽만 말풍선이고 한쪽은 아래 대화창이면 둘이 대화하는 느낌이 끊긴다.
     private static readonly System.Collections.Generic.HashSet<string> BoxOnlySpeakers =
         new System.Collections.Generic.HashSet<string> { "차재훈", "재훈" };
 
@@ -2209,29 +2245,44 @@ public class DialogueSystem : MonoBehaviour
 
         return line.lineType == LineType.NormalDialogue
             && !string.IsNullOrWhiteSpace(line.speaker)
-            && !BoxOnlySpeakers.Contains(line.speaker.Trim());
+            && (!BoxOnlySpeakers.Contains(line.speaker.Trim()) || SpeakerIsOnStage(line));
+    }
+
+    // 말하는 사람의 스탠딩이 지금 화면에 서 있는가. 주인공도 "보이는" 장면에서는
+    // 말풍선으로 말하게 하려고 본다 (BoxOnlySpeakers 설명 참고).
+    private bool SpeakerIsOnStage(DialogueLine line)
+    {
+        var stage = StageController.Instance;
+        if (stage == null || line == null) return false;
+        return !string.IsNullOrEmpty(stage.SpeakerStandingKey(line.speaker, line.talkerSlot));
     }
 
     // line이 null이면 아래 대화창으로 되돌린다.
     private void ApplySpeechBubble(DialogueLine line)
     {
-        UnityEngine.UI.Image standing = null;
-        if (line != null && StageController.Instance != null)
-            standing = StageController.Instance.FindSpeakerStanding(line.speaker, line.talkerSlot);
-
-        // 화자가 화면에 서 있으면 그 인물 옆에, 없으면(전화 목소리, 화면 밖 인물 등) 화면 아래 가운데에.
+        // ===== 말풍선 자리는 "스탠딩 한 종류당 하나" 다 =====
+        // 표정·입모양을 뗀 스탠딩 열쇠(StageController.BubbleAnchorKey)로 중심점을 찾는다.
+        //   - 말하는 사람이 서 있으면 그 사람의 열쇠 -> 말풍선이 그 사람 쪽에 붙는다
+        //   - 서 있지 않으면(내레이션, 화면에 없는 사람) 무대 구성 열쇠
+        // 어느 쪽이든 한 열쇠에 중심점은 하나뿐이라, 표정이 바뀌거나 장면이 넘어가도
+        // 같은 사람의 말풍선은 늘 같은 점에 온다.
         bool useBubble = false;
         if (line != null && speechBubble != null)
         {
             string name = line.lineType == LineType.Narration ? "" : line.speaker;
-            if (BubbleLayout.TryGetPosition(currentScenarioCsv, currentShownIndex, line.sentence, out Vector2 fixedPos))
+            var stage = StageController.Instance;
+            string anchorKey = stage != null
+                ? stage.BubbleAnchorKey(name, line.talkerSlot)   // 내레이션은 name이 ""라 무대 열쇠가 된다
+                : StageController.NoStandingKey;
+
+            if (BubbleLayout.TryGetPosition(anchorKey, out Vector2 fixedPos))
             {
-                speechBubble.ShowAt(name, fixedPos);   // 배치표에 직접 정해 둔 위치
+                speechBubble.ShowAt(name, fixedPos);   // 이 스탠딩의 자리를 F2로 직접 정해 뒀다
                 useBubble = true;
             }
             else
             {
-                useBubble = standing != null && speechBubble.Show(name, standing);
+                useBubble = speechBubble.ShowAnchored(name, anchorKey);
                 if (!useBubble) { speechBubble.ShowOffscreen(name); useBubble = true; }
             }
         }
@@ -2296,25 +2347,25 @@ public class DialogueSystem : MonoBehaviour
         float top = cr.rect.yMax - TopRightTop;
         float midY = top - TopRightHeight * 0.5f;
 
-        // 뒤에 까는 반투명 판 (말풍선과 같은 바탕 + 1px 외곽선)
+        // 뒤에 까는 반투명 판 (말풍선과 같은 바탕 + 픽셀 외곽선)
         if (quickButtonsBack == null)
         {
             var back = new GameObject("QuickButtonsBack", typeof(RectTransform), typeof(Image));
             back.transform.SetParent(dialoguePanel.transform, false);
             if (autoButton != null) back.transform.SetSiblingIndex(autoButton.transform.GetSiblingIndex());
             var img = back.GetComponent<Image>();
-            img.sprite = SpeechBubble.RoundedSprite(12f);
+            img.sprite = SpeechBubble.PixelBoxSprite(SpeechBubble.PixelCut, SpeechBubble.PixelStep);
             img.type = Image.Type.Sliced;
             img.color = SpeechBubble.OutlineColor;
             img.raycastTarget = false;
             var fill = new GameObject("Fill", typeof(RectTransform), typeof(Image));
             fill.transform.SetParent(back.transform, false);
             var fimg = fill.GetComponent<Image>();
-            fimg.sprite = SpeechBubble.RoundedSprite(11f);
+            fimg.sprite = SpeechBubble.PixelBoxSprite(SpeechBubble.PixelCut, SpeechBubble.PixelStep);
             fimg.type = Image.Type.Sliced;
             fimg.color = SpeechBubble.FillColor;
             fimg.raycastTarget = false;
-            UIKit.Stretch((RectTransform)fill.transform, 1f);
+            UIKit.Stretch((RectTransform)fill.transform, SpeechBubble.PixelBorder);
             quickButtonsBack = (RectTransform)back.transform;
         }
         quickButtonsBack.gameObject.SetActive(true);
@@ -2733,7 +2784,7 @@ public class DialogueSystem : MonoBehaviour
                     {
                         Debug.LogWarning($"[DialogueSystem] '{endingStr}'은 EndingType에 없는 값입니다. " +
                                          $"(CSV: {csvFileName}, 행: {i + 2}) " +
-                                         "쓸 수 있는 값: True, Normal, Bad_A ~ Bad_G");
+                                         "쓸 수 있는 값: True, Normal, Bad_A ~ Bad_H");
                     }
                 }
                 else
@@ -3051,6 +3102,12 @@ public class DialogueSystem : MonoBehaviour
     private List<Dictionary<string, object>> sceneFormatCheckedData;
     private bool sceneFormatUsesSceneColumn;
 
+    // 행마다 "이 행이 속한 장면 ID"를 미리 풀어 둔 것.
+    // Scene 칸이 비면 이전 장면 유지라서 위에서부터 이어 내려야 하는데, 읽는 중에 변수 하나로
+    // 이어 가면 행을 건너뛰거나 되돌아가는 경우(선택지 묶음 등)에 어긋난다.
+    // 그래서 파일을 처음 볼 때 전체를 한 번에 풀어서 배열로 들고 있는다.
+    private string[] resolvedSceneIds;
+
     private void ApplySceneColumn(DialogueLine line, List<Dictionary<string, object>> data, int rowIndex)
     {
         // 이 CSV가 Scene 칸을 쓰는 새 형식인지 파일마다 한 번만 확인한다.
@@ -3063,6 +3120,7 @@ public class DialogueSystem : MonoBehaviour
             {
                 if (r.ContainsKey("Scene")) { sceneFormatUsesSceneColumn = true; break; }
             }
+            ResolveSceneIds(data);
         }
 
         var row = data[rowIndex];
@@ -3073,6 +3131,10 @@ public class DialogueSystem : MonoBehaviour
             line.propNames = GetField(row, "Props");
             return;
         }
+
+        // 이어 내린 장면 ID는 Scene 칸이 비어 있는 줄에도 넣어 준다 (말풍선 자리의 열쇠).
+        if (resolvedSceneIds != null && rowIndex >= 0 && rowIndex < resolvedSceneIds.Length)
+            line.sceneId = resolvedSceneIds[rowIndex];
 
         string sceneId = GetField(row, "Scene").Trim();
         if (string.IsNullOrEmpty(sceneId)) return;
@@ -3088,5 +3150,20 @@ public class DialogueSystem : MonoBehaviour
 
         line.backgroundName = scene.background;
         line.propNames = string.IsNullOrWhiteSpace(scene.props) ? "none" : scene.props;
+    }
+
+    // 행마다 속한 장면 ID를 미리 풀어 둔다. Scene 칸이 빈 줄은 바로 위 줄의 장면을 잇는다.
+    private void ResolveSceneIds(List<Dictionary<string, object>> data)
+    {
+        if (!sceneFormatUsesSceneColumn || data == null) { resolvedSceneIds = null; return; }
+
+        resolvedSceneIds = new string[data.Count];
+        string current = "";
+        for (int i = 0; i < data.Count; i++)
+        {
+            string raw = GetField(data[i], "Scene").Trim();
+            if (!string.IsNullOrEmpty(raw)) current = raw;
+            resolvedSceneIds[i] = current;
+        }
     }
 }

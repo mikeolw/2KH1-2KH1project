@@ -19,7 +19,7 @@ using UnityEngine;
 //   추리(단서 조합) 실패        -> Bad_D
 //   조사 중 들킴(복도 감시)     -> Bad_C
 //   분노 루트                   -> Bad_E
-//   #04 대사 도중 선택지        -> Bad_F / Bad_G   (DialogueLine.isChoice)
+//   #04 대사 도중 선택지        -> Bad_F / Bad_G / Bad_H   (DialogueLine.isChoice)
 //
 // 위 연결은 아래 endingCsvMap 하나만 고치면 바꿀 수 있다. 선택지 CSV에서는
 // IsEndingChoice=TRUE, TargetEnding=Bad_A 처럼 "엔딩 종류"만 적으면 되고,
@@ -42,9 +42,11 @@ public class GameFlowManager : MonoBehaviour
         { EndingType.Bad_C,  "scenario_ending_bad_c" },
         { EndingType.Bad_D,  "scenario_ending_bad_d" },
         { EndingType.Bad_E,  "scenario_ending_bad_e" },
-        // #04 아이 분기에서 갈라지는 두 엔딩. 지금은 목업 대본이다.
+        // #04 아이 분기에서 갈라지는 세 엔딩. 지금은 전부 목업 대본이다.
         { EndingType.Bad_F,  "scenario_ending_bad_f" },
         { EndingType.Bad_G,  "scenario_ending_bad_g" },
+        // 아이에게 화를 내는 선택지에서 바로 떨어지는 엔딩.
+        { EndingType.Bad_H,  "scenario_ending_bad_h" },
         // Normal 엔딩은 아직 전용 CSV가 없어서 트루엔딩 파일을 임시로 쓴다.
         // 노말엔딩 대본이 나오면 여기 파일 이름만 바꾸면 된다.
         { EndingType.Normal, "scenario_ending_true" },

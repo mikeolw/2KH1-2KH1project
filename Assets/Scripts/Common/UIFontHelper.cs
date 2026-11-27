@@ -14,7 +14,9 @@ using TMPro;
 // 인스펙터에서 그걸 직접 꽂아뒀기 때문에 멀쩡했다.
 //
 // ===== 어떻게 고르나 =====
-// 글꼴 이름을 코드에 박아두면 나중에 글꼴을 바꿀 때 또 깨진다. 그래서 이름이 아니라
+// 1순위는 도트 글꼴(Neo둥근모)이다. 이 게임의 메인 글꼴이므로 있으면 무조건 이걸 쓴다.
+// 없으면(아직 안 구웠거나 팀원이 에셋을 못 받았을 때) 예전 방식으로 넘어간다:
+// 글꼴 이름을 코드에 박아두면 나중에 글꼴을 바꿀 때 또 깨지므로, 이름이 아니라
 // "한글이 실제로 들어있는지"를 직접 확인해서 고른다.
 //   TMP_FontAsset.HasCharacter('가') 로 물어보면 그 글꼴이 한글을 그릴 수 있는지 알 수 있다.
 // 화면에 있는 글꼴들을 훑어서 이 검사를 통과하는 첫 번째 것을 쓴다.
@@ -25,8 +27,45 @@ public static class UIFontHelper
     // '가'는 한글 음절의 첫 글자라 한글 글꼴이면 거의 반드시 들어있다.
     private const char KoreanSample = '가';
 
+    // ===== 도트 글꼴 (이 게임의 메인 글꼴) =====
+    // Assets/TextMesh Pro/Resources/Fonts & Materials/NeoDunggeunmo.asset 을 가리킨다.
+    // 그 폴더가 Resources 폴더라서 이 경로로 런타임에 읽히고 빌드에도 포함된다.
+    // 에셋은 메뉴 [2KH1 / 글꼴 / 도트 글꼴 에셋 만들기] 로 만든다(DotFontAssetBuilder.cs).
+    private const string DotFontResourcePath = "Fonts & Materials/NeoDunggeunmo";
+
     // 한 번 찾은 글꼴은 기억해둔다. 매번 씬을 뒤지면 느리다.
     private static TMP_FontAsset cachedFont;
+
+    // 도트 글꼴은 씬이 바뀌어도 그대로이므로 따로 기억한다(아래 cachedFont와 달리 안 비운다).
+    private static TMP_FontAsset dotFont;
+    private static bool dotFontLookedUp;
+
+    // 도트 글꼴. 아직 에셋을 만들지 않았으면 null.
+    public static TMP_FontAsset DotFont
+    {
+        get
+        {
+            if (dotFontLookedUp) return dotFont;
+            dotFontLookedUp = true;
+
+            dotFont = Resources.Load<TMP_FontAsset>(DotFontResourcePath);
+            if (dotFont == null)
+            {
+                // 경고는 딱 한 번만. 없어도 게임은 예전 글꼴로 정상 동작한다.
+                Debug.LogWarning(
+                    "[UIFontHelper] 도트 글꼴 에셋이 없어 예전 글꼴로 표시합니다.\n" +
+                    "  만드는 법: Neo둥근모 TTF를 Assets/Fonts/ 에 넣고 " +
+                    "메뉴 [2KH1 / 글꼴 / 도트 글꼴 에셋 만들기] 를 실행하세요.\n" +
+                    $"  찾은 경로: Resources/{DotFontResourcePath}");
+            }
+            else
+            {
+                // 씬이 바뀌어도 메모리에서 내려가지 않게 한다.
+                dotFont.hideFlags = HideFlags.DontUnloadUnusedAsset;
+            }
+            return dotFont;
+        }
+    }
 
     // 씬이 바뀌면 이전 씬의 글꼴 오브젝트가 사라질 수 있으므로 캐시를 비워야 한다.
     // 이 구독을 한 번만 걸기 위한 플래그.
@@ -50,6 +89,24 @@ public static class UIFontHelper
     // 한글이 실제로 나오는 글꼴을 찾는다.
     private static TMP_FontAsset FindKoreanFont()
     {
+        // 0) 도트 글꼴이 있으면 그것이 메인 글꼴이다.
+        //    씬에 꽂혀 있는 예전 글꼴(NanumBarunGothic)보다 우선한다.
+        var dot = DotFont;
+        if (dot != null)
+        {
+            if (SupportsKorean(dot)) return dot;
+
+            // 에셋은 있는데 한글 판정에 실패한 경우.
+            // 조용히 예전 글꼴로 넘어가면 "분명히 구웠는데 도트가 안 먹는다"가 되어
+            // 원인을 찾기 어렵다. 무엇이 문제인지 또렷하게 남긴다.
+            Debug.LogError(
+                $"[UIFontHelper] 도트 글꼴 에셋은 찾았지만 '{KoreanSample}' 글자가 없어 쓰지 못합니다. " +
+                "예전 글꼴로 표시합니다.\n" +
+                "  원인: 글꼴을 구울 때 이 글자가 글자 목록에 빠졌을 가능성이 큽니다.\n" +
+                "  해결: 메뉴 [2KH1 / 글꼴 / 도트 글꼴 에셋 만들기] 를 다시 실행하세요 " +
+                "(DotFontAssetBuilder.RequiredHangul 이 이 글자를 넣어 줍니다).");
+        }
+
         // 1) 대사창 글꼴을 먼저 본다. 게임에서 한글이 가장 확실히 나오는 곳이다.
         if (DialogueSystem.Instance != null && DialogueSystem.Instance.sentenceText != null)
         {

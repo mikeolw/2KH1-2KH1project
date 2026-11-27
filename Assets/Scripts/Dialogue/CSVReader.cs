@@ -41,7 +41,17 @@ public class CSVReader
     // 스토리가 없는 공통 데이터만 이 접두어로 부른다 (위 주석 참고).
     const string SharedStagePrefix = "Stage/";
 
-    public static List<Dictionary<string, object>> Read(string file)
+    // ===== 첫 칸이 비어 있는 줄은 기본적으로 버린다 =====
+    // 시나리오 CSV는 첫 칸(LineType)이 비면 대사 줄이 아니다. 엑셀에서 아래쪽에 남는
+    // 빈 줄이나 메모 줄이 그런 모양이라, 그걸 걸러 주는 규칙이 꼭 필요하다.
+    //
+    // 그런데 표에 따라 첫 칸을 비워 두는 것이 '뜻이 있는' 경우가 있다. 핸드폰 표가
+    // 그렇다 - 첫 칸이 Chapter이고, 비워 두면 '처음부터 끝까지 계속 보인다'는 뜻이다.
+    // 그런 표는 keepBlankFirstColumn: true 로 부르면 된다. 이때는 '모든 칸이 빈 줄'만
+    // 버린다(파일 끝의 빈 줄은 여전히 걸러진다).
+    public static List<Dictionary<string, object>> Read(string file) => Read(file, false);
+
+    public static List<Dictionary<string, object>> Read(string file, bool keepBlankFirstColumn)
     {
         var list = new List<Dictionary<string, object>>();
 
@@ -83,7 +93,8 @@ public class CSVReader
         for (var i = 1; i < lines.Length; i++)
         {
             var values = Regex.Split(lines[i], SPLIT_RE);
-            if (values.Length == 0 || values[0] == "") continue;
+            if (values.Length == 0) continue;
+            if (keepBlankFirstColumn ? IsAllBlank(values) : values[0] == "") continue;
 
             var entry = new Dictionary<string, object>();
             for (var j = 0; j < header.Length && j < values.Length; j++)
@@ -95,6 +106,14 @@ public class CSVReader
             list.Add(entry);
         }
         return list;
+    }
+
+    // 모든 칸이 비어 있는 줄인가. 파일 끝에 남는 빈 줄(",,,," 같은 것도 포함)을 걸러낸다.
+    private static bool IsAllBlank(string[] values)
+    {
+        for (int i = 0; i < values.Length; i++)
+            if (values[i].Trim(TRIM_CHARS).Trim().Length > 0) return false;
+        return true;
     }
 
     // CSV 파일의 내용을 글자로 가져온다. 없으면 null.
@@ -109,7 +128,43 @@ public class CSVReader
 
         // 그 외(스토리 CSV 전부): Resources에서만 읽는다. StreamingAssets는 보지 않는다.
         TextAsset data = Resources.Load<TextAsset>(file);
-        return data != null ? data.text : null;
+        if (data == null) return null;
+        return Decode(file + ".csv", data.bytes, data.text);
+    }
+
+    // ===== 엑셀에서 잘못 저장한 CSV를 알아챈다 (아주 중요) =====
+    // 엑셀의 '다른 이름으로 저장'에는 비슷한 항목이 두 개 있다.
+    //    CSV UTF-8(쉼표로 분리)  <- 이것을 골라야 한다
+    //    CSV(쉼표로 분리)        <- 이것을 고르면 ANSI(cp949)로 저장된다
+    // 아래쪽으로 저장하면 한글이 전부 다른 바이트로 적힌다. 유니티는 CSV를 UTF-8로만
+    // 읽기 때문에 그 파일의 한글은 통째로 깨진 글자가 되어 버린다. 그런데 화면에는
+    // 그냥 이상한 글자가 보일 뿐 아무 오류도 안 나서, 원인이 '저장 옵션'이라는 것을
+    // 알아채기가 거의 불가능하다 (실제로 scenario_03.csv가 이 상태로 있었다).
+    // 그래서 읽을 때마다 UTF-8이 맞는지 직접 확인하고, 아니면 어느 파일인지 알린다.
+    //
+    // 검사에 걸려도 게임을 멈추지는 않는다. 깨진 채로나마 진행되게 두고(fallback),
+    // 콘솔에 무엇을 어떻게 고치면 되는지 적어 둔다.
+    private static string Decode(string label, byte[] bytes, string fallback)
+    {
+        if (bytes == null || bytes.Length == 0) return fallback ?? "";
+
+        // 두 번째 인수 true = 잘못된 바이트를 만나면 조용히 넘기지 말고 예외를 던져라
+        var strict = new UTF8Encoding(false, true);
+        try
+        {
+            // 맨 앞 BOM은 Read()가 떼어내므로 여기서는 그대로 둔다.
+            return strict.GetString(bytes);
+        }
+        catch (DecoderFallbackException)
+        {
+            Debug.LogError(
+                $"[CSVReader] {label} 이 UTF-8이 아닙니다. 한글이 깨져서 나옵니다." + "\n" +
+                "  엑셀에서 그 파일을 열고 [다른 이름으로 저장] > " +
+                "'CSV UTF-8(쉼표로 분리)(*.csv)' 로 다시 저장해 주세요." + "\n" +
+                "  ('CSV(쉼표로 분리)'를 고르면 ANSI로 저장되어 이 문제가 다시 생깁니다)");
+            // 깨진 글자로라도 돌아가게 둔다 (UTF-8이 아닌 바이트는 ?로 바뀐다)
+            return fallback ?? Encoding.UTF8.GetString(bytes);
+        }
     }
 
     // 다른 프로그램이 열고 있어도 읽을 수 있게 파일을 연다.
@@ -118,10 +173,13 @@ public class CSVReader
     // FileShare.ReadWrite = "다른 프로그램이 읽거나 쓰는 중이어도 나는 읽기만 하겠다"는 뜻.
     private static string ReadSharedFile(string path)
     {
+        byte[] bytes;
         using (var stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite))
-        using (var reader = new StreamReader(stream, Encoding.UTF8, true))
+        using (var buffer = new MemoryStream())
         {
-            return reader.ReadToEnd();
+            stream.CopyTo(buffer);
+            bytes = buffer.ToArray();
         }
+        return Decode(path, bytes, null);
     }
 }

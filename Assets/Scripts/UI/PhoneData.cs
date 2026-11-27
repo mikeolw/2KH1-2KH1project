@@ -19,6 +19,9 @@ using UnityEngine;
 // ===== Chapter 칸 - 언제부터 보이나 =====
 // 모든 표에 Chapter 칸이 있다(연락처만 없다 - 처음부터 끝까지 같다).
 //   빈칸   : 처음부터 계속 보인다
+//            (Chapter가 CSV의 첫 칸인데, CSVReader는 첫 칸이 빈 줄을 기본적으로 버린다.
+//             그래서 아래에서 keepBlankFirstColumn: true로 읽는다 - 이걸 빼면 빈칸 줄이
+//             조용히 사라져서 인터넷/라디오의 '대신 보여줄 줄'이 영영 안 나온다)
 //   01     : 1장부터
 //   02     : 2장부터
 //   02b    : 2장b부터
@@ -128,7 +131,7 @@ public static class PhoneData
         if (calls != null) return;
 
         calls = new List<Call>();
-        foreach (var r in CSVReader.Read("Dialogues/PhoneCallLog"))
+        foreach (var r in CSVReader.Read("Dialogues/PhoneCallLog", keepBlankFirstColumn: true))
             calls.Add(new Call
             {
                 chapter = Get(r, "Chapter"), type = Get(r, "Type"), name = Get(r, "Name"),
@@ -136,7 +139,7 @@ public static class PhoneData
             });
 
         messages = new List<Message>();
-        foreach (var r in CSVReader.Read("Dialogues/PhoneMessages"))
+        foreach (var r in CSVReader.Read("Dialogues/PhoneMessages", keepBlankFirstColumn: true))
             messages.Add(new Message
             {
                 chapter = Get(r, "Chapter"), direction = Get(r, "Direction"), name = Get(r, "Name"),
@@ -151,7 +154,7 @@ public static class PhoneData
             });
 
         mails = new List<Mail>();
-        foreach (var r in CSVReader.Read("Dialogues/PhoneEmail"))
+        foreach (var r in CSVReader.Read("Dialogues/PhoneEmail", keepBlankFirstColumn: true))
             mails.Add(new Mail
             {
                 chapter = Get(r, "Chapter"), from = Get(r, "From"), subject = Get(r, "Subject"),
@@ -159,7 +162,7 @@ public static class PhoneData
             });
 
         sites = new List<Site>();
-        foreach (var r in CSVReader.Read("Dialogues/PhoneInternet"))
+        foreach (var r in CSVReader.Read("Dialogues/PhoneInternet", keepBlankFirstColumn: true))
             sites.Add(new Site
             {
                 chapter = Get(r, "Chapter"), title = Get(r, "Title"),
@@ -167,7 +170,7 @@ public static class PhoneData
             });
 
         radio = new List<RadioLine>();
-        foreach (var r in CSVReader.Read("Dialogues/PhoneRadio"))
+        foreach (var r in CSVReader.Read("Dialogues/PhoneRadio", keepBlankFirstColumn: true))
             radio.Add(new RadioLine
             {
                 chapter = Get(r, "Chapter"), frequency = Get(r, "Frequency"),

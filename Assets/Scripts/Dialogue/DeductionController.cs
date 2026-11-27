@@ -130,8 +130,11 @@ public class DeductionController : MonoBehaviour
             if (string.IsNullOrEmpty(choiceText)) continue; // 문제 문장만 적은 줄
 
             // 오답일 때 갈 엔딩. 비워두면 Bad_D(포기/일상 복귀 엔딩)로 간다.
+            // 두 번째 인수 true = 대소문자를 가리지 않는다. 엑셀이 True를 TRUE로 바꿔 적는
+            // 일이 있어서(실제로 scenario_03의 TargetEnding이 그랬다) 가리면 안 된다.
+            // 다른 곳(DialogueSystem, InvestigationController)도 전부 이렇게 읽는다.
             string endingStr = GetField(row, "WrongEnding").Trim();
-            if (!System.Enum.TryParse(endingStr, out EndingType wrongEnding) || wrongEnding == EndingType.None)
+            if (!System.Enum.TryParse(endingStr, true, out EndingType wrongEnding) || wrongEnding == EndingType.None)
             {
                 wrongEnding = EndingType.Bad_D;
             }

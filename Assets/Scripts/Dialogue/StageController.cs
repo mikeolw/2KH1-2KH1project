@@ -1,5 +1,6 @@
 using System.Collections;              // 코루틴(IEnumerator) - 배경 크로스페이드에 쓴다
 using System.Collections.Generic;
+using System.Text;                     // StringBuilder - 문자열을 이어 붙일 때 쓴다
 using UnityEngine;
 using UnityEngine.UI;
 
@@ -609,6 +610,126 @@ public class StageController : MonoBehaviour
         int slot = ResolveTalkerSlot(speaker, talkerIsNone ? null : talkerSpec);
         if (slot < 0 || slot >= standingSlots.Length || standingSlots[slot] == null) return null;
         return standingSlots[slot].IsShowing ? standingSlots[slot].Image : null;
+    }
+
+    // ===== 말풍선 자리 잡기용 (SpeechBubble.cs) =====
+    // 지금 화면에 서 있는 인물들의 그림. 말풍선이 "누가 말하든" 모든 사람의 얼굴을 피해
+    // 한 자리에 고정되도록, 말하는 사람만이 아니라 서 있는 전원을 돌려준다.
+    public void CollectVisibleStandings(List<Image> into)
+    {
+        if (into == null) return;
+        into.Clear();
+        if (standingSlots == null) return;
+
+        foreach (var slot in standingSlots)
+        {
+            if (slot != null && slot.IsShowing && slot.Image != null) into.Add(slot.Image);
+        }
+    }
+
+    // ===== 말풍선 중심점을 가르는 열쇠 =====
+    // 규칙은 하나다. "한 종류의 스탠딩 = 중심점 하나".
+    // 그래서 지금 서 있는 스탠딩의 파일 이름에서 표정과 입모양을 떼어내고, 정렬해서 잇는다.
+    //
+    //   STD_04_Child_Depressed_OpenMouse                    -> STD_04_Child
+    //   STD_040506_Child_DefaultStand_Sorry                 -> STD_040506_Child
+    //   STD_Past01_Hansung_Angry|STD_Past01_Jaehoon_Default -> STD_Past01_Hansung+STD_Past01_Jaehoon
+    //   아무도 없음(내레이션 등)                              -> none
+    //
+    // 일부러 보지 않는 것:
+    //   - 표정·입모양(_OpenMouse) : 보면 한 줄마다 자리를 다시 잡아 말풍선이 덜덜 떨린다.
+    //   - 배경                    : 같은 인물이 다른 배경에 서도 중심점은 하나여야 한다.
+    //   - 장면 ID                 : 예전에는 장면마다 따로 잡았는데, 같은 인물인데도 장면이
+    //                               넘어갈 때마다 말풍선이 건너뛰어서 이 방식으로 바꿨다.
+    //
+    // 이 값은 "무대 전체"의 열쇠다. 말하는 사람이 서 있을 때는 그 사람 쪽에 붙이는 것이
+    // 좋으므로, 실제로 말풍선이 쓰는 열쇠는 아래 BubbleAnchorKey(화자, Talker)가 정한다.
+    // 이 값은 화자가 화면에 없을 때(내레이션, 주인공 혼잣말)의 자리로 쓰인다.
+    public string StageAnchorKey
+    {
+        get
+        {
+            if (standingSlots == null) return NoStandingKey;
+
+            var keys = new List<string>();
+            for (int i = 0; i < standingSlots.Length; i++)
+            {
+                var slot = standingSlots[i];
+                if (slot == null || !slot.IsShowing) continue;
+                string key = StandingKeyOf(slot.CurrentFileName);
+                if (!string.IsNullOrEmpty(key) && !keys.Contains(key)) keys.Add(key);
+            }
+
+            if (keys.Count == 0) return NoStandingKey;
+            keys.Sort(System.StringComparer.Ordinal);   // 자리 순서가 달라도 같은 열쇠가 되게
+            return string.Join("+", keys);
+        }
+    }
+
+    // 아무도 서 있지 않을 때 쓰는 열쇠 (내레이션, 배경만 있는 장면).
+    public const string NoStandingKey = "none";
+
+    // ===== 말하는 사람이 서 있으면 "그 사람"이 중심점의 주인이다 =====
+    // 두 사람이 함께 서 있는 장면에서, 말풍선이 둘 사이 한 점에만 뜨면 누가 말하는지
+    // 알기 어렵다. 그래서 말하는 사람의 스탠딩이 화면에 있으면 그 스탠딩을 열쇠로 쓴다.
+    //   유한성이 말함 -> STD_Past01_Hansung          (한성 쪽)
+    //   차재훈이 말함 -> STD_Past01_Jaehoon          (재훈 쪽)
+    //   내레이션      -> STD_Past01_Hansung+STD_Past01_Jaehoon  (둘 다 피하는 한 점)
+    //
+    // 혼자 서 있는 장면에서는 그 사람의 열쇠와 무대 구성 열쇠가 같은 값이 되므로,
+    // 누가 말하든(내레이션이든) 자리가 하나다 - 예전 동작과 똑같다.
+    public string BubbleAnchorKey(string speaker, string talkerSpec)
+    {
+        string own = SpeakerStandingKey(speaker, talkerSpec);
+        return string.IsNullOrEmpty(own) ? StageAnchorKey : own;
+    }
+
+    // 말하는 사람의 스탠딩 열쇠. 그 사람이 화면에 서 있지 않으면 빈 문자열.
+    public string SpeakerStandingKey(string speaker, string talkerSpec)
+    {
+        var image = FindSpeakerStanding(speaker, talkerSpec);
+        if (image == null || standingSlots == null) return "";
+
+        foreach (var slot in standingSlots)
+        {
+            if (slot == null || !slot.IsShowing || slot.Image != image) continue;
+            return StandingKeyOf(slot.CurrentFileName);
+        }
+        return "";
+    }
+
+    // 그 열쇠에 해당하는 스탠딩 그림을 찾는다. 말풍선을 "그 사람 쪽"에 붙일 때 쓴다.
+    public Image FindStandingByKey(string standingKey)
+    {
+        if (standingSlots == null || string.IsNullOrEmpty(standingKey)) return null;
+
+        foreach (var slot in standingSlots)
+        {
+            if (slot == null || !slot.IsShowing || slot.Image == null) continue;
+            if (StandingKeyOf(slot.CurrentFileName) == standingKey) return slot.Image;
+        }
+        return null;
+    }
+
+    // 스탠딩 파일 이름에서 "한 종류"만 뽑는다. 밑줄로 끊어 앞 세 토막까지 = STD_장면_인물.
+    //   STD_040506_Child_DefaultStand_Default_OpenMouse -> STD_040506_Child
+    // 토막이 세 개가 안 되는 이름은 그대로 쓴다(그 자체가 이미 한 종류다).
+    public static string StandingKeyOf(string fileName)
+    {
+        fileName = (fileName ?? "").Trim();
+        if (fileName.Length == 0) return "";
+
+        int cut = -1;
+        int found = 0;
+        for (int i = 0; i < fileName.Length; i++)
+        {
+            if (fileName[i] != '_') continue;
+            found++;
+            if (found != 3) continue;
+            cut = i;
+            break;
+        }
+        return cut > 0 ? fileName.Substring(0, cut) : fileName;
     }
 
     // 어느 자리의 캐릭터가 말하고 있는지 알아낸다. 못 찾으면 -1(아무도 입을 안 움직임).

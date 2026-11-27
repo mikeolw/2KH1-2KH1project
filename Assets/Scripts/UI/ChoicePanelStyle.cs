@@ -366,8 +366,11 @@ public class ChoicePanelStyle : MonoBehaviour
                 var nav = button.navigation; nav.mode = Navigation.Mode.None; button.navigation = nav;
             }
 
-            // 테두리 (얇은 선 4개)
-            border = AddBorder(rt, UITheme.Line);
+            // 테두리 (도트 한 칸 두께의 선 4개)
+            // 말풍선과 같은 두께로 맞췄다. 1px이면 도트 글꼴 옆에서 선만 가늘어 겉돈다.
+            // 모서리를 깎지 않고 네모로 두는 이유: 마우스 올림 때 선 4개의 색을 따로
+            // 바꾸는 구조(SetHover)를 그대로 쓸 수 있고, 네모 모서리도 도트 스타일에 맞는다.
+            border = AddBorder(rt, UITheme.Line, SpeechBubble.PixelBorder);
 
             // 마우스 올림 때만 보이는 왼쪽 강조 막대
             accentBar = NewImage("AccentBar", rt, UITheme.Accent);
@@ -382,10 +385,22 @@ public class ChoicePanelStyle : MonoBehaviour
                 lrt.anchorMin = Vector2.zero; lrt.anchorMax = Vector2.one;
                 lrt.offsetMin = new Vector2(TextPadding, 6f);
                 lrt.offsetMax = new Vector2(-TextPadding, -6f);
-                label.fontSize = 22;
-                label.enableAutoSizing = true;          // 긴 선택지는 줄이 넘치지 않게 글자를 줄인다
-                label.fontSizeMin = 16;
-                label.fontSizeMax = 22;
+                // ===== 글자 크기 =====
+                // 도트 글꼴은 고유 크기(16px)의 배수로만 선명하다. 자동 줄이기를 켜 두면
+                // 19.3px 같은 값이 나와 글자가 뭉개지므로, 도트일 때는 끄고 격자에 맞춘다.
+                // (22 -> 16으로 작아지므로 글자가 넘칠 걱정은 오히려 줄어든다)
+                if (FontManager.DotFontActive)
+                {
+                    label.enableAutoSizing = false;
+                    label.fontSize = FontManager.SnapToPixelGrid(22f);
+                }
+                else
+                {
+                    label.fontSize = 22;
+                    label.enableAutoSizing = true;      // 긴 선택지는 줄이 넘치지 않게 글자를 줄인다
+                    label.fontSizeMin = 16;
+                    label.fontSizeMax = 22;
+                }
                 label.fontStyle = FontStyles.Normal;
                 label.alignment = TextAlignmentOptions.Center;
                 label.textWrappingMode = TextWrappingModes.Normal;
